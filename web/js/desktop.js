@@ -102,8 +102,9 @@ async function sidebar(route) {
     S.views.map((v) => h("a.view" + (route.parts[1] === v.id ? ".on" : ""), { href: "#/v/" + v.id }, h("span.ellipsis", v.name),
       v.view === "duplicates" ? null : null)),
     h("div.bottom",
-      nav("#/settings", "settings", "Einstellungen", undefined, p0 === "settings" && route.parts[1] !== "suggestions"),
-      h("a.nav", { href: "#/p/" + S.me.self_id }, avatar(all.find((r) => r.is_self) || { is_self: true, display: "Du" }, 22, { self: true }), h("span.lab", "Mein Profil"))));
+      h("div.side-me",
+        h("a.nav" + (p0 === "p" && route.parts[1] === S.me.self_id ? ".on" : ""), { href: "#/p/" + S.me.self_id }, avatar(all.find((r) => r.is_self) || { is_self: true, display: "Du" }, 22, { self: true }), h("span.lab", "Mein Profil")),
+        h("a.btn.ghost.icon.side-set" + (p0 === "settings" ? ".active" : ""), { href: "#/settings", title: `Einstellungen (${pretty(binding("go_settings"))})` }, icon("settings")))));
 }
 
 // ---------------------------------------------------------------- Personen

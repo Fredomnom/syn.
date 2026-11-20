@@ -1053,3 +1053,10 @@ code { font: 400 12.5px var(--f-mono); }
 @media (max-width: 760px) { .imp-dock { right: 12px; bottom: 90px; } }
 .bd-swap svg { transition: transform .3s cubic-bezier(.2,.8,.2,1); }
 .bd-swap.flip svg { transform: scaleX(-1); }
+/* Mein Profil mit Einstellungen rechts in derselben Zeile */
+.side-me { display: flex; align-items: center; gap: 4px; }
+.side-me > a.nav { flex: 1; min-width: 0; }
+.side-set { flex: none; }
+.side-set.active { background: var(--yellow); color: var(--on-yellow); box-shadow: none; }
+.desk.collapsed .side-me { flex-direction: column; }
+.side-me .side-set.active, .side-me .side-set.active:hover { background: var(--yellow); color: var(--on-yellow); }
