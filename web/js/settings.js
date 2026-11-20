@@ -9,7 +9,7 @@ import { ACTIONS, binding, pretty, saveBinding, recordCombo, keys } from "./shor
 // Navigation: gruppiert, mit Symbol und kurzer Erklärung je Seite
 const NAV = [
   ["Allgemein", [["account", "Konto", "user", "Name, Passwort und angemeldete Geräte"], ["appearance", "Darstellung", "sun", "Hell oder dunkel, Karten-Anbieter"],
-    ["shortcuts", "Tastenkürzel", "key", "Alle Kürzel ansehen und neu belegen"]]],
+    ["shortcuts", "Tastenkürzel", "key", "Alle Kürzel ansehen und neu belegen"], ["card", "Visitenkarte", "idcard", "Deine Angaben als kurzer Link zum Teilen"]]],
   ["Daten", [["fields", "Felder", "list", "Welche Angaben es zu Personen gibt"], ["circle-kinds", "Kreis-Arten", "circles", "Arten von Kreisen und ihre Farben"],
     ["bund-kinds", "Bund-Arten", "bund", "Arten von Beziehungen und ihre Rollen"], ["rings", "Ringe & Ist", "rings", "Ringe benennen, „Ist“ berechnen"]]],
   ["Automatisierung", [["routines", "Routinen", "zap", "Erinnerungen, Webhooks und Schnellaktionen"], ["importers", "Importe", "download", "Leute aus Diensten und Dateien holen"],
@@ -35,7 +35,7 @@ export async function settingsPage(main, tab, route) {
     items.filter(([k]) => visible(k)).map(([k, l, ic]) => h("a.set-item" + (k === tab ? ".on" : ""), { href: "#/settings/" + k }, h("span.set-ic", icon(ic)), l)))));
   const head = h("div.set-head", mobile ? h("a.back", { href: "#/settings" }, icon("left"), "Einstellungen") : null, h("h1", cur[1]), h("p.t2", cur[3]));
   page.append(h("div.set-layout", nav, h("div.set-main.slide-zone", head, body)));
-  const fn = { fields, "circle-kinds": circleKinds, "bund-kinds": bundKinds, rings: ringsTab, routines, importers, sync, suggestions, modules, shortcuts, account, appearance, tokens, admin }[tab] || account;
+  const fn = { card: cardTab, fields, "circle-kinds": circleKinds, "bund-kinds": bundKinds, rings: ringsTab, routines, importers, sync, suggestions, modules, shortcuts, account, appearance, tokens, admin }[tab] || account;
   await fn(body, route);
 }
 const reloadTab = (body, fn, route) => rebuild(body, (b) => fn(b, route));
@@ -488,4 +488,36 @@ async function shortcuts(body) {
           : h("button.btn.sm.ghost", { on: { click: async () => { await saveBinding(id, ""); reloadTab(body, shortcuts); } } }, "Aus")));
     }))),
     h("button.btn", { style: { alignSelf: "flex-start" }, on: { click: async () => { await saveSettings({ shortcuts: {} }); reloadTab(body, shortcuts); } } }, icon("refresh"), "Alle auf Standard"));
+}
+
+// ---------------------------------------------------------------- Visitenkarte
+async function cardTab(body) {
+  let c = await GET("/card");
+  const origin = location.origin.replace(/^https?:\/\//, "");
+  const url = () => location.origin + c.path;
+  const save = async (patch) => { try { c = await api("PATCH", "/card", patch, { quiet: true }); refresh(); return true; } catch (e) { toast(e.message, { err: true }); return false; } };
+  const linkTxt = h("span.mono");
+  const openA = h("a.btn.sm", { target: "_blank", rel: "noopener" }, icon("ext"), "Öffnen");
+  const refresh = () => { linkTxt.textContent = origin + c.path; openA.href = c.path; box.classList.toggle("off", !c.enabled); };
+  const slug = h("input.input.mono.card-slug", { value: c.slug, spellcheck: false, on: { change: async (e) => { if (!(await save({ slug: e.target.value }))) e.target.value = c.slug; } } });
+  const copy = h("button.btn.sm.primary", { on: { click: async () => { try { await navigator.clipboard.writeText(url()); toast("Link kopiert"); } catch (_) { toast(url()); } } } }, icon("copy"), "Link kopieren");
+  const share = navigator.share ? h("button.btn.sm", { on: { click: () => navigator.share({ title: "Meine Visitenkarte", url: url() }).catch(() => {}) } }, icon("ext"), "Teilen") : null;
+  const box = h("div.card-link", h("div.card-link-url", icon("link"), linkTxt), h("div.row.wrap", copy, share, openA));
+  const persons = S.fieldList.filter((f) => ["person", "both"].includes(f.scope) && !["note", "image", "ref", "person", "checkbox"].includes(f.type) && !["f_level", "f_seen", "f_via", "f_met"].includes(f.id));
+  const mine = (await rows()).find((r) => r.is_self);
+  const list = (key, hint) => h("div.card-fields", persons.map((f) => {
+    const has = !!mine?.v?.[f.id];
+    const cb = h("input", { type: "checkbox", checked: c[key].includes(f.id), on: { change: () => { const set = new Set(c[key]); cb.checked ? set.add(f.id) : set.delete(f.id); save({ [key]: persons.map((x) => x.id).filter((id) => set.has(id)) }); } } });
+    return h("label.check.card-field", cb, h("span.grow", f.name), key === "fields" ? h("span.small.t3", has ? mine.v[f.id].d : "noch leer") : null);
+  }), hint ? h("p.small.t3", hint) : null);
+  const intro = h("textarea.input.card-intro", { rows: 3, maxLength: 280, placeholder: "z.B. Schön, dich kennenzulernen! Hier sind meine Kontaktdaten.", value: c.intro || "", on: { change: (e) => save({ intro: e.target.value }) } });
+  body.append(
+    panel("", srow("Visitenkarte teilen", "Wer den Link hat, sieht die Angaben unten und kann dir seine eigenen schicken. Ohne Freigabe ist der Link aus.", sw(c.enabled, (v) => save({ enabled: v })))),
+    panel("Link", h("div.srow-full.col", { style: { gap: "10px" } },
+      h("label.f", "Dein Link", h("div.card-slug-row", h("span.t3.mono", origin + "/@"), slug)),
+      h("p.small.t3", "Kurz und frei wählbar: Kleinbuchstaben, Ziffern, Punkt, Strich und Unterstrich."), box)),
+    panel("Was du teilst", h("div.srow-full", list("fields", "Die Werte kommen aus deinem eigenen Profil („Mein Profil“). Leere Felder bleiben unsichtbar."))),
+    panel("Was andere dir schicken können", h("div.srow-full", list("ask", "Der Name ist immer dabei, dazu ein Feld für eine Nachricht. Antworten landen als neue Person mit der Quelle „Visitenkarte“ – und unter „Heute“."))),
+    panel("Begrüßung", h("div.srow-full", intro)));
+  refresh();
 }

@@ -1,0 +1,56 @@
+/* Öffentliche Visitenkarte */
+.vk-body { background: var(--bg); min-height: 100vh; margin: 0; }
+.vk { max-width: 460px; margin: 0 auto; padding: 32px 16px 40px; display: flex; flex-direction: column; gap: 16px; }
+.vk-loading { display: grid; place-items: center; min-height: 60vh; }
+.vk-card { background: var(--white); border-radius: 24px; padding: 24px; box-shadow: 0 1px 2px rgba(0,0,0,.04); display: flex; flex-direction: column; gap: 16px; }
+.vk-head { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; margin: -24px -24px 0; padding: 32px 24px 22px; border-radius: 24px 24px 0 0; background: var(--yellow); color: #111; }
+.vk-av { width: 112px; height: 112px; border-radius: 50%; object-fit: cover; box-shadow: 0 0 0 5px rgba(255,255,255,.7); background: #fff; }
+.vk-av-i { display: grid; place-items: center; font: 700 38px var(--f-head, inherit); color: #111; }
+.vk-head h1 { margin: 4px 0 0; font: 700 26px/1.15 var(--f-head, inherit); letter-spacing: -.01em; }
+.vk-intro { margin: 0; font-size: 15px; line-height: 1.45; max-width: 34ch; }
+.vk-rows { display: flex; flex-direction: column; }
+.vk-row { display: flex; align-items: center; gap: 14px; padding: 12px 8px; border-radius: 14px; color: var(--ink); text-decoration: none; }
+a.vk-row:hover { background: var(--bg); }
+.vk-row + .vk-row { box-shadow: 0 -1px 0 var(--line); }
+.vk-ic { flex: none; width: 38px; height: 38px; border-radius: 12px; background: var(--bg2); display: grid; place-items: center; }
+.vk-ic svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.vk-txt { display: flex; flex-direction: column; min-width: 0; }
+.vk-k { font-size: 12px; color: var(--text2); }
+.vk-v { font-weight: 600; font-size: 15px; overflow-wrap: anywhere; }
+.vk-save, .vk-send { height: 46px; font-size: 15px; justify-content: center; gap: 8px; }
+.vk-save svg, .vk-send svg, .vk-done-i svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.vk-form { display: flex; flex-direction: column; gap: 12px; }
+.vk-form h2, .vk-done h2 { margin: 0; font: 700 21px var(--f-head, inherit); }
+.vk-sub { margin: -6px 0 4px; color: var(--text2); font-size: 14px; line-height: 1.45; }
+.vk-form .f { display: flex; flex-direction: column; gap: 5px; font-size: 13px; color: var(--text2); }
+.vk-form .input { height: 44px; font-size: 15px; width: 100%; box-sizing: border-box; }
+.vk-form textarea.input { height: auto; padding: 10px 12px; resize: vertical; font: inherit; font-size: 15px; }
+.vk-pair { display: grid; grid-template-columns: 40% 1fr; gap: 8px; }
+.vk-trap { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
+.vk-err { margin: 0; color: var(--danger); font-size: 13.5px; min-height: 0; }
+.vk-err:empty { display: none; }
+.vk-done { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; padding: 12px 0; }
+.vk-done p { margin: 0; color: var(--text2); }
+.vk-done-i { width: 56px; height: 56px; border-radius: 50%; background: var(--yellow); color: #111; display: grid; place-items: center; }
+.vk-done-i svg { width: 26px; height: 26px; }
+.vk-foot { align-self: center; color: var(--text3); font-size: 13px; text-decoration: none; display: inline-flex; gap: 6px; align-items: baseline; }
+.vk-foot .logo { font-size: 15px; }
+.vk-404 { align-items: center; text-align: center; padding: 48px 24px; }
+.vk-404 h1 { margin: 0; font-size: 20px; }
+.vk-404 p { margin: 0; color: var(--text2); }
+.vk-multi { display: flex; flex-direction: column; gap: 8px; }
+.vk-multi .vk-pair { position: relative; }
+.vk-multi .vk-pair:has(.vk-x) { grid-template-columns: 40% 1fr 36px; }
+.vk-x { border: 0; background: var(--bg2); color: var(--text2); border-radius: 10px; font-size: 18px; cursor: pointer; }
+.vk-x:hover { color: var(--ink); }
+.vk-more { align-self: flex-start; margin-top: 6px; border: 0; background: none; padding: 4px 0; color: var(--ink); font: 600 13.5px inherit; font-family: inherit; cursor: pointer; text-decoration: underline; text-decoration-color: var(--yellow-line); text-underline-offset: 3px; }
+.vk-multi-wrap { display: flex; flex-direction: column; }
+/* Desktop: links die Person, rechts das Formular */
+@media (min-width: 900px) {
+  .vk { max-width: 980px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); align-items: start; gap: 24px; padding-top: 56px; }
+  .vk-me { position: sticky; top: 32px; }
+  .vk-foot, .vk-404 { grid-column: 1 / -1; }
+  .vk-loading { grid-column: 1 / -1; }
+}
+.vk-me:not(:has(.vk-rows)):not(:has(.vk-save)) { padding-bottom: 0; }
+.vk-me:not(:has(.vk-rows)):not(:has(.vk-save)) .vk-head { border-radius: 24px; padding-bottom: 32px; }

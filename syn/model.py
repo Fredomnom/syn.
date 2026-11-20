@@ -12,7 +12,8 @@ FIELD_TYPES = ["text", "note", "number", "date", "choice", "checkbox", "person",
                "address", "profile", "image"]
 # Quellen für „Kennengelernt über“, die keine Profil-Dienste sind
 EXTRA_SOURCES = {"imap": "E-Mail", "kalender": "Kalender", "vcard": "Handy-Kontakte", "android": "Anrufe & SMS",
-                 "carddav": "Adressbuch (CardDAV)", "google": "Google Kontakte"}
+                 "carddav": "Adressbuch (CardDAV)", "google": "Google Kontakte",
+                 "card": "Visitenkarte"}
 
 
 def source_names(uid) -> dict:
@@ -583,6 +584,9 @@ def load_rows(ctx, at: str | None = None, ids=None) -> list[dict]:
     hand = "(source='manual' OR source LIKE 'Handy%' OR source='Zusammenführen')"
     edited = {r["owner_id"] for r in db.q(f"SELECT DISTINCT owner_id FROM history WHERE user_id=? AND owner_type='entity' AND {hand}", uid)}
     bund_edited = {r["owner_id"] for r in db.q(f"SELECT DISTINCT owner_id FROM history WHERE user_id=? AND owner_type='bund' AND {hand}", uid)}
+    # Herkunft: mit welcher Quelle der Eintrag angelegt wurde (manual, Importer-ID, card …)
+    origin = {r["owner_id"]: r["source"] for r in db.q("SELECT owner_id, source FROM history WHERE user_id=? "
+                                                         "AND owner_type='entity' AND attr='created'", uid)}
     signals = {}
     for s in db.q("SELECT entity_id, at FROM contact_signals WHERE user_id=?", uid):
         signals.setdefault(s["entity_id"], []).append(s["at"])
@@ -638,6 +642,7 @@ def load_rows(ctx, at: str | None = None, ids=None) -> list[dict]:
             "bund_kind": b["kind_id"] if b else None, "ist": ist,
             "long_unseen": long_unseen(ctx.settings, level, ist) if ist else False,
             "approx_created": not e["valid_from"], "v": v,
+            "origin": origin.get(e["id"]) or "manual",
             "edited": bool(e["is_self"] or e["id"] in edited or (b and b["id"] in bund_edited)),
         })
     return rows

@@ -6,8 +6,8 @@ import { S, h, icon, api, PUT, POST, clear, modal, rows, invalidate, avatar, cir
 
 export const TYPE_NAMES = { text: "Text", note: "Notiz", number: "Zahl", date: "Datum", choice: "Auswahl", checkbox: "Checkbox",
   person: "Person", ref: "Verweis", phone: "Telefon", email: "E-Mail", address: "Adresse", profile: "Profil", image: "Bild" };
-export const SOURCE = (s) => (!s || s === "manual" ? "von Hand" : s === "Zusammenführen" ? "zusammengeführt" : "aus " + (S.me?.importers_available?.includes(s) ? importerName(s) : s));
-function importerName(id) { return ({ google: "Google Kontakte", vcard: "Handy-Kontakte", carddav: "CardDAV", imap: "E-Mail", kalender: "Kalender" })[id] || id[0].toUpperCase() + id.slice(1); }
+export const SOURCE = (s) => (!s || s === "manual" ? "von Hand" : s === "Zusammenführen" ? "zusammengeführt" : s === "card" ? "über deine Visitenkarte" : "aus " + (S.me?.importers_available?.includes(s) ? importerName(s) : s));
+function importerName(id) { return ({ card: "Visitenkarte", google: "Google Kontakte", vcard: "Handy-Kontakte", carddav: "CardDAV", imap: "E-Mail", kalender: "Kalender" })[id] || id[0].toUpperCase() + id.slice(1); }
 
 export function fieldsFor(kind) {
   return S.fieldList.filter((f) => f.scope === "both" || f.scope === kind);
@@ -15,7 +15,7 @@ export function fieldsFor(kind) {
 export const bundFields = () => S.fieldList.filter((f) => f.scope === "bund");
 
 // Quellen für „Kennengelernt über“: Profil-Dienste und Import-Quellen
-const EXTRA_SOURCES = { imap: "E-Mail", kalender: "Kalender", vcard: "Handy-Kontakte", android: "Anrufe & SMS", carddav: "Adressbuch (CardDAV)", google: "Google Kontakte" };
+const EXTRA_SOURCES = { card: "Visitenkarte", imap: "E-Mail", kalender: "Kalender", vcard: "Handy-Kontakte", android: "Anrufe & SMS", carddav: "Adressbuch (CardDAV)", google: "Google Kontakte" };
 export function sources() {
   const out = { ...EXTRA_SOURCES };
   for (const s of S.settings.services || []) out[s.id] = s.name;
@@ -26,7 +26,7 @@ export const sourceName = (id) => sources()[id] || id;
 // Logos der Dienste (Simple Icons, CC0) – einfarbig in der Textfarbe; Import-Quellen mit eigenen Symbolen
 const LOGOS = new Set(["instagram", "discord", "steam", "telegram", "whatsapp", "signal", "matrix", "github", "mastodon", "bluesky", "twitch",
   "psn", "linkedin", "facebook", "snapchat", "anilist", "lastfm", "google", "prate", "xbox"]);
-const SOURCE_ICONS = { imap: "mail", kalender: "calendar", vcard: "smartphone", android: "phone", carddav: "users" };
+const SOURCE_ICONS = { card: "idcard", imap: "mail", kalender: "calendar", vcard: "smartphone", android: "phone", carddav: "users" };
 export function serviceIcon(id, size = 16) {
   if (LOGOS.has(id)) return h("span.svc-ic", { style: { "--src": `url(/static/icons/services/${id}.svg)`, width: size + "px", height: size + "px" } });
   if (SOURCE_ICONS[id]) return icon(SOURCE_ICONS[id], "svc-sym");

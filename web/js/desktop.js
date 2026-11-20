@@ -1,7 +1,7 @@
 // Desktop: sortieren und bearbeiten in großen Mengen. Seitenleiste, sechs Ansichten, Personenseite, Kreise.
 import { S, h, icon, GET, POST, PUT, PATCH, DEL, clear, rebuild, rows, captureSegs, animateSegs, invalidate, avatar, circleChip, nameEl, rel, ringName, today, debounce,
   toast, modal, logo, qs, menu, pickPerson, pickCircle, reloadCircles, confirmDlg, ringMini, MOD, fmtTs, circleColors, kindColors, promptDlg, RING, cssVar as V } from "./core.js";
-import { primaryOf, valueEl, actionFor, editField, entityFieldList, runQuick, bundFields, TYPE_NAMES, SOURCE, plain, fieldsFor, service, serviceIcon, fieldRow, fieldSections } from "./fields.js";
+import { primaryOf, valueEl, actionFor, editField, entityFieldList, runQuick, bundFields, TYPE_NAMES, SOURCE, plain, fieldsFor, service, serviceIcon, fieldRow, fieldSections, sourceName } from "./fields.js";
 import { onPage, onGlobal, resetPage, binding, pretty, helpOverlay, keys } from "./shortcuts.js";
 import { dateInput } from "./date.js";
 import { openSpotlight, rememberPerson } from "./spotlight.js";
@@ -14,7 +14,9 @@ const SAVE = (k, v) => { try { localStorage.setItem("syn." + k, JSON.stringify(v
 
 export const VIEWS = [["grid", "Grid", "grid"], ["list", "Liste", "list"], ["table", "Tabelle", "table"], ["rings", "Ringe", "rings"], ["axes", "Achsen", "axes"], ["net", "Netz", "net"]];
 // Zustand der Personen-Ansicht (Filter, Sortierung, Spalten) – lässt sich als Ansicht speichern
-export const VS = { view: LS("view", "table"), filter: "", kind: "all", q: "", sort: "name", circle: "", max_level: "", columns: null, savedId: null, cfg: {} };
+// Standard-Personenansicht: Antworten über die Visitenkarte erst mal ausblenden (sie stehen unter „Heute“ und „Neue Personen“)
+const DEFAULT_HIDE = ["card"];
+export const VS = { hideSources: DEFAULT_HIDE, view: LS("view", "table"), filter: "", kind: "all", q: "", sort: "name", circle: "", max_level: "", columns: null, savedId: null, cfg: {} };
 
 let lastPath = null, lastPlace = null;
 const SET_ORDER = ["account", "appearance", "shortcuts", "fields", "circle-kinds", "bund-kinds", "rings", "routines", "importers", "suggestions", "sync", "tokens", "modules", "admin"];
@@ -99,7 +101,7 @@ async function sidebar(route) {
       a.addEventListener("click", (ev) => {
         if (!["people", "v"].includes(p0)) return;
         ev.preventDefault();
-        Object.assign(VS, { filter: "", kind: "all", q: "", circle: "", max_level: "", via: "", colFilters: {}, savedId: null });
+        Object.assign(VS, { filter: "", kind: "all", q: "", circle: "", max_level: "", via: "", colFilters: {}, hideSources: DEFAULT_HIDE, savedId: null, fromSaved: false });
         if (location.hash.startsWith("#/people")) import("./app.js").then((m) => m.render()); else location.hash = "#/people";
       });
       return a; })(),
@@ -121,7 +123,7 @@ async function savedView(main, id, route) {
   const v = S.views.find((x) => x.id === id);
   if (!v) return people(main, null, route);
   if (v.view === "duplicates") return (await import("./merge.js")).duplicatesPage(main, v);
-  Object.assign(VS, { filter: "", kind: "all", q: "", sort: "name", circle: "", max_level: "", via: "", columns: null, colFilters: {}, cfg: {} }, v.config, { view: v.view, savedId: v.id });
+  Object.assign(VS, { filter: "", kind: "all", q: "", sort: "name", circle: "", max_level: "", via: "", columns: null, colFilters: {}, hideSources: [], fromSaved: true, cfg: {} }, v.config, { view: v.view, savedId: v.id });
   return people(main, v.view, route, v);
 }
 
@@ -130,6 +132,7 @@ export function filterRows(all) {
   const self = VS.view === "net" || VS.view === "rings" ? all.filter((r) => r.is_self) : [];
   let list = all.filter((r) => !r.is_self);
   if (VS.filter === "new") list = list.filter((r) => !r.edited);
+  if (VS.hideSources?.length) list = list.filter((r) => !VS.hideSources.includes(r.origin));
   if (VS.kind !== "all") list = list.filter((r) => r.kind === VS.kind);
   if (VS.filter === "lose") list = list.filter((r) => !r.circles.length);
   if (VS.filter === "no_ring") list = list.filter((r) => r.level == null);
@@ -147,6 +150,7 @@ export function filterRows(all) {
 }
 
 async function people(main, view, route, saved = null) {
+  if (!saved && VS.fromSaved) Object.assign(VS, { fromSaved: false, hideSources: DEFAULT_HIDE, filter: "", circle: "", max_level: "", via: "", colFilters: {} });
   if (view && !saved) { VS.view = view; VS.savedId = null; }
   if (!view && !saved) { VS.view = LS("view", "table"); }
   if (!S.settings.use_levels && VS.view === "rings") VS.view = "table";
@@ -177,7 +181,8 @@ async function people(main, view, route, saved = null) {
   await redraw(); // erst fertig zeichnen, dann einblenden
 }
 
-function activeFilters() { return [VS.filter, VS.circle, VS.max_level, VS.via].filter(Boolean).length + Object.keys(VS.colFilters || {}).length || ""; }
+const sameHide = (a, b) => (a || []).slice().sort().join() === (b || []).slice().sort().join();
+function activeFilters() { return [VS.filter, VS.circle, VS.max_level, VS.via].filter(Boolean).length + Object.keys(VS.colFilters || {}).length + (sameHide(VS.hideSources, VS.savedId ? [] : DEFAULT_HIDE) ? 0 : 1) || ""; }
 function refreshFilterBtn() { const b = document.querySelector(".filter-btn"); if (b) b.lastChild.textContent = "Filter" + (activeFilters() ? " · " + activeFilters() : ""); }
 function sortLabel() { const k = VS.sort.replace("-", ""); return ({ name: "Name", created: "Erfasst", level: "Ring", seen: "Zuletzt gesehen", main_circle_id: "Hauptkreis", kind: "Art" })[k] || S.fields[k]?.name || k; }
 
@@ -192,6 +197,16 @@ function filterMenu(anchor, redraw) {
       const seen = new Map();
       for (const r of S.rows || []) { const x = r.v.f_via; if (x?.raw?.type) seen.set(`${x.raw.type}:${x.raw.id}`, x.d); }
       return seen.size ? [{ label: "Kennengelernt über" }, ...[...seen].sort((a, b) => a[1].localeCompare(b[1])).map(([k, d]) => it(d, "via", k))] : [];
+    })(),
+    // Quelle: woher ein Eintrag stammt – abgehakt = wird gezeigt
+    ...(() => {
+      const origins = new Map();
+      for (const r of S.rows || []) if (!r.is_self) origins.set(r.origin || "manual", (origins.get(r.origin || "manual") || 0) + 1);
+      if (!origins.has("card")) origins.set("card", 0);
+      const name = (o) => (o === "manual" ? "Von Hand angelegt" : sourceName(o));
+      return [{ label: "Quelle" }, ...[...origins].sort((a, b) => name(a[0]).localeCompare(name(b[0]), "de")).map(([o, n]) => ({
+        label: name(o), icon: VS.hideSources?.includes(o) ? "x" : "check", hint: String(n),
+        action: () => { const s = new Set(VS.hideSources || []); s.has(o) ? s.delete(o) : s.add(o); VS.hideSources = [...s]; redraw(); refreshFilterBtn(); } }))];
     })()]);
 }
 function refreshToolbar() { /* Toolbar wird beim nächsten Rendern aktualisiert */ }
@@ -202,7 +217,7 @@ function sortMenu(anchor, redraw) {
 }
 
 async function saveView(saved) {
-  const cfg = { filter: VS.filter, kind: VS.kind, q: VS.q, sort: VS.sort, circle: VS.circle, max_level: VS.max_level, via: VS.via, columns: VS.columns, colFilters: VS.colFilters || {}, ...VS.cfg };
+  const cfg = { hideSources: VS.hideSources || [], filter: VS.filter, kind: VS.kind, q: VS.q, sort: VS.sort, circle: VS.circle, max_level: VS.max_level, via: VS.via, columns: VS.columns, colFilters: VS.colFilters || {}, ...VS.cfg };
   if (saved) { await PUT("/views/" + saved.id, { view: VS.view, config: cfg }); toast("Ansicht gespeichert"); }
   else {
     const name = await promptDlg("Ansicht speichern", "Name", "");

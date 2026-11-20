@@ -129,6 +129,10 @@ CREATE TABLE IF NOT EXISTS google_map(
   pushed TEXT, PRIMARY KEY(user_id, entity_id)
 );
 CREATE TABLE IF NOT EXISTS instance(key TEXT PRIMARY KEY, value TEXT);
+CREATE TABLE IF NOT EXISTS cards(
+  user_id TEXT PRIMARY KEY, slug TEXT UNIQUE NOT NULL, enabled INTEGER DEFAULT 0, fields TEXT DEFAULT '[]',
+  ask TEXT DEFAULT '[]', intro TEXT, created_at TEXT, updated_at TEXT
+);
 CREATE TABLE IF NOT EXISTS import_blocks(
   id TEXT PRIMARY KEY, user_id TEXT NOT NULL, grp TEXT NOT NULL, kind TEXT NOT NULL, key TEXT NOT NULL,
   label TEXT, sources TEXT, created_at TEXT
