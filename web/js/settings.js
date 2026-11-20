@@ -3,22 +3,47 @@ import { S, h, icon, api, GET, POST, PUT, PATCH, DEL, clear, invalidate, toast, 
   loadBase, circleChip, avatar, fmtTs, rel, RING, download, rebuild, isMobile, themePref, setTheme } from "./core.js";
 import { TYPE_NAMES, serviceIcon, GROUPS, groupOf, MAPS } from "./fields.js";
 import { hueInput, hueOf } from "./color.js";
-import { ACTIONS, binding, pretty, saveBinding, recordCombo } from "./shortcuts.js";
+import { ACTIONS, binding, pretty, saveBinding, recordCombo, keys } from "./shortcuts.js";
 
-const TABS = [["fields", "Felder"], ["circle-kinds", "Kreis-Arten"], ["bund-kinds", "Bund-Arten"], ["rings", "Ringe"], ["routines", "Routinen"],
-  ["importers", "Importe"], ["sync", "Sync"], ["suggestions", "Vorschläge"], ["modules", "Module"], ["shortcuts", "Tastenkürzel"], ["account", "Konto"], ["admin", "Konten (Admin)"]];
+// Navigation: gruppiert, mit Symbol und kurzer Erklärung je Seite
+const NAV = [
+  ["Allgemein", [["account", "Konto", "user", "Name, Passwort und angemeldete Geräte"], ["appearance", "Darstellung", "sun", "Hell oder dunkel, Karten-Anbieter"],
+    ["shortcuts", "Tastenkürzel", "key", "Alle Kürzel ansehen und neu belegen"]]],
+  ["Daten", [["fields", "Felder", "list", "Welche Angaben es zu Personen gibt"], ["circle-kinds", "Kreis-Arten", "circles", "Arten von Kreisen und ihre Farben"],
+    ["bund-kinds", "Bund-Arten", "bund", "Arten von Beziehungen und ihre Rollen"], ["rings", "Ringe & Ist", "rings", "Ringe benennen, „Ist“ berechnen"]]],
+  ["Automatisierung", [["routines", "Routinen", "zap", "Erinnerungen, Webhooks und Schnellaktionen"], ["importers", "Importe", "download", "Leute aus Diensten und Dateien holen"],
+    ["suggestions", "Vorschläge", "merge", "Offene Vorschläge aus Importen und Daten"]]],
+  ["Verbindungen", [["sync", "Handy & Sync", "smartphone", "Wer aufs Handy kommt, CardDAV und Google"], ["tokens", "API-Tokens", "link", "Zugänge für Skripte, n8n und Home Assistant"]]],
+  ["System", [["modules", "Module & Daten", "layers", "Notizen-Modul, Export und API"], ["admin", "Konten", "users", "Konten anlegen und verwalten (Admin)"]]],
+];
+const ALL = NAV.flatMap(([, items]) => items);
 
 export async function settingsPage(main, tab, route) {
-  const page = h("div.page"); main.append(page);
-  const body = h("div.col", { style: { gap: "16px" } });
-  page.append(h("div.page-h", h("h1", "Einstellungen")),
-    h("nav.tabs", TABS.filter(([k]) => k !== "admin" || S.me.is_admin).map(([k, l]) => h("a" + (k === tab ? ".on" : ""), { href: "#/settings/" + k }, l))), body);
-  const fn = { fields, "circle-kinds": circleKinds, "bund-kinds": bundKinds, rings: ringsTab, routines, importers, sync, suggestions, modules, shortcuts, account, admin }[tab] || fields;
+  const mobile = isMobile();
+  const page = h("div.page.settings"); main.append(page);
+  const visible = (k) => k !== "admin" || S.me.is_admin;
+  if (mobile && !tab) {
+    page.append(h("h1", "Einstellungen"), NAV.map(([g, items]) => h("div.set-group", h("div.set-gtitle", g),
+      h("div.list", items.filter(([k]) => visible(k)).map(([k, l, ic, d]) => h("a.prow.set-link", { href: "#/settings/" + k }, h("span.set-ic", icon(ic)), h("div.grow", h("div.nm", l), h("div.sub", d)), icon("right")))))));
+    return;
+  }
+  tab = tab || "account";
+  const cur = ALL.find(([k]) => k === tab) || ALL[0];
+  const body = h("div.col.set-body", { style: { gap: "16px" } });
+  const nav = mobile ? null : h("nav.set-nav", { "data-seg": "settings" }, NAV.map(([g, items]) => h("div.set-group", h("div.set-gtitle", g),
+    items.filter(([k]) => visible(k)).map(([k, l, ic]) => h("a.set-item" + (k === tab ? ".on" : ""), { href: "#/settings/" + k }, h("span.set-ic", icon(ic)), l)))));
+  const head = h("div.set-head", mobile ? h("a.back", { href: "#/settings" }, icon("left"), "Einstellungen") : null, h("h1", cur[1]), h("p.t2", cur[3]));
+  page.append(h("div.set-layout", nav, h("div.set-main.slide-zone", head, body)));
+  const fn = { fields, "circle-kinds": circleKinds, "bund-kinds": bundKinds, rings: ringsTab, routines, importers, sync, suggestions, modules, shortcuts, account, appearance, tokens, admin }[tab] || account;
   await fn(body, route);
-  requestAnimationFrame(() => page.querySelector(".tabs a.on")?.scrollIntoView({ inline: "center", block: "nearest" }));
 }
 const reloadTab = (body, fn, route) => rebuild(body, (b) => fn(b, route));
 const card = (title, ...kids) => h("div.card", h("div.card-h", h("h3", title)), h("div.card-b.col", kids));
+// Ruhige Einstellungs-Zeilen: links Titel und Hinweis, rechts das Bedienelement
+const panel = (title, ...rows) => h("section.set-panel", title ? h("h3.set-ptitle", title) : null, h("div.set-rows", rows));
+const srow = (title, hint, control) => h("div.srow", h("div.srow-text", h("div.srow-title", title), hint ? h("div.srow-hint", hint) : null), control ? h("div.srow-ctl", control) : null);
+const sw = (checked, onChange) => h("input.switch", { type: "checkbox", checked, role: "switch", on: { change: (e) => onChange(e.target.checked) } });
+const segc = (options, value, onPick) => h("div.seg", options.map(([k, l]) => h("button" + (value === k ? ".on" : ""), { type: "button", on: { click: () => onPick(k) } }, l)));
 const saveSettings = async (patch) => { S.settings = await PATCH("/me/settings", patch); S.me.settings = S.settings; toast("Gespeichert"); };
 
 // ---------------------------------------------------------------- Felder
@@ -105,16 +130,17 @@ async function bundKinds(body) {
 async function ringsTab(body) {
   const st = S.settings;
   const names = { ...st.ring_names }, days = { ...st.unseen_days };
-  body.append(card("Ringe (Level)",
-    h("label.check", h("input", { type: "checkbox", checked: st.use_levels, on: { change: (e) => saveSettings({ use_levels: e.target.checked }) } }), "Mit Ringen arbeiten – ohne Level fallen die Ringe-Ansicht und Level-Bedingungen weg"),
-    h("div.row.wrap", [1, 2, 3, 4].map((n) => h("label.f", `Ring ${n}`, h("input.input", { value: names[n], on: { input: (e) => (names[n] = e.target.value) } })))),
-    h("button.btn.sm.primary", { style: { alignSelf: "flex-start" }, on: { click: () => saveSettings({ ring_names: names }) } }, "Namen speichern")),
-    card("Berechnetes „Ist“",
-      h("label.check", h("input", { type: "checkbox", checked: st.use_ist, on: { change: (e) => saveSettings({ use_ist: e.target.checked }) } }), "„Ist“ aus Zuletzt gesehen, Zählern und Importen (letzte Nachricht) berechnen"),
-      h("p.small.t3", "Ist-Ring: letzter Kontakt ≤ 7 Tage → 1, ≤ 30 → 2, ≤ 120 → 3, sonst 4. Ab 25 Treffen einen Ring näher."),
-      h("div.small.t2", "„Lange nicht gesehen“ ab … Tagen (je Ring)"),
-      h("div.row.wrap", [1, 2, 3, 4].map((n) => h("label.f", `Ring ${n}`, h("input.input", { type: "number", value: days[n], style: { width: "90px" }, on: { input: (e) => (days[n] = +e.target.value) } })))),
-      h("button.btn.sm.primary", { style: { alignSelf: "flex-start" }, on: { click: () => saveSettings({ unseen_days: days }) } }, "Speichern")));
+  const nameIns = h("div.ring-names", [1, 2, 3, 4].map((n) => h("label.ring-name", h("span.mono", n), h("input.input", { value: names[n], on: { change: (e) => { names[n] = e.target.value; saveSettings({ ring_names: names }); } } }))));
+  const dayIns = h("div.ring-names", [1, 2, 3, 4].map((n) => h("label.ring-name", h("span.mono", n), h("input.input", { type: "number", value: days[n], on: { change: (e) => { days[n] = +e.target.value; saveSettings({ unseen_days: days }); } } }), h("span.t3.small", "Tage"))));
+  body.append(
+    panel("Ringe",
+      srow("Mit Ringen arbeiten", "Jede Person bekommt von Hand einen Ring von 1 (Engste) bis 4 (Weit). Ohne Ringe fallen die Ringe-Ansicht und Ring-Bedingungen weg.", sw(st.use_levels, (v) => saveSettings({ use_levels: v }))),
+      st.use_levels ? srow("Namen der Ringe", "So heißen die Ringe überall in syn.", null) : null,
+      st.use_levels ? h("div.srow-full", nameIns) : null),
+    panel("Berechnetes „Ist“",
+      srow("„Ist“ berechnen", "Aus „Zuletzt gesehen“, Treffen und Importen (z.B. letzte Nachricht). Ring 1 bis 7 Tage, 2 bis 30, 3 bis 120, sonst 4; ab 25 Treffen einen Ring näher.", sw(st.use_ist, (v) => saveSettings({ use_ist: v }))),
+      st.use_ist ? srow("„Lange nicht gesehen“ ab", "Je Ring: nach wie vielen Tagen ohne Kontakt jemand als „lange nicht gesehen“ gilt.", null) : null,
+      st.use_ist ? h("div.srow-full", dayIns) : null));
 }
 
 // ---------------------------------------------------------------- Routinen
@@ -237,11 +263,24 @@ async function routines(body, route) {
 // ---------------------------------------------------------------- Importe
 async function importers(body) {
   const list = await GET("/importers");
-  body.append(h("p.small.t2", "syn zieht Leute aus Messengern und Online-Diensten. Neue Leute landen unter „Lose“. Ein Importer schreibt nur Werte aus seiner eigenen Quelle und überschreibt nie, was du von Hand gesetzt hast. Unsichere Treffer erscheinen unter „Mögliche Doppelte“."));
-  const grid = h("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(min(380px,100%),1fr))", gap: "12px" } });
-  body.append(grid);
-  for (const imp of list) grid.append(importerCard(imp, () => reloadTab(body, importers)));
+  const on = list.filter((i) => i.enabled), off = list.filter((i) => !i.enabled);
+  const reload = () => reloadTab(body, importers);
+  const row = (imp) => {
+    const det = h("div.imp-detail");
+    const status = imp.last_status ? (imp.last_status.startsWith("Fehler") ? h("span.imp-st.err", "Fehler") : h("span.imp-st.ok", "zuletzt " + rel((imp.last_run_at || "").slice(0, 10)))) : imp.enabled ? h("span.imp-st", "eingeschaltet") : null;
+    const item = h("div.imp" + (imp.enabled ? ".on" : ""),
+      h("button.imp-head", { type: "button", on: { click: () => { const open = item.classList.toggle("open"); if (open && !det.firstChild) det.append(importerCard(imp, reload)); } } },
+        h("span.svc-tile", serviceIcon(imp.service || imp.id, 20)),
+        h("span.grow", h("b", imp.name), h("span.imp-sub", imp.brings)),
+        imp.unofficial ? h("span.tag", "inoffiziell") : null, status, h("span.imp-chev", icon("down"))),
+      det);
+    return item;
+  };
+  body.append(h("p.small.t2", "Neue Leute landen unter „Lose“. Ein Importer schreibt nur Werte aus seiner eigenen Quelle und überschreibt nie, was du von Hand gesetzt hast."),
+    on.length ? panel("Eingerichtet", ...on.map(row)) : null,
+    panel(on.length ? "Weitere Dienste" : "Dienste", ...off.map(row)));
 }
+
 function importerCard(imp, reload) {
   const cfg = {};
   const form = h("div.col", imp.config.map((c) => {
@@ -307,30 +346,32 @@ async function sync(body, route) {
       h("button.btn.sm.ghost.icon", { on: { click: () => { sy.rules.splice(i, 1); drawRules(); } } }, icon("x")))),
     h("button.btn.sm", { style: { alignSelf: "flex-start" }, on: { click: () => { (sy.rules ||= []).push({ type: S.settings.use_levels ? "level" : "has_phone", max: 2 }); drawRules(); } } }, icon("plus"), "Regel")]);
   drawRules();
-  const host = h("input.input.mono", { value: st.public_host || "", placeholder: "syn.example.org" });
+  const host = h("input.input.mono", { value: st.public_host || "", placeholder: "syn.example.org", style: { width: "240px" } });
   const cc = h("input.input.mono", { value: st.country_code || "49", style: { width: "80px" } });
-  const n = (await rows()).filter((r) => !r.is_self).length;
-  body.append(card("Wer aufs Handy kommt",
-    h("div.seg.yellow", [["all", "Jeder"], ["rule", "Nach Regel"], ["none", "Niemand"]].map(([k, l]) => h("button" + (sy.mode === k ? ".on" : ""), { on: { click: () => { sy.mode = k; clear(body); S.settings.sync = sy; sync(body, {}); } } }, l))),
-    h("p.small.t3", sy.mode === "all" ? "Alle Personen." : "Außer bei „Jeder“ hat jede Person einen Schalter „Mit Handy synchronisieren“, mit dem sie trotzdem synchronisiert wird."),
-    rulesBox,
-    h("p.small.t3", "Was aufs Handy geht: nur, was ein Telefonbuch versteht – Name, Nummern, E-Mails, Geburtstag, Profilbild. Ringe, Bünde und Notizen bleiben in syn. Ein neuer Kontakt vom Handy landet unter „Lose“."),
-    h("div.row.wrap", h("label.f", "Öffentlicher Hostname (für den Link zur Personenseite)", host), h("label.f", "Ländervorwahl", cc)),
-    h("button.btn.primary", { style: { alignSelf: "flex-start" }, on: { click: () => saveSettings({ sync: sy, public_host: host.value.trim(), country_code: cc.value.trim() || "49" }) } }, "Speichern")),
-    card("Handy direkt mit syn (CardDAV)",
-      h("p.small", "syn ist selbst ein CardDAV-Server. Das Handy synchronisiert direkt mit syn, ohne Google dazwischen."),
-      h("div.rblock", h("div.row", h("span.t2", { style: { width: "110px" } }, "Server"), h("span.mono", location.host)),
-        h("div.row", h("span.t2", { style: { width: "110px" } }, "Adresse"), h("span.mono", location.origin + "/dav/")),
-        h("div.row", h("span.t2", { style: { width: "110px" } }, "Benutzer"), h("span.mono", S.me.username)),
-        h("div.row", h("span.t2", { style: { width: "110px" } }, "Passwort"), h("span", "dein syn-Passwort oder besser ein eigenes Token aus ", h("a", { href: "#/settings/account" }, "Konto")))),
-      h("p.small.t3", "iPhone: Einstellungen → Kontakte → Accounts → Account hinzufügen → Andere → CardDAV-Account. Android: DAVx⁵ → Login mit URL und Benutzername. Löschen am Handy entfernt nur vom Handy, nicht aus syn.")),
+  const save = () => saveSettings({ sync: sy, public_host: host.value.trim(), country_code: cc.value.trim() || "49" });
+  const copy = (text) => h("span.row", { style: { gap: "6px" } }, h("span.mono", text), h("button.btn.sm.icon.ghost", { title: "Kopieren", on: { click: () => { navigator.clipboard?.writeText(text); toast("Kopiert"); } } }, icon("copy")));
+  body.append(
+    panel("Wer aufs Handy kommt",
+      srow("Synchronisieren", sy.mode === "all" ? "Alle Personen." : "Dazu jede Person, bei der „Mit Handy synchronisieren“ an ist.",
+        segc([["all", "Jeder"], ["rule", "Nach Regel"], ["none", "Niemand"]], sy.mode, (k) => { sy.mode = k; S.settings.sync = sy; save(); reloadTab(body, sync); })),
+      sy.mode === "rule" ? h("div.srow-full", rulesBox) : null,
+      sy.mode === "rule" ? srow("", null, h("button.btn.primary", { on: { click: save } }, "Regeln speichern")) : null,
+      srow("Was aufs Handy geht", "Nur, was ein Telefonbuch versteht: Name, Nummern, E-Mails, Geburtstag, Profilbild. Ein neuer Kontakt vom Handy landet unter „Lose“.", null)),
+    panel("Adresse und Nummern",
+      srow("Öffentlicher Hostname", "Damit Kontakte am Handy einen Link zur Personenseite tragen.", h("div.row", host, h("button.btn", { on: { click: save } }, "Speichern"))),
+      srow("Ländervorwahl", "Für Nummern ohne Vorwahl, z.B. 0151 … → +49 151 …", h("div.row", cc, h("button.btn", { on: { click: save } }, "Speichern")))),
+    panel("Handy direkt mit syn (CardDAV)",
+      srow("Server-Adresse", "Am iPhone: Einstellungen → Kontakte → Accounts → Andere → CardDAV. Android: DAVx⁵.", copy(location.origin + "/dav/")),
+      srow("Benutzername", null, copy(S.me.username)),
+      srow("Passwort", "Dein syn-Passwort – besser ein eigenes Token.", h("a.btn", { href: "#/settings/tokens" }, icon("key"), "Token erstellen")),
+      srow("Löschen am Handy", "Entfernt den Kontakt nur vom Handy, nicht aus syn.", null)),
     await googleCard());
 }
 async function googleCard() {
   const g = await GET("/google");
   const id = h("input.input.mono", { placeholder: g.configured ? "•••• gespeichert" : "Client-ID" });
   const sec = h("input.input.mono", { placeholder: g.configured ? "•••• gespeichert" : "Client-Secret" });
-  return card("Option: Sync zu Google Kontakte",
+  return card("Alternative: Sync zu Google Kontakte",
     h("p.small", "Wer kein CardDAV am Handy einrichten will, synchronisiert nach Google Kontakte – Google bringt die Kontakte aufs Handy. Es gelten dieselben Regeln. Die Daten liegen dann auch bei Google. syn bleibt die führende Quelle: Änderungen aus Google kommen als Vorschlag zurück."),
     h("ol.small.t2", h("li", "In der Google Cloud Console ein Projekt anlegen, People API und Calendar API aktivieren."), h("li", "OAuth-Client vom Typ Webanwendung anlegen mit Weiterleitungs-URI: ", h("span.mono", g.redirect_uri)), h("li", "Client-ID und Secret hier eintragen, dann verbinden.")),
     h("div.row.wrap", id, sec, h("button.btn.sm", { on: { click: async () => { await PUT("/google", { client_id: id.value || undefined, client_secret: sec.value || undefined }); toast("Gespeichert"); } } }, "Speichern"),
@@ -357,39 +398,52 @@ async function suggestions(body) {
 
 // ---------------------------------------------------------------- Module, Konto, Admin
 async function modules(body) {
-  body.append(card("Module",
-    h("label.check", h("input", { type: "checkbox", checked: S.settings.notes_enabled, on: { change: async (e) => { await saveSettings({ notes_enabled: e.target.checked }); location.reload(); } } }), h("b", "Notizen"), h("span.t2.small", "– datierte Notizen, in denen Namen automatisch erkannt werden")),
-    h("div.small.t2", "Importer schaltest du unter ", h("a", { href: "#/settings/importers" }, "Importe"), " ein. Global ausgeschaltete Importer stehen dort nicht zur Verfügung (Admin)."),
-    h("div.small.t2", "Doppelte: ", h("a", { href: "#/v/" + (S.views.find((v) => v.view === "duplicates")?.id || "") }, "Empfindlichkeit in „Mögliche Doppelte“"))),
-    card("Daten",
-      h("p.small.t2", "Die API ist komplett offen: alles, was die Oberfläche kann, geht auch über die API."),
-      h("div.row", h("a.btn.sm", { href: "/api/docs", target: "_blank" }, icon("ext"), "API-Dokumentation"),
-        h("button.btn.sm", { on: { click: async () => download("syn-export.json", JSON.stringify({ entities: await GET("/entities"), circles: await GET("/circles"), bunds: await GET("/bunds"), fields: await GET("/fields"), routines: await GET("/routines") }, null, 2)) } }, icon("download"), "Alles als JSON exportieren"))));
+  body.append(
+    panel("Module",
+      srow("Notizen", "Datierte Notizen, in denen Namen automatisch erkannt werden. Mit „Dabei“-Zeile und Werte-Übernahme.", sw(S.settings.notes_enabled, async (v) => { await saveSettings({ notes_enabled: v }); location.reload(); }))),
+    panel("Daten",
+      srow("Alles exportieren", "Personen, Kreise, Bünde, Felder und Routinen als JSON.", h("button.btn", { on: { click: async () => download("syn-export.json", JSON.stringify({ entities: await GET("/entities"), circles: await GET("/circles"), bunds: await GET("/bunds"), fields: await GET("/fields"), routines: await GET("/routines") }, null, 2)) } }, icon("download"), "Exportieren")),
+      srow("API", "Alles, was die Oberfläche kann, geht auch über die API.", h("a.btn", { href: "#/api" }, icon("ext"), "API-Dokumentation"))));
+}
+
+async function appearance(body) {
+  body.append(
+    panel("Darstellung",
+      srow("Farbschema", "Gilt für dieses Gerät.", segc([["system", "Wie das System"], ["light", "Hell"], ["dark", "Dunkel"]], themePref(), (k) => setTheme(k)))),
+    panel("Karten",
+      srow("Adressen öffnen mit", "Ein Klick auf eine Adresse öffnet die Karte.", segc(MAPS, S.settings.map_provider || "osm", async (k) => { await saveSettings({ map_provider: k }); reloadTab(body, appearance); }))));
 }
 
 async function account(body) {
-  const toks = await GET("/tokens");
   const ses = await GET("/sessions");
-  const dn = h("input.input", { value: S.me.display_name });
-  const o = h("input.input", { type: "password", placeholder: "Altes Passwort" }), n = h("input.input", { type: "password", placeholder: "Neues Passwort (mind. 8 Zeichen)" });
-  const tn = h("input.input", { placeholder: "Name, z.B. n8n, Home Assistant, Türschild" }), tro = h("input", { type: "checkbox" });
-  body.append(card("Darstellung", h("div.seg", [["system", "Wie das System"], ["light", "Hell"], ["dark", "Dunkel"]].map(([k, l]) =>
-      h("button" + (themePref() === k ? ".on" : ""), { on: { click: () => setTheme(k) } }, l))), h("p.small.t3", "Gilt für dieses Gerät.")),
-    card("Karten", h("p.small.t3", "Wohin Adressen verlinken."), h("div.seg", MAPS.map(([k, l]) =>
-      h("button" + ((S.settings.map_provider || "osm") === k ? ".on" : ""), { on: { click: async () => { await saveSettings({ map_provider: k }); reloadTab(body, account); } } }, l)))),
-    card("Profil", h("div.row", dn, h("button.btn.sm", { on: { click: () => saveSettings({ display_name: dn.value }) } }, "Speichern"))),
-    card("Passwort", h("div.row.wrap", o, n, h("button.btn.sm", { on: { click: async () => { await POST("/me/password", { old: o.value, new: n.value }); o.value = n.value = ""; toast("Passwort geändert"); } } }, "Ändern"))),
-    card("Long-lived Access Tokens",
-      h("p.small.t3", "Für Skripte, n8n, Home Assistant und CardDAV. Jedes Token sieht nur deine Daten. Ein Token kann auf Lesen beschränkt sein."),
-      h("div.row.wrap", tn, h("label.check", tro, "nur lesen"), h("button.btn.sm.primary", { on: { click: async () => {
-        const r = await POST("/tokens", { name: tn.value || "Token", read_only: tro.checked });
+  const dn = h("input.input", { value: S.me.display_name, style: { width: "240px" }, on: { change: (e) => saveSettings({ display_name: e.target.value }) } });
+  const o = h("input.input", { type: "password", placeholder: "Altes Passwort", autocomplete: "current-password" });
+  const n = h("input.input", { type: "password", placeholder: "Neues Passwort", autocomplete: "new-password" });
+  body.append(
+    panel("Profil",
+      srow("Anzeigename", "So nennt dich syn.", dn),
+      srow("Benutzername", "Für die Anmeldung und CardDAV.", h("span.mono", S.me.username))),
+    panel("Passwort",
+      srow("Passwort ändern", "Mindestens 8 Zeichen.", h("div.row", o, n, h("button.btn", { on: { click: async () => { await POST("/me/password", { old: o.value, new: n.value }); o.value = n.value = ""; toast("Passwort geändert"); } } }, "Ändern")))),
+    panel("Angemeldete Geräte",
+      ...ses.map((x) => srow(x.agent?.replace(/\(.*?\)/g, "").slice(0, 60) || "Unbekanntes Gerät", `Seit ${(x.created_at || "").slice(0, 10)} · läuft ab ${(x.expires_at || "").slice(0, 10)}`, null)),
+      srow("Abmelden", "Auf diesem Gerät.", h("button.btn", { on: { click: async () => { await POST("/auth/logout"); location.hash = "#/login"; } } }, icon("logout"), "Abmelden"))));
+}
+
+async function tokens(body) {
+  const toks = await GET("/tokens");
+  const tn = h("input.input", { placeholder: "Name, z.B. n8n oder Türschild", style: { width: "260px" } });
+  const ro = h("input.switch", { type: "checkbox", role: "switch" });
+  body.append(
+    panel("Neues Token",
+      srow("Name", "Wofür das Token ist – damit du es später erkennst.", tn),
+      srow("Nur lesen", "Das Token kann nichts ändern, z.B. für ein Türschild.", ro),
+      srow("", null, h("button.btn.primary", { on: { click: async () => {
+        const r = await POST("/tokens", { name: tn.value || "Token", read_only: ro.checked });
         await modal("Token erstellt", h("div.col", h("p", "Kopiere das Token jetzt – es wird nur einmal angezeigt."), h("div.code", r.token), h("button.btn.sm", { on: { click: () => { navigator.clipboard?.writeText(r.token); toast("Kopiert"); } } }, icon("copy"), "Kopieren")), [{ label: "Fertig", primary: true }]);
-        reloadTab(body, account); } } }, icon("key"), "Erstellen")),
-      h("table.mtable", h("tr", h("th", "Name"), h("th", "Token"), h("th", "Rechte"), h("th", "Erstellt"), h("th", "Zuletzt benutzt"), h("th")),
-        toks.map((t) => h("tr" + (t.revoked_at ? ".t3" : ""), h("td", t.name), h("td.mono", t.prefix + "…"), h("td", t.read_only ? "lesen" : "lesen & schreiben"), h("td.mono", (t.created_at || "").slice(0, 10)), h("td", t.last_used_at ? rel(t.last_used_at.slice(0, 10)) : "nie"),
-          h("td", t.revoked_at ? "widerrufen" : h("button.btn.sm", { on: { click: async () => { await DEL("/tokens/" + t.id); reloadTab(body, account); } } }, "Widerrufen")))))),
-    card("Angemeldete Geräte", ses.map((s) => h("div.small", h("span.mono", (s.created_at || "").slice(0, 16)), " · ", s.agent?.slice(0, 80), " · läuft ab ", (s.expires_at || "").slice(0, 16))),
-      h("button.btn.sm", { style: { alignSelf: "flex-start" }, on: { click: async () => { await POST("/auth/logout"); location.hash = "#/login"; } } }, icon("logout"), "Abmelden")));
+        reloadTab(body, tokens); } } }, icon("key"), "Token erstellen"))),
+    panel("Deine Tokens", ...(toks.length ? toks.map((t) => srow(t.name, `${t.prefix}… · ${t.read_only ? "nur lesen" : "lesen & schreiben"} · erstellt ${(t.created_at || "").slice(0, 10)} · ${t.last_used_at ? "benutzt " + rel(t.last_used_at.slice(0, 10)) : "noch nie benutzt"}`,
+      t.revoked_at ? h("span.t3", "widerrufen") : h("button.btn.sm", { on: { click: async () => { await DEL("/tokens/" + t.id); reloadTab(body, tokens); } } }, "Widerrufen"))) : [srow("Noch keine Tokens", "Jedes Token sieht nur deine Daten. Nutzbar auch als Passwort für CardDAV.", null)])));
 }
 
 async function admin(body) {
@@ -412,14 +466,13 @@ async function admin(body) {
 async function shortcuts(body) {
   const groups = {};
   for (const a of ACTIONS) (groups[a[1]] ||= []).push(a);
-  body.append(h("p.small.t2", "Alle Tastenkürzel lassen sich ändern. Einfache Tasten (ohne Strg/⌘/Alt) wirken nicht, während du in ein Feld tippst."),
-    ...Object.entries(groups).map(([g, list]) => card(g, h("table.mtable", list.map(([id, , label, def]) => {
+  body.append(h("p.small.t2", "Einfache Tasten ohne Sondertaste wirken nicht, während du in ein Feld tippst. Shift+? zeigt alle Kürzel."),
+    ...Object.entries(groups).map(([g, list]) => panel(g, ...list.map(([id, , label, def]) => {
       const cur = binding(id);
-      return h("tr", h("td", label), h("td", h("span.kbd.big", pretty(cur))), h("td.small.t3", cur !== def ? `Standard: ${pretty(def)}` : "Standard"),
-        h("td.row", { style: { justifyContent: "flex-end" } },
-          h("button.btn.sm", { on: { click: async () => { const c = await recordCombo(); if (c) { await saveBinding(id, c); reloadTab(body, shortcuts); } } } }, "Ändern"),
-          h("button.btn.sm.ghost", { on: { click: async () => { await saveBinding(id, ""); reloadTab(body, shortcuts); } } }, "Aus"),
-          cur !== def ? h("button.btn.sm.ghost", { on: { click: async () => { await saveBinding(id, null); reloadTab(body, shortcuts); } } }, "Zurücksetzen") : null));
-    })))),
+      return srow(label, cur !== def ? h("span", "Standard: ", keys(def)) : null, h("div.row",
+        h("button.kbd-btn", { title: "Neu belegen", on: { click: async () => { const c = await recordCombo(); if (c) { await saveBinding(id, c); reloadTab(body, shortcuts); } } } }, keys(cur)),
+        cur !== def ? h("button.btn.sm.ghost", { on: { click: async () => { await saveBinding(id, null); reloadTab(body, shortcuts); } } }, "Zurücksetzen")
+          : h("button.btn.sm.ghost", { on: { click: async () => { await saveBinding(id, ""); reloadTab(body, shortcuts); } } }, "Aus")));
+    }))),
     h("button.btn", { style: { alignSelf: "flex-start" }, on: { click: async () => { await saveSettings({ shortcuts: {} }); reloadTab(body, shortcuts); } } }, icon("refresh"), "Alle auf Standard"));
 }

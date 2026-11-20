@@ -109,6 +109,34 @@ export function helpOverlay() {
   const groups = {};
   for (const [id, g, label] of ACTIONS) (groups[g] ||= []).push([id, label]);
   modal("Tastenkürzel", h("div.col", Object.entries(groups).map(([g, list]) => h("div.col", { style: { gap: "4px" } }, h("h3", g),
-    list.map(([id, label]) => h("div.row.between", h("span", label), h("span.kbd", pretty(binding(id))))))),
+    list.map(([id, label]) => h("div.row.between", h("span", label), keys(binding(id)))))),
   h("a.small", { href: "#/settings/shortcuts", on: { click: () => document.querySelector(".backdrop:not(.leaving)")?._close?.(null) } }, "Tastenkürzel ändern →")), []);
+}
+
+// ---------------------------------------------------------------- Tastenkappen: einheitliche Darstellung aller Tasten
+const KEY_SVG = {
+  cmd: '<path d="M9 6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3z"/>',
+  shift: '<path d="M12 4 4 12h4v8h8v-8h4z"/>',
+  opt: '<path d="M3 6h5l8 12h5M14 6h7"/>',
+  ctrl: '<path d="m6 14 6-6 6 6"/>',
+  enter: '<path d="M20 5v7a3 3 0 0 1-3 3H5"/><path d="m9 11-4 4 4 4"/>',
+  up: '<path d="M12 19V5M6 11l6-6 6 6"/>', down: '<path d="M12 5v14M6 13l6 6 6-6"/>',
+  left: '<path d="M19 12H5M11 6l-6 6 6 6"/>', right: '<path d="M5 12h14M13 6l6 6-6 6"/>',
+};
+const NAMES = { Mod: IS_MAC ? "cmd" : "Strg", Ctrl: IS_MAC ? "ctrl" : "Strg", Meta: IS_MAC ? "cmd" : "Win", Alt: IS_MAC ? "opt" : "Alt", Shift: IS_MAC ? "shift" : "Shift",
+  Enter: "enter", Up: "up", Down: "down", Left: "left", Right: "right", Esc: "Esc", Space: "Leertaste", "↑": "up", "↓": "down", "←": "left", "→": "right" };
+export function keycap(k) {
+  const n = NAMES[k] ?? k;
+  const el = document.createElement("span"); el.className = "key";
+  if (KEY_SVG[n]) { el.innerHTML = `<svg viewBox="0 0 24 24">${KEY_SVG[n]}</svg>`; el.title = ""; el.setAttribute("aria-label", k); }
+  else el.textContent = n.length === 1 ? n.toUpperCase() : n;
+  return el;
+}
+// „Mod+Shift+Z“ → einzelne Tastenkappen; auch „↑↓“ oder „1–3“
+export function keys(combo) {
+  const box = document.createElement("span"); box.className = "keys";
+  if (!combo) { box.append(Object.assign(document.createElement("span"), { className: "key off", textContent: "aus" })); return box; }
+  const parts = combo === "↑↓" ? ["↑", "↓"] : combo.split("+").filter((x, i, a) => x || a[i - 1] === "");
+  for (const p of parts) box.append(keycap(p || "+"));
+  return box;
 }

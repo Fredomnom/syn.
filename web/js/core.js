@@ -429,3 +429,30 @@ export function svgEl(tag, attrs = {}, ...kids) { return h(tag, attrs, ...kids);
 export function download(name, text, mime = "application/json") {
   const a = h("a", { href: URL.createObjectURL(new Blob([text], { type: mime })), download: name }); a.click();
 }
+
+// ---------------------------------------------------------------- Räumliche Übergänge
+// Markierungen in Leisten ([data-seg]) gleiten vom alten zum neuen Eintrag, statt neu zu erscheinen.
+export function captureSegs(root) {
+  const out = {};
+  root.querySelectorAll("[data-seg]").forEach((c) => {
+    const on = c.querySelector(".on"); if (!on) return;
+    const a = c.getBoundingClientRect(), b = on.getBoundingClientRect();
+    out[c.dataset.seg] = { x: b.left - a.left + c.scrollLeft, y: b.top - a.top + c.scrollTop, w: b.width, h: b.height };
+  });
+  return out;
+}
+export function animateSegs(root, prev) {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  root.querySelectorAll("[data-seg]").forEach((c) => {
+    const old = prev[c.dataset.seg]; const on = c.querySelector(".on");
+    if (!old || !on) return;
+    const a = c.getBoundingClientRect(), b = on.getBoundingClientRect();
+    const now = { x: b.left - a.left + c.scrollLeft, y: b.top - a.top + c.scrollTop, w: b.width, h: b.height };
+    if (Math.abs(now.x - old.x) < 1 && Math.abs(now.y - old.y) < 1) return;
+    const ind = document.createElement("span"); ind.className = "seg-ind";
+    Object.assign(ind.style, { left: old.x + "px", top: old.y + "px", width: old.w + "px", height: old.h + "px" });
+    c.classList.add("seg-anim"); c.prepend(ind);
+    requestAnimationFrame(() => requestAnimationFrame(() => Object.assign(ind.style, { left: now.x + "px", top: now.y + "px", width: now.w + "px", height: now.h + "px" })));
+    setTimeout(() => { c.classList.remove("seg-anim"); ind.remove(); }, 300);
+  });
+}

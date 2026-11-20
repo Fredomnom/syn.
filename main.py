@@ -34,15 +34,31 @@ def create_app() -> FastAPI:
 
     app = FastAPI(title="syn", version="1.0.0", description="Das Kontaktbuch für alle, die du kennst. "
                   "Alles, was die Oberfläche kann, geht auch über diese API.",
-                  docs_url="/api/docs", openapi_url="/api/openapi.json", lifespan=lifespan)
+                  docs_url=None, redoc_url=None, openapi_url="/api/openapi.json", lifespan=lifespan)
     for mod in mods:
         app.include_router(mod.router)
         if hasattr(mod, "install"):
             mod.install(app)
 
+    @app.middleware("http")
+    async def no_stale_ui(request: Request, call_next):
+        # Oberfläche immer frisch: der Browser fragt bei jedem Aufruf nach (304, wenn unverändert)
+        resp = await call_next(request)
+        p = request.url.path
+        if p.startswith("/static/") or p in ("/", "/sw.js", "/manifest.webmanifest"):
+            if not p.startswith(("/static/fonts/", "/static/icons/")):
+                resp.headers["Cache-Control"] = "no-cache"
+        return resp
+
     @app.exception_handler(ValueError)
     async def value_error(request: Request, exc: ValueError):
         return JSONResponse({"detail": str(exc)}, status_code=400)
+
+    @app.get("/api/docs", include_in_schema=False)
+    def api_docs():
+        # eigene Dokumentation in der Oberfläche – ohne fremde CDNs
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse("/#/api")
 
     @app.get("/api/v1/health", tags=["Konten"])
     def health():

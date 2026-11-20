@@ -3,7 +3,7 @@ import "./date.js";
 import "./color.js";
 import "./hover.js";
 import "./controls.js";
-import { onGlobal } from "./shortcuts.js";
+import { onGlobal, keys } from "./shortcuts.js";
 import { S, h, api, GET, POST, clear, logo, loadBase, isMobile, flushQueue, toast, icon } from "./core.js";
 
 export const route = { parts: [], query: {} };
@@ -82,7 +82,7 @@ async function renderSetup(app) {
   const dots = h("div.intro-dots");
   const back = h("button.btn.ghost", { on: { click: () => go(i - 1) } }, icon("left"), "Zurück");
   const next = h("button.btn.primary", { on: { click: () => (i === steps.length - 1 ? finish() : go(i + 1)) } });
-  const keysHint = h("span.intro-keys", h("span.kbd", "Enter"), " weiter");
+  const keysHint = h("span.intro-keys");
   const card = h("div.intro", { style: { position: "relative" } }, dots, stage, h("div.intro-nav", back, h("span.grow"), keysHint, next));
   const choice = (key, val, title, text, ill) => h("button.intro-choice" + (st[key] === val ? ".on" : ""), { type: "button", tabIndex: -1, on: { click: () => { st[key] = val; draw(true); } } },
     ill ? h("span.intro-ill", ill) : null, h("span.col", { style: { gap: "2px", alignItems: "flex-start", textAlign: "left" } }, h("b", title), h("span.small.t2", text)), h("span.intro-radio"));
@@ -124,7 +124,7 @@ async function renderSetup(app) {
     if (!same) pg.classList.add(dir > 0 ? "from-right" : "from-left");
     clear(stage, pg);
     pg.querySelectorAll(".intro-choice").forEach((c, k) => c.prepend(h("span.intro-num", String(k + 1))));
-    clear(keysHint, pg.querySelector(".intro-choice") ? [h("span.kbd", "↑↓"), " oder ", h("span.kbd", "1–" + pg.querySelectorAll(".intro-choice").length), " wählen  ", h("span.kbd", "Enter"), " weiter"] : [h("span.kbd", "Enter"), " weiter"]);
+    clear(keysHint, pg.querySelector(".intro-choice") ? [keys("↑↓"), " wählen ", keys("Enter"), " weiter"] : [keys("Enter"), " weiter"]);
     clear(dots, steps.map((_, k) => h("span" + (k === i ? ".on" : k < i ? ".done" : ""))));
     back.style.visibility = i === 0 || i === steps.length - 1 ? "hidden" : "visible";
     clear(next, i === 0 ? "Los geht's" : i === steps.length - 1 ? "syn öffnen" : "Weiter", icon("right"));

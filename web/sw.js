@@ -1,5 +1,5 @@
 // syn Service Worker: App-Hülle offline verfügbar; API immer übers Netz (Erfassungen puffert die App selbst).
-const CACHE = "syn-v1";
+const CACHE = "syn-v2";
 const SHELL = ["/", "/static/css/app.css", "/static/js/app.js", "/static/js/core.js", "/static/js/fields.js", "/static/js/shared.js",
   "/static/js/mobile.js", "/static/js/notes.js", "/static/icons/icon.svg", "/static/fonts/inter-400.woff2", "/static/fonts/inter-500.woff2",
   "/static/fonts/inter-600.woff2", "/static/fonts/space-grotesk-600.woff2", "/static/fonts/jetbrains-mono-400.woff2"];

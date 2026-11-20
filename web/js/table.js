@@ -3,7 +3,7 @@
 import { S, h, icon, GET, POST, PATCH, clear, invalidate, avatar, circleChip, nameEl, rel, ringName, menu, pickCircle, toast, confirmDlg, modal, rows, MOD, popover, closePop } from "./core.js";
 import { editField, plain, TYPE_NAMES } from "./fields.js";
 import { ringPopup } from "./shared.js";
-import { matches } from "./shortcuts.js";
+import { matches, keys, binding } from "./shortcuts.js";
 import { dateInput } from "./date.js";
 import { VS } from "./desktop.js";
 
@@ -92,7 +92,7 @@ export async function table(body, list, all) {
     const n = (g.r2 - g.r1 + 1) * (g.c2 - g.c1 + 1);
     clear(foot, h("span", `${list.length} Zeilen`), h("span", `${all.filter((x) => !x.is_self).length} gesamt`), n > 1 ? h("span", `Auswahl ${g.r2 - g.r1 + 1} × ${g.c2 - g.c1 + 1}`) : null,
       st.rowsSel.size ? h("span", `${st.rowsSel.size} Zeilen markiert`) : null, h("span.grow"),
-      h("span", h("span.kbd", "↑↓←→"), " bewegen"), h("span", h("span.kbd", "Enter"), " bearbeiten"), h("span", h("span.kbd", "Shift+Klick"), " Bereich"), h("span", h("span.kbd", MOD + "D"), " füllen"), h("span", h("span.kbd", MOD + "C / " + MOD + "V"), " kopieren"));
+      h("span.row", keys("↑↓"), " bewegen"), h("span.row", keys("Enter"), " bearbeiten"), h("span.row", keys("Shift"), "+Klick Bereich"), h("span.row", keys(binding("fill_down")), " füllen"), h("span.row", keys("Mod+C"), " kopieren"));
     drawBulk();
     const td = tds[st.act.r]?.[st.act.c];
     if (td) { const sr = sheet.getBoundingClientRect(), tr = td.getBoundingClientRect();

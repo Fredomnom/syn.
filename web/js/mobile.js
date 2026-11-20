@@ -22,6 +22,7 @@ export async function render(app, route) {
   else if (p0 === "today") await todayPage(page);
   else if (p0 === "notes") await notesPage(page);
   else if (p0 === "settings") await settingsMobile(page, p1, route);
+  else if (p0 === "api") await (await import("./apidocs.js")).apiDocs(page, route);
   else await people(page);
   const old = app.querySelector(".mpage");
   const scroll = same ? scrollY : 0;
@@ -33,9 +34,9 @@ export async function render(app, route) {
 
 async function settingsMobile(page, tab, route) {
   const { settingsPage } = await import("./settings.js");
-  page.append(h("div.mtop", h("a.back", { href: "#/me" }, icon("left"), "Ich")));
+  if (!tab) page.append(h("div.mtop", h("a.back", { href: "#/me" }, icon("left"), "Ich")));
   const box = h("div.msettings");
-  await settingsPage(box, tab || "account", route);
+  await settingsPage(box, tab || null, route);
   page.append(box);
 }
 
@@ -221,7 +222,7 @@ async function mePage(page) {
       h("div.kv", h("span.k", "Darstellung"), h("div.seg", [["system", "System"], ["light", "Hell"], ["dark", "Dunkel"]].map(([k, l]) =>
         h("button" + (themePref() === k ? ".on" : ""), { on: { click: () => { setTheme(k); rebuild(page, mePage); } } }, l)))),
       h("button.prow", { style: { width: "100%", border: 0, textAlign: "left", font: "inherit", color: "inherit" }, on: { click: () => dispatchEvent(new CustomEvent("syn-undo", { detail: "undo" })) } }, icon("undo"), h("span.grow", "Letzte Änderung rückgängig")),
-      h("a.prow", { href: "#/settings/account" }, icon("settings"), h("span.grow", "Einstellungen"), icon("right")),
+      h("a.prow", { href: "#/settings" }, icon("settings"), h("span.grow", "Einstellungen"), icon("right")),
       h("a.prow", { href: "#/settings/routines" }, icon("zap"), h("span.grow", "Routinen"), icon("right")),
       h("a.prow", { href: "#/settings/importers" }, icon("download"), h("span.grow", "Importe"), icon("right")),
       h("a.prow", { href: "#/settings/sync" }, icon("smartphone"), h("span.grow", "Sync aufs Handy"), icon("right"))),

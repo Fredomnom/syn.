@@ -1,6 +1,6 @@
 // Spotlight-Suche (Strg/⌘+K): Personen, Kreise, Ansichten & Seiten, gespeicherte Ansichten, Bünde.
 import { S, h, icon, GET, clear, rows, avatar, circleChip, circleColors } from "./core.js";
-import { binding, pretty } from "./shortcuts.js";
+import { binding, pretty, keys } from "./shortcuts.js";
 
 const fold = (s) => String(s ?? "").toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/ß/g, "ss");
 const RECENT = "syn.recent";
@@ -29,11 +29,11 @@ const PAGES = [
   ["Kreise", "#/circles", "circles"], ["Kreise · Bereiche", "#/circles/areas", "layers"], ["Heute", "#/today", "bell"], ["Notizen", "#/notes", "note"],
   ["Mögliche Doppelte", null, "merge"],
   ["Einstellungen · Felder", "#/settings/fields", "settings"], ["Einstellungen · Kreis-Arten", "#/settings/circle-kinds", "settings"],
-  ["Einstellungen · Bund-Arten", "#/settings/bund-kinds", "settings"], ["Einstellungen · Ringe", "#/settings/rings", "settings"],
+  ["Einstellungen · Bund-Arten", "#/settings/bund-kinds", "settings"], ["Einstellungen · Ringe & Ist", "#/settings/rings", "rings"],
   ["Einstellungen · Routinen", "#/settings/routines", "zap"], ["Einstellungen · Importe", "#/settings/importers", "download"],
-  ["Einstellungen · Sync", "#/settings/sync", "smartphone"], ["Einstellungen · Vorschläge", "#/settings/suggestions", "zap"],
-  ["Einstellungen · Tastenkürzel", "#/settings/shortcuts", "key"], ["Einstellungen · Konto", "#/settings/account", "user"],
-  ["Mein Profil", null, "user"],
+  ["Einstellungen · Handy & Sync", "#/settings/sync", "smartphone"], ["Einstellungen · Vorschläge", "#/settings/suggestions", "zap"],
+  ["Einstellungen · Tastenkürzel", "#/settings/shortcuts", "key"], ["Einstellungen · Konto", "#/settings/account", "user"], ["Einstellungen · Darstellung", "#/settings/appearance", "sun"], ["Einstellungen · API-Tokens", "#/settings/tokens", "link"], ["Einstellungen · Module & Daten", "#/settings/modules", "layers"],
+  ["Mein Profil", null, "user"], ["API-Dokumentation", "#/api", "link"],
 ];
 
 let open = null;
@@ -41,8 +41,8 @@ export async function openSpotlight() {
   if (open) { open.input.focus(); open.input.select(); return; }
   const input = h("input.spot-input", { placeholder: "Personen, Kreise, Ansichten, Bünde suchen …", autocomplete: "off", spellcheck: false });
   const list = h("div.spot-list");
-  const panel = h("div.spot", h("div.spot-head", icon("search"), input, h("span.kbd", "Esc")), list,
-    h("div.spot-foot", h("span", h("span.kbd", "↑↓"), " auswählen"), h("span", h("span.kbd", "Enter"), " öffnen"), h("span.grow"), h("span", pretty(binding("search")), " öffnet die Suche")));
+  const panel = h("div.spot", h("div.spot-head", icon("search"), input, keys("Esc")), list,
+    h("div.spot-foot", h("span.row", keys("↑↓"), " auswählen"), h("span.row", keys("Enter"), " öffnen"), h("span.grow"), h("span.row", keys(binding("search")), " öffnet die Suche")));
   const bd = h("div.spot-bd", { on: { mousedown: (e) => { if (e.target === bd) close(); } } }, panel);
   document.body.append(bd);
   open = { input };

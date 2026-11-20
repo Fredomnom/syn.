@@ -1,8 +1,8 @@
 // Desktop: sortieren und bearbeiten in großen Mengen. Seitenleiste, sechs Ansichten, Personenseite, Kreise.
-import { S, h, icon, GET, POST, PUT, PATCH, DEL, clear, rebuild, rows, invalidate, avatar, circleChip, nameEl, rel, ringName, today, debounce,
+import { S, h, icon, GET, POST, PUT, PATCH, DEL, clear, rebuild, rows, captureSegs, animateSegs, invalidate, avatar, circleChip, nameEl, rel, ringName, today, debounce,
   toast, modal, logo, qs, menu, pickPerson, pickCircle, reloadCircles, confirmDlg, ringMini, MOD, fmtTs, circleColors, kindColors, promptDlg, RING, cssVar as V } from "./core.js";
 import { primaryOf, valueEl, actionFor, editField, entityFieldList, runQuick, bundFields, TYPE_NAMES, SOURCE, plain, fieldsFor, service, serviceIcon, fieldRow, fieldSections } from "./fields.js";
-import { onPage, onGlobal, resetPage, binding, pretty, helpOverlay } from "./shortcuts.js";
+import { onPage, onGlobal, resetPage, binding, pretty, helpOverlay, keys } from "./shortcuts.js";
 import { dateInput } from "./date.js";
 import { openSpotlight, rememberPerson } from "./spotlight.js";
 import { editPerson, addField, dupHint, ringPopup, setRing, editIhrZwei, editBund, bundKindName, addBund, addToCircle, historyText } from "./shared.js";
@@ -14,7 +14,16 @@ export const VIEWS = [["grid", "Grid", "grid"], ["list", "Liste", "list"], ["tab
 // Zustand der Personen-Ansicht (Filter, Sortierung, Spalten) – lässt sich als Ansicht speichern
 export const VS = { view: LS("view", "table"), filter: "", kind: "all", q: "", sort: "name", circle: "", max_level: "", columns: null, savedId: null, cfg: {} };
 
-let lastPath = null;
+let lastPath = null, lastPlace = null;
+const SET_ORDER = ["account", "appearance", "shortcuts", "fields", "circle-kinds", "bund-kinds", "rings", "routines", "importers", "suggestions", "sync", "tokens", "modules", "admin"];
+// Position einer Seite innerhalb ihrer Leiste (für die Richtung der Übergänge)
+function place(route) {
+  const [p0, p1] = route.parts;
+  if (!p0 || p0 === "people") return ["people", VIEWS.findIndex(([id]) => id === (p1 || LS("view", "table")))];
+  if (p0 === "settings") return ["settings", Math.max(0, SET_ORDER.indexOf(p1 || "account"))];
+  if (p0 === "circles") return ["circles", p1 === "areas" ? 1 : 0];
+  return null;
+}
 export async function render(app, route) {
   const [p0, p1, p2] = route.parts;
   const path = route.parts.join("/");
@@ -27,9 +36,19 @@ export async function render(app, route) {
   const scroll = same && oldMain ? oldMain.scrollTop : 0;
   await routeTo(main, route);
   const desk = h("div.desk" + (LS("side", true) ? "" : ".collapsed"), side, main);
+  const prevSegs = captureSegs(app);
+  const pos = place(route), prevPos = lastPlace; lastPlace = pos;
   clear(app, desk);
   main.scrollTop = scroll;
-  if (!same) main.classList.add("enter");
+  animateSegs(app, prevSegs);
+  if (!same) {
+    // Innerhalb einer Leiste: nur der Inhalt gleitet in Richtung des neuen Eintrags
+    const zone = main.querySelector(".slide-zone");
+    if (zone && pos && prevPos && pos[0] === prevPos[0] && pos[1] !== prevPos[1]) {
+      const vertical = pos[0] === "settings";
+      zone.classList.add(vertical ? (pos[1] > prevPos[1] ? "slide-up" : "slide-down") : (pos[1] > prevPos[1] ? "slide-left" : "slide-right"));
+    } else main.classList.add("enter");
+  }
   setupGlobalKeys();
 }
 
@@ -44,6 +63,7 @@ async function routeTo(main, route) {
   if (p0 === "settings") return (await import("./settings.js")).settingsPage(main, p1 || "fields", route);
   if (p0 === "notes") return notesPage(main);
   if (p0 === "today") return todayPage(main);
+  if (p0 === "api") return (await import("./apidocs.js")).apiDocs(main, route);
   return people(main, null, route);
 }
 
@@ -69,9 +89,9 @@ async function sidebar(route) {
   const nav = (href, ic, label, n, on) => h("a.nav" + (on ? ".on" : ""), { href, title: label }, icon(ic), h("span.lab", label), n !== undefined ? h("span.n", n) : null);
   const t = await GET("/today");
   const sugg = (await GET("/suggestions")).length;
-  return h("aside.side",
+  return h("aside.side", { "data-seg": "side" },
     h("div.top", logo(), h("button.btn.ghost.icon", { title: `Seitenleiste ein-/ausklappen (${pretty(binding("toggle_sidebar"))})`, on: { click: toggleSidebar } }, icon("sidebar"))),
-    h("button.nav.spot-btn", { on: { click: () => openSpotlight() } }, icon("search"), h("span.lab", "Suchen"), h("span.n.kbd", pretty(binding("search")))),
+    h("button.nav.spot-btn", { on: { click: () => openSpotlight() } }, icon("search"), h("span.lab", "Suchen"), h("span.n", keys(binding("search")))),
     nav("#/people", "users", "Personen", all.filter((r) => !r.is_self).length, ["people", "p", "v", "merge"].includes(p0)),
     nav("#/circles", "circles", "Kreise", Object.keys(S.circles).length, ["circles", "c"].includes(p0)),
     S.settings.notes_enabled ? nav("#/notes", "note", "Notizen", undefined, p0 === "notes")
@@ -119,7 +139,7 @@ async function people(main, view, route, saved = null) {
   const all = await rows();
   const page = h("div.page");
   main.append(page);
-  const body = h("div.col", { style: { flex: 1, minHeight: 0 } });
+  const body = h("div.col.slide-zone", { style: { flex: 1, minHeight: 0 } });
   const redraw = () => drawView(body, all);
   const views = VIEWS.filter(([id]) => S.settings.use_levels || id !== "rings");
   const filterBtn = h("button.btn.sm", { on: { click: (e) => filterMenu(e.currentTarget, redraw) } }, icon("filter"), "Filter" + (activeFilters() ? " · " + activeFilters() : ""));
@@ -132,7 +152,7 @@ async function people(main, view, route, saved = null) {
     h("div.toolbar",
       h("span.small.t2", "Personen"), h("select.input", { on: { change: (e) => { VS.kind = e.target.value; redraw(); } } },
         [["all", "Alle Menschen & Tiere"], ["person", "Menschen"], ["pet", "Haustiere"]].map(([k, l]) => h("option", { value: k, selected: VS.kind === k }, l))),
-      h("div.seg", views.map(([id, label, ic], i) => h("button" + (VS.view === id ? ".on" : ""), { title: `${label} (${pretty(binding("view_" + id))})`, on: { click: () => { location.hash = `#/people/${id}`; } } }, icon(ic), label))),
+      h("div.seg", { "data-seg": "views" }, views.map(([id, label, ic], i) => h("button" + (VS.view === id ? ".on" : ""), { title: `${label} (${pretty(binding("view_" + id))})`, on: { click: () => { location.hash = `#/people/${id}`; } } }, icon(ic), label))),
       h("span.grow"), filterBtn, sortBtn,
       h("button.btn.sm", { title: "Ansicht speichern", on: { click: () => saveView(saved) } }, icon("download"), saved ? "Speichern" : "Ansicht speichern")),
     body);
@@ -335,9 +355,10 @@ async function circlesPage(main, sub) {
   const mode = sub || LS("cview", "table"); SAVE("cview", mode);
   const cs = Object.values(S.circles);
   page.append(h("div.page-h", h("h1", "Kreise"), h("button.btn.primary", { on: { click: () => newCircle() } }, icon("plus"), "Kreis anlegen")),
-    h("div.toolbar", h("div.seg", [["table", "Tabelle", "table"], ["areas", "Bereiche", "layers"]].map(([k, l, ic]) => h("button" + (mode === k ? ".on" : ""), { on: { click: () => (location.hash = "#/circles/" + k) } }, icon(ic), l))),
+    h("div.toolbar", h("div.seg", { "data-seg": "circles" }, [["table", "Tabelle", "table"], ["areas", "Bereiche", "layers"]].map(([k, l, ic]) => h("button" + (mode === k ? ".on" : ""), { on: { click: () => (location.hash = "#/circles/" + k) } }, icon(ic), l))),
       h("span.grow"), h("a.btn.sm", { href: "#/settings/circle-kinds" }, "Kreis-Arten")));
-  if (mode === "areas") return (await import("./viz.js")).areas(page, await rows());
+  const zone = h("div.col.slide-zone", { style: { gap: "16px" } }); page.append(zone);
+  if (mode === "areas") return (await import("./viz.js")).areas(zone, await rows());
   const tops = cs.filter((c) => !c.parent_id).sort((a, b) => a.name.localeCompare(b.name));
   const order = tops.flatMap((c) => [c, ...cs.filter((x) => x.parent_id === c.id).sort((a, b) => a.name.localeCompare(b.name))]);
   order.push(...cs.filter((c) => c.parent_id && !S.circles[c.parent_id]));
@@ -350,7 +371,7 @@ async function circlesPage(main, sub) {
       h("td", c.count, c.children.length ? h("span.t3.small", ` (inkl. ${c.children.length} Unterkreis${c.children.length > 1 ? "e" : ""})`) : null),
       h("td.mono.t2", (c.created_at || "").slice(0, 10)),
       h("td", h("button.btn.sm.ghost.icon", { on: { click: (ev) => circleMenu(ev.currentTarget, c, () => rebuild(main, (m) => circlesPage(m, sub))) } }, icon("more"))))));
-  page.append(h("div.card", cs.length ? t : h("div.empty", "Noch keine Kreise. Kreise sind Gruppen ohne Beziehungsbedeutung: Familie, Klasse, Firma, Verein …")));
+  zone.append(h("div.card", cs.length ? t : h("div.empty", "Noch keine Kreise. Kreise sind Gruppen ohne Beziehungsbedeutung: Familie, Klasse, Firma, Verein …")));
 }
 
 function circleMenu(anchor, c, done) {
