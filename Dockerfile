@@ -41,16 +41,19 @@ ENV PATH="/venv/bin:$PATH" \
     SYN_HOST=0.0.0.0 \
     SYN_PORT=8080
 
-# eigener Nutzer statt root; /data gehört ihm
+# eigener Nutzer statt root; syn läuft als dieser Nutzer (siehe Startskript)
 RUN groupadd --system --gid 1000 syn \
  && useradd --system --uid 1000 --gid syn --home-dir /app --shell /usr/sbin/nologin syn \
  && mkdir -p /data && chown syn:syn /data
 
+# Startskript: richtet die Rechte an /data ein und startet syn dann ohne root-Rechte (setpriv)
+COPY --chmod=755 docker-entrypoint.sh /usr/local/bin/syn-entrypoint
 WORKDIR /app
 VOLUME ["/data"]
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD python -c "import os,urllib.request; urllib.request.urlopen(f'http://127.0.0.1:{os.environ.get(\"SYN_PORT\",\"8080\")}/api/v1/health', timeout=4)" || exit 1
+ENTRYPOINT ["syn-entrypoint"]
 CMD ["python", "main.py"]
 
 # ---------------------------------------------------------------- Variante „full“
@@ -60,7 +63,6 @@ COPY --from=deps-full /venv /venv
 COPY --chown=syn:syn main.py ./
 COPY --chown=syn:syn syn ./syn
 COPY --chown=syn:syn web ./web
-USER syn
 
 # ---------------------------------------------------------------- Variante „slim“ (Standard, letzte Stufe)
 FROM runtime AS slim
@@ -68,4 +70,3 @@ COPY --from=deps /venv /venv
 COPY --chown=syn:syn main.py ./
 COPY --chown=syn:syn syn ./syn
 COPY --chown=syn:syn web ./web
-USER syn
