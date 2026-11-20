@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#FFD60A">
+<title>syn. – Das Kontaktbuch für alle, die du kennst</title>
+<meta name="description" content="syn ist ein selbst gehostetes Kontaktbuch: Ringe, Kreise, Bünde, Importe aus über 25 Diensten, Visitenkarte und Sync aufs Handy.">
+<link rel="icon" href="/static/icons/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/static/css/app.css">
+<link rel="stylesheet" href="/static/css/landing.css">
+<script>
+try { const t = localStorage.getItem("syn.theme"); const d = t ? t === "dark" : matchMedia("(prefers-color-scheme: dark)").matches; document.documentElement.dataset.theme = d ? "dark" : "light"; } catch (_) {}
+</script>
+</head>
+<body class="ld">
+
+<header class="ld-nav">
+  <a class="ld-logo" href="#top" aria-label="syn">syn<b>.</b></a>
+  <nav>
+    <a href="#features">Funktionen</a>
+    <a href="#privacy">Deine Daten</a>
+    <a href="#start">Loslegen</a>
+  </nav>
+  <a class="ld-btn ld-btn-ghost ld-gh" href="#github" data-github title="GitHub-Repository – kommt gleich">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.33-1.28-1.69-1.28-1.69-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.71 1.26 3.37.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.7 5.39-5.26 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5z"/></svg>
+    <span>GitHub</span>
+  </a>
+</header>
+
+<main id="top">
+  <!-- Hero -->
+  <section class="ld-hero">
+    <svg class="ld-rings" viewBox="-500 -500 1000 1000" aria-hidden="true">
+      <circle r="90"/><circle r="170"/><circle r="250"/><circle r="330"/><circle r="410"/>
+      <g class="ld-orbit o1"><circle cx="170" cy="0" r="16"/></g>
+      <g class="ld-orbit o2"><circle cx="0" cy="-250" r="20"/></g>
+      <g class="ld-orbit o3"><circle cx="-330" cy="0" r="13"/></g>
+      <g class="ld-orbit o4"><circle cx="0" cy="410" r="10"/></g>
+      <circle class="ld-me" r="34"/>
+    </svg>
+    <div class="ld-hero-in">
+      <p class="ld-kicker reveal">Selbst gehostet · Open Source · Ohne Tracking</p>
+      <h1 class="ld-title">
+        <span class="ld-word">Das</span> <span class="ld-word">Kontaktbuch</span><br>
+        <span class="ld-word">für</span> <span class="ld-word ld-hl">alle,</span><br>
+        <span class="ld-word">die</span> <span class="ld-word">du</span> <span class="ld-word">kennst.</span>
+      </h1>
+      <p class="ld-lead reveal">Auch für die, deren Namen du noch nicht weißt. syn merkt sich, wer dir nah ist, woher ihr euch kennt und wann ihr euch zuletzt gesehen habt.</p>
+      <div class="ld-cta reveal">
+        <a class="ld-btn ld-btn-primary" href="/#/login">Zur App <span aria-hidden="true">→</span></a>
+        <a class="ld-btn ld-btn-ghost" href="#github" data-github>Auf GitHub ansehen</a>
+      </div>
+    </div>
+    <a class="ld-scroll" href="#features" aria-label="Weiter"><span></span></a>
+  </section>
+
+  <!-- Laufband -->
+  <div class="ld-marquee" aria-hidden="true">
+    <div class="ld-track">
+      <span>Ringe</span><b>●</b><span>Kreise</span><b>●</b><span>Bünde</span><b>●</b><span>Visitenkarte</span><b>●</b><span>Zeitregler</span><b>●</b><span>Routinen</span><b>●</b><span>CardDAV</span><b>●</b><span>Rückgängig</span><b>●</b>
+      <span>Ringe</span><b>●</b><span>Kreise</span><b>●</b><span>Bünde</span><b>●</b><span>Visitenkarte</span><b>●</b><span>Zeitregler</span><b>●</b><span>Routinen</span><b>●</b><span>CardDAV</span><b>●</b><span>Rückgängig</span><b>●</b>
+    </div>
+  </div>
+
+  <!-- Zahlen -->
+  <section class="ld-stats">
+    <div class="reveal"><b data-count="26">0</b><span>Importe aus Diensten und Dateien</span></div>
+    <div class="reveal"><b data-count="4">0</b><span>Ringe von Engste bis Weit</span></div>
+    <div class="reveal"><b data-count="3">0</b><span>Sprachen: Deutsch, Englisch, Spanisch</span></div>
+    <div class="reveal"><b data-count="0">0</b><span>fremde Dienste, die mitlesen</span></div>
+  </section>
+
+  <!-- Funktionen -->
+  <section class="ld-section" id="features">
+    <h2 class="ld-h2 reveal">Alles, was Beziehungen <span class="ld-hl">wirklich</span> ausmacht.</h2>
+    <div class="ld-grid">
+      <article class="ld-card ld-big reveal">
+        <div class="ld-ill ld-ill-rings" aria-hidden="true"><i></i><i></i><i></i><i></i><em></em></div>
+        <h3>Ringe</h3>
+        <p>Wer ist dir nah? Von 1 (Engste) bis 4 (Weit) – ziehen, klicken, fertig. Das berechnete „Ist“ zeigt, wer nah ist, aber lange nicht gesehen wurde.</p>
+      </article>
+      <article class="ld-card reveal">
+        <div class="ld-ico">◎</div>
+        <h3>Kreise</h3>
+        <p>Familie, Klasse, Verein. Kreise färben Profilbilder und ordnen die Ringe in Sektoren.</p>
+      </article>
+      <article class="ld-card reveal">
+        <div class="ld-ico">∞</div>
+        <h3>Bünde</h3>
+        <p>Beziehungen zwischen genau zwei Menschen – mit Rollen wie Eltern-Kind oder Trainingspartner. Als Netz sichtbar.</p>
+      </article>
+      <article class="ld-card reveal">
+        <div class="ld-ico">?</div>
+        <h3>Erfassen ohne Namen</h3>
+        <p>„Typ aus dem Fitnessstudio“ reicht für den Anfang. Aus einem Eintrag wird nach und nach eine Person.</p>
+      </article>
+      <article class="ld-card ld-wide ld-yellow reveal">
+        <h3>Hol dir deine Leute</h3>
+        <p>Handy-Kontakte, Google, WhatsApp, Discord, Instagram, Telegram, Signal, Mastodon, Bluesky, GitHub, Steam, PlayStation, Xbox, LinkedIn und mehr. Mit Schritt-für-Schritt-Anleitung und Fortschrittsanzeige. Bots bleiben draußen.</p>
+        <div class="ld-chips"><span>WhatsApp</span><span>Discord</span><span>Instagram</span><span>Telegram</span><span>Signal</span><span>Mastodon</span><span>Bluesky</span><span>GitHub</span><span>Steam</span><span>LinkedIn</span><span>Google</span><span>vCard</span></div>
+      </article>
+      <article class="ld-card reveal">
+        <div class="ld-ico">@</div>
+        <h3>Visitenkarte</h3>
+        <p>Ein kurzer Link wie <code>/@fred</code>. Wer ihn öffnet, sieht deine Angaben – und lässt seine eigenen da.</p>
+      </article>
+      <article class="ld-card reveal">
+        <div class="ld-ico">↻</div>
+        <h3>Sync aufs Handy</h3>
+        <p>Per CardDAV direkt oder über Google Kontakte. Du bestimmst, wer aufs Handy kommt.</p>
+      </article>
+      <article class="ld-card reveal">
+        <div class="ld-ico">◷</div>
+        <h3>Zeitregler</h3>
+        <p>Wie sah dein Umfeld vor einem Jahr aus? Zieh den Regler zurück und sieh es.</p>
+      </article>
+      <article class="ld-card reveal">
+        <div class="ld-ico">↯</div>
+        <h3>Routinen</h3>
+        <p>Geburtstage, „lange nicht gesehen“, Webhooks und Schnellaktionen – automatisch.</p>
+      </article>
+      <article class="ld-card reveal">
+        <div class="ld-ico">⇧</div>
+        <h3>Tastatur zuerst</h3>
+        <p>Alles mit Kürzeln, frei belegbar. Rückgängig und Wiederholen für jede Änderung.</p>
+      </article>
+      <article class="ld-card reveal">
+        <div class="ld-ico">{ }</div>
+        <h3>Offene API</h3>
+        <p>Alles, was die Oberfläche kann, geht auch über die API – für Skripte, n8n und Home Assistant.</p>
+      </article>
+    </div>
+  </section>
+
+  <!-- Datenschutz -->
+  <section class="ld-dark" id="privacy">
+    <div class="ld-dark-in">
+      <h2 class="ld-h2 reveal">Deine Leute.<br><span class="ld-hl">Dein Server.</span></h2>
+      <ul class="ld-list">
+        <li class="reveal"><b>Selbst gehostet</b><span>Läuft auf deinem Server, ohne fremde Dienste.</span></li>
+        <li class="reveal"><b>Zwei-Faktor-Anmeldung</b><span>Mit jeder Authenticator-App und Wiederherstellungscodes.</span></li>
+        <li class="reveal"><b>Verschlüsselte Zugangsdaten</b><span>Tokens für Importe liegen verschlüsselt je Konto.</span></li>
+        <li class="reveal"><b>Alles exportierbar</b><span>Personen, Kreise, Bünde, Felder und Routinen als JSON.</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- Loslegen -->
+  <section class="ld-section ld-start" id="start">
+    <h2 class="ld-h2 reveal">In einer Minute startklar.</h2>
+    <pre class="ld-code reveal"><code><span class="c"># mit Docker</span>
+docker run -d -p 8080:8080 -v syn-data:/data \
+  -e SYN_ADMIN_USER=du -e SYN_ADMIN_PASSWORD=geheim123 \
+  ghcr.io/OWNER/syn:latest</code></pre>
+    <div class="ld-cta reveal">
+      <a class="ld-btn ld-btn-primary" href="#github" data-github>Repository öffnen <span aria-hidden="true">→</span></a>
+      <a class="ld-btn ld-btn-ghost" href="/#/login">Zur App</a>
+    </div>
+  </section>
+</main>
+
+<footer class="ld-foot">
+  <span class="ld-logo">syn<b>.</b></span>
+  <span>Das Kontaktbuch für alle, die du kennst.</span>
+</footer>
+
+<script type="module">
+import { initI18n, LANG } from "/static/js/i18n.js";
+initI18n();
+// Überschrift Wort für Wort (für die Animation) – je Sprache eigene Zeilen, das hervorgehobene Wort mit *
+const TITLES = { en: [["The", "contact", "book"], ["for", "*everyone"], ["you", "know."]], es: [["La", "agenda"], ["para", "*todas", "las"], ["personas", "que", "conoces."]] };
+if (TITLES[LANG]) {
+  const t = document.querySelector(".ld-title"); t.textContent = "";
+  TITLES[LANG].forEach((line, li) => {
+    if (li) t.append(document.createElement("br"));
+    line.forEach((w, wi) => { const s = document.createElement("span"); s.className = "ld-word" + (w.startsWith("*") ? " ld-hl" : ""); s.textContent = w.replace("*", ""); if (wi) t.append(" "); t.append(s); });
+  });
+  t.querySelectorAll(".ld-word").forEach((s, i) => (s.style.animationDelay = 0.25 + i * 0.08 + "s"));
+}
+// GitHub-Link: kommt gleich – bis dahin ein Platzhalter
+const GITHUB = "";
+for (const a of document.querySelectorAll("[data-github]")) {
+  if (GITHUB) { a.href = GITHUB; a.target = "_blank"; a.rel = "noopener"; }
+  else a.addEventListener("click", (e) => { e.preventDefault(); a.classList.remove("ld-wiggle"); void a.offsetWidth; a.classList.add("ld-wiggle"); });
+}
+// Einblenden beim Scrollen
+const io = new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); } }), { threshold: 0.15 });
+document.querySelectorAll(".reveal").forEach((el, i) => { el.style.setProperty("--d", (i % 4) * 70 + "ms"); io.observe(el); });
+// Zähler
+const co = new IntersectionObserver((es) => es.forEach((e) => {
+  if (!e.isIntersecting) return; co.unobserve(e.target);
+  const to = +e.target.dataset.count, t0 = performance.now();
+  const step = (t) => { const k = Math.min(1, (t - t0) / 1100); e.target.textContent = Math.round(to * (1 - Math.pow(1 - k, 3))); if (k < 1) requestAnimationFrame(step); };
+  requestAnimationFrame(step);
+}), { threshold: 0.6 });
+document.querySelectorAll("[data-count]").forEach((el) => co.observe(el));
+// Kopfzeile beim Scrollen
+const nav = document.querySelector(".ld-nav");
+addEventListener("scroll", () => nav.classList.toggle("scrolled", scrollY > 20), { passive: true });
+// Ringe folgen leicht der Maus
+const rings = document.querySelector(".ld-rings");
+if (matchMedia("(pointer: fine)").matches && !matchMedia("(prefers-reduced-motion: reduce)").matches)
+  addEventListener("pointermove", (e) => { const x = (e.clientX / innerWidth - 0.5) * 18, y = (e.clientY / innerHeight - 0.5) * 18; rings.style.translate = `${x}px ${y}px`; }, { passive: true });
+</script>
+</body>
+</html>
