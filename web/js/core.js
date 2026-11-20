@@ -87,6 +87,7 @@ export function h(tag, attrs, ...kids) {
     }
     else if (k === "class") el.setAttribute("class", [el.getAttribute("class"), v].filter(Boolean).join(" "));
     else if (k === "html") el.innerHTML = v;
+    else if (k === "title") el.dataset.tip = v; // keine Browser-Tooltips – eigenes <syn-tooltip>
     else if (k in el && !isSvg && k !== "list" && k !== "form") el[k] = v;
     else el.setAttribute(k, v === true ? "" : v);
   }
@@ -271,7 +272,8 @@ export function avatar(row, size = 28, { sel = false, self = false, exact = fals
   const name = row.display || row.name || row.description;
   const cc = circleColors(row.main_circle_id);
   const unsure = !row.name || row.name_uncertain;
-  const el = h("span.av", { style: { "--s": size + "px", background: cc.bg, color: cc.fg }, title: name });
+  const el = h("span.av", { style: { "--s": size + "px", background: cc.bg, color: cc.fg } });
+  if (row.id && !row.is_self) el.dataset.pid = row.id;
   if (row.is_self || self) el.classList.add("self");
   if (unsure && !row.is_self) el.classList.add("unsure");
   if (sel) el.classList.add("sel");

@@ -42,7 +42,7 @@ class SynDate extends HTMLElement {
     this.input.className = "input mono";
     this.input.autocomplete = "off";
     this.btn = document.createElement("button");
-    this.btn.type = "button"; this.btn.className = "btn icon"; this.btn.title = "Kalender";
+    this.btn.type = "button"; this.btn.className = "btn icon"; this.btn.dataset.tip = "Kalender öffnen";
     this.btn.innerHTML = '<svg viewBox="0 0 24 24" class="i"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/></svg>';
     this.input.addEventListener("input", () => { this._value = this.input.value; this.dispatchEvent(new Event("input", { bubbles: true })); });
     this.input.addEventListener("change", () => this.dispatchEvent(new Event("change", { bubbles: true })));
@@ -51,6 +51,15 @@ class SynDate extends HTMLElement {
   }
   connectedCallback() {
     if (!this.contains(this.input)) { this.classList.add("syn-date"); this.append(this.input, this.btn); }
+    if (this.hasAttribute("compact")) {
+      // nur ein Knopf mit Beschriftung, z.B. „Stand am …“
+      this.input.hidden = true;
+      this.btn.className = "btn sm"; this.btn.dataset.tip = "";
+      const lab = document.createElement("span"); lab.className = "sd-lab";
+      lab.textContent = this._value ? pretty(this._value) : this.getAttribute("compact");
+      this.btn.querySelector(".sd-lab")?.remove(); this.btn.append(lab);
+      this.addEventListener("change", () => { lab.textContent = this._value ? pretty(this._value) : this.getAttribute("compact"); });
+    }
     this.input.placeholder = this.getAttribute("placeholder") || "TT.MM.JJJJ, ohne Jahr, Herbst 2025 …";
     if (this.hasAttribute("value") && !this._value) this.value = this.getAttribute("value");
   }

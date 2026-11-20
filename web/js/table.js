@@ -266,8 +266,8 @@ export async function table(body, list, all) {
       S.settings.use_levels ? h("button.btn.sm", { on: { click: (e) => ringPopup(e.currentTarget, null, async (l) => { await POST("/bulk", { ids, op: "ring", value: l }); ids.forEach((id) => { const x = list.find((y) => y.id === id); if (x) x.level = l; }); invalidate(); refreshAll(); }) } }, icon("rings"), "Ring") : null,
       n === 2 ? h("button.btn.sm.dark", { on: { click: () => (location.hash = `#/merge/${ids[0]}/${ids[1]}`) } }, icon("merge"), "Zusammenführen") : null,
       h("button.btn.sm", { on: { click: (e) => menu(e.currentTarget, [
-        { label: "Aufs Handy", icon: "smartphone", action: async () => { await POST("/bulk", { ids, op: "on_phone", value: true }); toast("Aufs Handy gesetzt"); } },
-        { label: "Nicht aufs Handy", action: async () => { await POST("/bulk", { ids, op: "on_phone", value: false }); } },
+        { label: "Mit Handy synchronisieren", icon: "smartphone", action: async () => { await POST("/bulk", { ids, op: "on_phone", value: true }); toast("Wird mit dem Handy synchronisiert"); } },
+        { label: "Nicht mit Handy synchronisieren", action: async () => { await POST("/bulk", { ids, op: "on_phone", value: false }); } },
         { label: "Heute gesehen", icon: "eye", action: async () => { for (const id of ids) await POST(`/seen-today/${id}`); invalidate(); toast(`${n} × heute gesehen`); } },
         { label: "Löschen", icon: "trash", action: async () => { if (await confirmDlg(`${n} Einträge löschen?`, "Das lässt sich nicht rückgängig machen.", "Löschen", true)) { await POST("/bulk", { ids, op: "delete" }); invalidate(); location.reload(); } } }]) } }, icon("more"))] : null);
   }

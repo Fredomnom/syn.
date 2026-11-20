@@ -23,15 +23,6 @@ function node(r, x, y, size = 15, { approx = false, sel = false } = {}) {
   return g;
 }
 
-function tip(box, r, x, y, extra = []) {
-  box.querySelector(".tip")?.remove();
-  const t = h("div.tip", { style: { left: Math.min(x + 14, box.clientWidth - 200) + "px", top: Math.min(y + 14, box.clientHeight - 110) + "px" } },
-    h("b", r.display), h("div.small.t2", [S.settings.use_levels ? ringName(r.level) : null, r.bund_kind ? bundKindName(r.bund_kind) : null].filter(Boolean).join(" · ")),
-    h("div.small.t2", r.v.f_seen ? "Zuletzt gesehen: " + rel(r.v.f_seen.raw) : "noch nicht gesehen"), h("a.small", { href: "#/p/" + r.id }, "Profil öffnen →"));
-  box.append(t);
-  return t;
-}
-
 // ---------------------------------------------------------------- Zeitregler
 async function timeSlider(onChange) {
   const range = await GET("/timeline/range");
@@ -115,7 +106,7 @@ export async function rings(body, list0, all) {
       drag = { g, r: placed.find((x) => x.id === g.dataset.id), moved: false }; g.setPointerCapture(e.pointerId);
     });
     nodes.addEventListener("pointermove", (e) => {
-      if (!drag) { const g = e.target.closest(".node"); if (g) { const b = vizBox.getBoundingClientRect(); tip(vizBox, placed.find((x) => x.id === g.dataset.id), e.clientX - b.left, e.clientY - b.top); } return; }
+      if (!drag) return;
       const p = svgPoint(svg, e); drag.moved = true; drag.g.setAttribute("transform", `translate(${p.x},${p.y})`); drag.p = p;
     });
     nodes.addEventListener("pointerup", async (e) => {
@@ -134,7 +125,6 @@ export async function rings(body, list0, all) {
     };
     svg.addEventListener("dragover", (e) => e.preventDefault());
     svg.addEventListener("drop", async (e) => { e.preventDefault(); const id = e.dataTransfer.getData("text/syn-id"); const r = list.find((x) => x.id === id); if (r) { r.level = null; await dropAt(r, svgPoint(svg, e)); } });
-    vizBox.addEventListener("mouseleave", () => vizBox.querySelector(".tip")?.remove());
     // Seitenleiste: Ohne Ring + Ansicht
     clear(side,
       h("div.card", h("div.card-h", h("h3", "Ohne Ring"), h("span.small.t2", unplaced.length)),
@@ -231,7 +221,7 @@ export async function axes(body, list0) {
     let drag = null;
     g.addEventListener("pointerdown", (e) => { const n = e.target.closest(".node"); if (!n) return; drag = { n, p: shown.find((x) => x.r.id === n.dataset.id), moved: false }; n.setPointerCapture(e.pointerId); });
     g.addEventListener("pointermove", (e) => {
-      if (!drag) { const n = e.target.closest(".node"); if (n) { const b = box.getBoundingClientRect(); tip(box, shown.find((x) => x.r.id === n.dataset.id).r, e.clientX - b.left, e.clientY - b.top); } return; }
+      if (!drag) return;
       if (locked) return; const pt = svgPoint(svg, e); drag.moved = true; drag.pt = pt; drag.n.setAttribute("transform", `translate(${pt.x},${pt.y})`);
     });
     g.addEventListener("pointerup", async () => {
@@ -244,7 +234,6 @@ export async function axes(body, list0) {
       const fresh = (await rows(true)).find((x) => x.id === d.p.r.id); if (fresh) Object.assign(d.p.r, fresh);
       draw();
     });
-    box.addEventListener("mouseleave", () => box.querySelector(".tip")?.remove());
     const sel = (key) => h("select.input", { style: { height: "28px" }, on: { change: (e) => { cfg[key] = e.target.value; draw(); } } }, Object.entries(opts).map(([k, o]) => h("option", { value: k, selected: cfg[key] === k }, o.label + (o.locked ? " 🔒" : ""))));
     clear(side, h("div.card", h("div.card-h", h("h3", "Achsen")), h("div.card-b.col",
       h("label.f", "X-Achse", sel("x")), h("label.f", "Y-Achse", sel("y")),
@@ -347,7 +336,7 @@ export async function net(body, list0) {
     let drag = null;
     gN.addEventListener("pointerdown", (e) => { const g = e.target.closest(".node"); if (!g) return; drag = { g, id: g.dataset.id, moved: false }; g.setPointerCapture(e.pointerId); });
     gN.addEventListener("pointermove", (e) => {
-      if (!drag) { const g = e.target.closest(".node"); if (g) { const b = box.getBoundingClientRect(); tip(box, nodes.find((x) => x.id === g.dataset.id), e.clientX - b.left, e.clientY - b.top); } return; }
+      if (!drag) return;
       const p = svgPoint(svg, e); drag.moved = true; pos[drag.id] = { x: p.x, y: p.y }; drag.g.setAttribute("transform", `translate(${p.x},${p.y})`);
       for (const ln of gL.children) { if (ln.dataset.a === drag.id) { ln.setAttribute("x1", p.x); ln.setAttribute("y1", p.y); } if (ln.dataset.b === drag.id) { ln.setAttribute("x2", p.x); ln.setAttribute("y2", p.y); } }
     });
@@ -360,7 +349,6 @@ export async function net(body, list0) {
       if (hit && !at) { await POST(`/circles/${hit.id}/members`, { entity_id: d.id }); toast(`${n.display} ist jetzt in ${S.circles[hit.id].name}`); invalidate(); n.circles_all.push(hit.id); n.circles.push(hit.id); if (!n.main_circle_id) n.main_circle_id = hit.id; draw(); }
       else draw();
     });
-    box.addEventListener("mouseleave", () => box.querySelector(".tip")?.remove());
     drawSide();
   };
   const inside = (p, pts) => {

@@ -226,7 +226,7 @@ async function mePage(page) {
       h("button.btn.sm.ghost.icon", { on: { click: async () => { await POST(`/suggestions/${s.id}/reject`); rebuild(page, mePage); } } }, icon("x"))))) : null,
     h("div.list",
       h("div.kv", h("span.k", "Angemeldet als"), h("span.v", S.me.username)),
-      h("div.kv", h("span.k", "Aufs Handy"), h("span.v", ({ all: "Jeder", rule: "Nach Regel", none: "Niemand" })[S.settings.sync?.mode])),
+      h("div.kv", h("span.k", "Mit Handy synchronisiert"), h("span.v", ({ all: "Jeder", rule: "Nach Regel", none: "Niemand" })[S.settings.sync?.mode])),
       h("div.kv", h("span.k", "CardDAV"), h("span.v.mono.small", location.origin + "/dav/"))),
     h("div.list",
       h("div.kv", h("span.k", "Darstellung"), h("div.seg", [["system", "System"], ["light", "Hell"], ["dark", "Dunkel"]].map(([k, l]) =>

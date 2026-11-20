@@ -543,3 +543,28 @@ syn-date .btn.icon { flex: none; }
 .fv-head { padding-top: 2px; }
 .fv-more { margin-left: 4px; }
 @media (max-width: 760px) { .fv-main { grid-template-columns: 1fr; } }
+
+/* ======================================================= <syn-tooltip> und <syn-personcard> */
+syn-tooltip { position: fixed; z-index: 90; max-width: 260px; padding: 7px 11px; border-radius: 10px; background: var(--ink); color: var(--white);
+  font: 500 12.5px/1.35 var(--f-ui); pointer-events: none; opacity: 0; transform: translateY(4px); transition: opacity .14s, transform .14s; }
+syn-tooltip.below { transform: translateY(-4px); }
+syn-tooltip.on { opacity: 1; transform: none; }
+syn-personcard { position: fixed; z-index: 85; width: 340px; padding: 18px; border-radius: 22px; pointer-events: none;
+  background: color-mix(in srgb, var(--white) 70%, transparent); -webkit-backdrop-filter: blur(22px) saturate(1.5); backdrop-filter: blur(22px) saturate(1.5);
+  border: 1px solid color-mix(in srgb, var(--line-strong) 70%, transparent); color: var(--ink);
+  opacity: 0; transform: scale(.97) translateY(4px); transition: opacity .16s ease, transform .18s cubic-bezier(.2,.8,.2,1); display: flex; flex-direction: column; gap: 14px; }
+syn-personcard.on { opacity: 1; transform: none; }
+syn-personcard:not(.on) { visibility: hidden; transition: opacity .16s ease, transform .18s, visibility 0s .16s; }
+.pc-head { display: flex; gap: 14px; align-items: center; }
+.pc-names { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.pc-name { font: 600 19px/1.2 var(--f-head); letter-spacing: -0.02em; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.pc-alias { font-size: 12.5px; color: var(--text2); }
+.pc-chips { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 2px; }
+.pc-facts { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.pc-fact { display: flex; flex-direction: column; gap: 1px; padding: 8px 10px; border-radius: 12px; background: color-mix(in srgb, var(--bg) 75%, transparent); min-width: 0; }
+.pc-k { font-size: 11px; color: var(--text2); }
+.pc-v { font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pc-v.mono { font: 400 12.5px var(--f-mono); }
+.pc-flag { grid-column: 1 / -1; display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-radius: 12px; background: var(--yellow-light); border: 1px dashed var(--yellow-line); font-size: 12.5px; font-weight: 600; }
+.pc-foot { font-size: 11px; color: var(--text3); text-align: right; }
+@supports not (backdrop-filter: blur(1px)) { syn-personcard { background: var(--white); } }

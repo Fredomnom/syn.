@@ -1,6 +1,7 @@
 // syn – Start, Router, Login, Erststart und Ersteinrichtung. Handy und Desktop sind bewusst zwei Oberflächen.
 import "./date.js";
 import "./color.js";
+import "./hover.js";
 import { onGlobal } from "./shortcuts.js";
 import { S, h, api, GET, POST, clear, logo, loadBase, isMobile, flushQueue, toast, icon } from "./core.js";
 
@@ -81,8 +82,8 @@ async function renderSetup(app) {
       opt("use_ist", false, "Nein", "Nur das, was du selbst einträgst.")),
     h("h3", "3. Wer kommt aufs Handy?"),
     h("div.choice", opt("mode", "all", "Jeder", "Alle Personen."),
-      opt("mode", "rule", "Nach Regel", st.use_levels ? `Alle bis Ring ${st.max} – dazu jede Person mit dem Schalter „aufs Handy“.` : "Alle mit Telefonnummer – dazu jede Person mit dem Schalter „aufs Handy“."),
-      opt("mode", "none", "Niemand", "Nur Personen, bei denen du „aufs Handy“ einschaltest.")),
+      opt("mode", "rule", "Nach Regel", st.use_levels ? `Alle bis Ring ${st.max} – dazu jede Person mit dem Schalter „Mit Handy synchronisieren“.` : "Alle mit Telefonnummer – dazu jede Person mit dem Schalter „Mit Handy synchronisieren“."),
+      opt("mode", "none", "Niemand", "Nur Personen, bei denen du „Mit Handy synchronisieren“ einschaltest.")),
     st.mode === "rule" && st.use_levels ? h("label.f", "Bis Ring", h("select.input", { on: { change: (e) => (st.max = +e.target.value) } }, [1, 2, 3, 4].map((n) => h("option", { value: n, selected: st.max === n }, n)))) : null,
     h("button.btn.primary", { on: { click: async () => {
       const rules = st.use_levels ? [{ type: "level", max: st.max }] : [{ type: "has_phone" }];

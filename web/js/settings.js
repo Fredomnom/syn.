@@ -116,7 +116,7 @@ async function ringsTab(body) {
 }
 
 // ---------------------------------------------------------------- Routinen
-const SPECIAL = [["f_level", "Ring · Bund mit dir"], ["ist", "Ist (berechnet)"], ["kind", "Art"], ["circle", "Kreis"], ["circle_kind", "Kreis-Art"], ["lose", "Lose"], ["name_unknown", "Name unbekannt"], ["on_phone", "Aufs Handy"]];
+const SPECIAL = [["f_level", "Ring · Bund mit dir"], ["ist", "Ist (berechnet)"], ["kind", "Art"], ["circle", "Kreis"], ["circle_kind", "Kreis-Art"], ["lose", "Lose"], ["name_unknown", "Name unbekannt"], ["on_phone", "Mit Handy synchronisiert"]];
 const OPS = [["<=", "≤"], ["<", "<"], [">=", "≥"], [">", ">"], ["=", "="], ["!=", "≠"], ["contains", "enthält"], ["in", "ist einer von"], ["not_in", "ist keiner von"], ["empty", "ist leer"], ["not_empty", "ist gesetzt"], ["days_since_gt", "vor mehr als … Tagen"], ["days_since_lt", "vor weniger als … Tagen"], ["is_true", "ist wahr"], ["is_false", "ist falsch"]];
 const ACTS = [["webhook", "Webhook"], ["card", "In syn anzeigen: Karte unter „Heute“"], ["list", "In syn anzeigen: Liste unter „Heute“"], ["set_today", "Feld auf heute setzen"], ["increment", "Zahl erhöhen (+1)"], ["set_value", "Feld auf Wert setzen"], ["import", "Import ausführen"], ["google_sync", "Google-Sync ausführen"]];
 const WD = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"];
@@ -310,7 +310,7 @@ async function sync(body, route) {
   const n = (await rows()).filter((r) => !r.is_self).length;
   body.append(card("Wer aufs Handy kommt",
     h("div.seg.yellow", [["all", "Jeder"], ["rule", "Nach Regel"], ["none", "Niemand"]].map(([k, l]) => h("button" + (sy.mode === k ? ".on" : ""), { on: { click: () => { sy.mode = k; clear(body); S.settings.sync = sy; sync(body, {}); } } }, l))),
-    h("p.small.t3", sy.mode === "all" ? "Alle Personen." : "Außer bei „Jeder“ hat jede Person einen Schalter „aufs Handy“, mit dem sie trotzdem synchronisiert wird."),
+    h("p.small.t3", sy.mode === "all" ? "Alle Personen." : "Außer bei „Jeder“ hat jede Person einen Schalter „Mit Handy synchronisieren“, mit dem sie trotzdem synchronisiert wird."),
     rulesBox,
     h("p.small.t3", "Was aufs Handy geht: nur, was ein Telefonbuch versteht – Name, Nummern, E-Mails, Geburtstag, Profilbild. Ringe, Bünde und Notizen bleiben in syn. Ein neuer Kontakt vom Handy landet unter „Lose“."),
     h("div.row.wrap", h("label.f", "Öffentlicher Hostname (für den Link zur Personenseite)", host), h("label.f", "Ländervorwahl", cc)),

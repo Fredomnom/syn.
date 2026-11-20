@@ -239,7 +239,7 @@ async function personPage(main, id) {
     h("div.names.grow", h("h1", e.name || e.description || "Ohne Namen", !e.name ? h("span.qmark", "ohne Namen") : e.name_uncertain ? h("span.qmark", "Name ?") : null,
       e.kind === "pet" ? h("span.chip.plain", icon("paw"), "Haustier") : null),
       e.aliases?.length ? h("div.small.t2", "auch: " + e.aliases.join(", ")) : null,
-      h("div.meta-line", h("span", "Erfasst ", h("span.mono", (e.created_at || "").slice(0, 10))), e.on_phone_effective ? h("span.meta-pill", icon("smartphone", "xs"), "aufs Handy") : null)),
+      h("div.meta-line", h("span", "Erfasst ", h("span.mono", (e.created_at || "").slice(0, 10))), e.on_phone_effective ? h("span.meta-pill", icon("smartphone", "xs"), "Mit Handy synchronisiert") : null)),
     e.is_self ? null : h("button.btn.primary", { on: { click: async () => { await POST(`/seen-today/${id}`); invalidate(); reload(); } } }, icon("eye"), "Heute gesehen"),
     phone ? h("a.btn", { href: "tel:" + phone.value.replace(/[^\d+]/g, "") }, icon("phone"), "Anrufen") : null,
     mail ? h("a.btn", { href: "mailto:" + mail.value }, icon("message"), "Schreiben") : null,
@@ -247,7 +247,7 @@ async function personPage(main, id) {
       { label: "Bearbeiten", icon: "edit", action: async () => { if (await editPerson(e)) reload(); } },
       { label: "Feld hinzufügen", icon: "plus", action: () => addField(e, { onDone: reload }) },
       e.is_self ? null : { label: "Zusammenführen mit …", icon: "merge", action: () => pickPerson(ev.target, { exclude: [id], allowNew: false, onPick: (r) => (location.hash = `#/merge/${id}/${r.id}`) }) },
-      e.is_self ? null : { label: e.on_phone ? "Nicht mehr aufs Handy" : "Aufs Handy", icon: "smartphone", action: async () => { await PATCH("/entities/" + id, { on_phone: !e.on_phone }); reload(); } },
+      e.is_self ? null : { label: e.on_phone ? "Nicht mehr mit Handy synchronisieren" : "Mit Handy synchronisieren", icon: "smartphone", action: async () => { await PATCH("/entities/" + id, { on_phone: !e.on_phone }); reload(); } },
       { label: "Verlauf als JSON", icon: "history", action: async () => modal("Verlauf", h("div.code", JSON.stringify(await GET(`/entities/${id}/history`), null, 2)), [], { wide: true }) },
     ], { align: "right" }) } }, icon("more")));
 
@@ -305,6 +305,7 @@ async function personPage(main, id) {
     hist.length > n ? h("button.btn.sm.ghost", { style: { alignSelf: "flex-start" }, on: { click: () => drawHist(999) } }, "Ganzen Verlauf zeigen") : null);
   drawHist(6);
   const timeAt = dateInput("", { placeholder: "Datum wählen" });
+  timeAt.setAttribute("compact", "Stand am …");
   timeAt.addEventListener("change", async () => {
     const day = timeAt.value; if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return toast("Für den Stand ein vollständiges Datum wählen");
     const st = await GET(`/entities/${id}/at?date=${day}`);
@@ -312,7 +313,7 @@ async function personPage(main, id) {
       Object.entries(st.fields).map(([fid, vals]) => h("div.row", h("span.t2", { style: { width: "160px" } }, S.fields[fid]?.name || fid), h("span", vals.map((v) => plain(S.fields[fid] || { type: "text" }, v.value, e.names)).join(", ")))),
       h("div.small.t2", "Kreise: " + (st.memberships.map((m) => S.circles[m.circle_id]?.name).join(", ") || "–"))), []);
   });
-  const verlauf = h("div.card", h("div.card-h", h("h3", "Verlauf"), h("span.row.small.t2", "Stand am", timeAt)), h("div.card-b", hist.length ? histBox : h("div.t3", "Noch keine Änderungen.")));
+  const verlauf = h("div.card", h("div.card-h", h("h3", "Verlauf"), timeAt), h("div.card-b", hist.length ? histBox : h("div.t3", "Noch keine Änderungen.")));
   const routines = e.routines.length ? h("div.card", h("div.card-h", h("h3", "Routinen, die hier greifen")), h("div.card-b.col", e.routines.map((r) => h("div.row", h("span.tag", r.next ? r.next : "aktiv"), h("a", { href: "#/settings/routines?r=" + r.id }, r.name), h("span.small.t3", r.trigger_text))))) : null;
   const notes = e.notes?.length ? h("div.card", h("div.card-h", h("h3", "Notizen")), h("div.card-b.col", e.notes.map((n) => h("div", h("span.mono.t3", n.day + " "), h("span.tag", n.role), " ", n.text.replace(/@\[([^\]]+)\]\([^)]+\)/g, "$1").slice(0, 140))))) : null;
   const suggBox = sugg.length ? h("div.card", h("div.card-h", h("h3", "Vorschläge")), h("div.card-b.col", sugg.map((s) => h("div.row",
@@ -340,7 +341,7 @@ function fieldCell(def, vals, path, e, reload, compact = false) {
       label ? h("span.fl-lab", label) : null,
       act ? h("a.btn.sm.icon.fl-act", { href: act.href, title: act.label, target: act.href.startsWith("http") ? "_blank" : null, rel: "noopener", on: { click: (ev) => ev.stopPropagation() } }, icon(act.icon)) : null);
   };
-  return h("div.fld", { on: { click: edit }, style: { cursor: "pointer" }, title: `${def.name} bearbeiten (${def.id})` },
+  return h("div.fld", { on: { click: edit }, style: { cursor: "pointer" } },
     h("div.grow",
       h("div.k", def.name, live.length > 1 ? h("span.fl-count", live.length) : null, p?.source && p.source !== "manual" ? h("span.tiny.t3", SOURCE(p.source)) : null,
         quick ? h("button.btn.sm.icon.fl-quick", { title: "Schnellaktion", on: { click: async (ev) => { ev.stopPropagation(); await runQuick(e.id, def.quick_routine_id); reload(); } } }, icon(def.type === "number" ? "plus" : "refresh")) : null),
@@ -457,6 +458,6 @@ function ringDrag(level, onSet) {
     const l = d > band * 4.2 ? null : Math.min(4, Math.max(1, Math.ceil(d / band)));
     if (l !== level) onSet(l);
   });
-  svg.append(h("title", "Ziehen setzt den Ring"));
+  svg.dataset.tip = "Ziehen setzt den Ring";
   return svg;
 }
