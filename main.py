@@ -18,7 +18,7 @@ from syn import config, db
 
 # Je ein Modul für Lebewesen, Kreise, Bünde, Felder, Verlauf, Routinen und Importe – plus Konten, Sync & Co.
 MODULES = ["konten", "lebewesen", "kreise", "buende", "felder", "verlauf", "routinen", "importe_api", "dubletten",
-           "vorschlaege", "notizen", "dateien", "carddav", "google_sync"]
+           "vorschlaege", "notizen", "dateien", "carddav", "google_sync", "undo"]
 
 
 def create_app() -> FastAPI:
@@ -37,6 +37,8 @@ def create_app() -> FastAPI:
                   docs_url="/api/docs", openapi_url="/api/openapi.json", lifespan=lifespan)
     for mod in mods:
         app.include_router(mod.router)
+        if hasattr(mod, "install"):
+            mod.install(app)
 
     @app.exception_handler(ValueError)
     async def value_error(request: Request, exc: ValueError):

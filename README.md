@@ -31,6 +31,14 @@ Einstellungen → Sync eintragen, damit Kontakte am Handy einen Link zur Persone
   Android: DAVx⁵ mit `https://<host>/dav/`. Als Passwort am besten ein eigenes Long-lived Token.
 - **Alternativ Google Kontakte:** Einstellungen → Sync (eigener OAuth-Client nötig, Anleitung dort).
 
+## Bedienung
+
+- **Tastenkürzel:** alle frei belegbar unter Einstellungen → Tastenkürzel (`Shift+?` zeigt die Übersicht).
+  Standard u.a. Seitenleiste `Strg/⌘+B`, Suche `Strg/⌘+K`, Rückgängig `Strg/⌘+Z`, Wiederholen `Strg/⌘+Shift+Z`.
+- **Rückgängig/Wiederholen** gilt für jede Änderung (auch Löschen, Zusammenführen, Importe) – pro Nutzer, die letzten 200 Schritte.
+  Passwort und Rechte werden dabei nie zurückgesetzt.
+- **Darstellung:** Hell, Dunkel oder wie das System (Einstellungen → Konto, am Handy unter „Ich“).
+
 ## API
 
 Alles, was die Oberfläche kann, geht auch über die API (die Oberfläche nutzt nur sie). Doku: `/api/docs`.
@@ -42,6 +50,8 @@ Long-lived Tokens unter Einstellungen → Konto, optional nur lesend. `Authoriza
 - `syn/importers/` – ein Modul pro Dienst, global (Admin) und pro Nutzer an- und ausschaltbar.
 - `web/` – Oberfläche ohne Build-Schritt (Handy und Desktop sind bewusst zwei Oberflächen).
 - Technik: Python, FastAPI, SQLite. Import-Zugangsdaten sind pro Nutzer verschlüsselt (Fernet).
+- Rückgängig nutzt SQLite-Trigger (Funktion `syn_batch`). Die Datenbank deshalb nicht mit fremden Werkzeugen
+  beschreiben, solange syn läuft – Lesen ist unproblematisch.
 
 ## Entwicklung
 

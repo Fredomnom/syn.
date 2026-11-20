@@ -11,8 +11,10 @@ export async function api(method, path, body, { raw = false, quiet = false } = {
   if (body instanceof FormData) opts.body = body;
   else if (body !== undefined) { opts.body = JSON.stringify(body); opts.headers["Content-Type"] = "application/json"; }
   let res;
+  busy(true);
   try { res = await fetch("/api/v1" + path, opts); }
   catch (e) { throw new ApiError(0, "Keine Verbindung"); }
+  finally { busy(false); }
   if (res.status === 401 && !path.startsWith("/auth")) { location.hash = "#/login"; throw new ApiError(401, "Nicht angemeldet"); }
   if (!res.ok) {
     let msg = res.statusText;
@@ -68,7 +70,7 @@ for (const proto of [Element.prototype, DocumentFragment.prototype]) {
 export const MOD = /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Strg+";
 export function h(tag, attrs, ...kids) {
   const m = tag.match(/^([a-z0-9-]+)?((?:[.#][\w-]+)*)$/i);
-  const isSvg = ["svg", "g", "circle", "line", "path", "text", "rect", "polygon", "polyline", "defs", "clipPath", "ellipse", "title", "tspan"].includes(m[1]);
+  const isSvg = ["svg", "g", "circle", "line", "path", "text", "rect", "polygon", "polyline", "defs", "clipPath", "ellipse", "title", "tspan", "image", "pattern", "mask"].includes(m[1]);
   const el = isSvg ? document.createElementNS("http://www.w3.org/2000/svg", m[1]) : document.createElement(m[1] || "div");
   for (const part of (m[2] || "").match(/[.#][\w-]+/g) || []) {
     if (part[0] === ".") el.classList.add(part.slice(1)); else el.id = part.slice(1);
@@ -77,7 +79,12 @@ export function h(tag, attrs, ...kids) {
   for (const [k, v] of Object.entries(attrs || {})) {
     if (v === undefined || v === null || v === false) continue;
     if (k === "on") for (const [ev, fn] of Object.entries(v)) el.addEventListener(ev, fn);
-    else if (k === "style" && typeof v === "object") Object.assign(el.style, v);
+    else if (k === "style" && typeof v === "object") {
+      for (const [sk, sv] of Object.entries(v)) {
+        if (sv === undefined || sv === null) continue;
+        if (sk.startsWith("--")) el.style.setProperty(sk, sv); else el.style[sk] = sv;
+      }
+    }
     else if (k === "class") el.setAttribute("class", [el.getAttribute("class"), v].filter(Boolean).join(" "));
     else if (k === "html") el.innerHTML = v;
     else if (k in el && !isSvg && k !== "list" && k !== "form") el[k] = v;
@@ -93,6 +100,25 @@ function add(el, kids) {
   }
 }
 export const clear = (el, ...kids) => { el.replaceChildren(); add(el, kids); return el; };
+
+// Ohne Flackern neu aufbauen: frische Kopie im Hintergrund füllen, dann in einem Schritt austauschen.
+export async function rebuild(el, fill) {
+  const fresh = el.cloneNode(false);
+  fresh.classList.remove("enter");
+  await fill(fresh);
+  const st = el.scrollTop;
+  if (el.isConnected) { el.replaceWith(fresh); fresh.scrollTop = st; }
+  return fresh;
+}
+
+// dünner Ladebalken, wenn etwas länger als einen Moment dauert
+let busyN = 0, busyT;
+export function busy(on) {
+  busyN = Math.max(0, busyN + (on ? 1 : -1));
+  clearTimeout(busyT);
+  if (busyN) busyT = setTimeout(() => document.body.classList.add("busy"), 160);
+  else document.body.classList.remove("busy");
+}
 export const $ = (s, r = document) => r.querySelector(s);
 export const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 
@@ -141,6 +167,7 @@ const P = {
   drag: '<circle cx="9" cy="6" r=".9"/><circle cx="15" cy="6" r=".9"/><circle cx="9" cy="12" r=".9"/><circle cx="15" cy="12" r=".9"/><circle cx="9" cy="18" r=".9"/><circle cx="15" cy="18" r=".9"/>',
   smartphone: '<rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M11 18h2"/>', clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
   layers: '<path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/>',
+  undo: '<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>', redo: '<path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/>',
 };
 export function icon(name, cls = "") {
   const s = document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -174,11 +201,40 @@ export function initials(name) {
   if (!p.length) return "?";
   return ((p[0][0] || "") + (p.length > 1 ? p[p.length - 1][0] : (p[0][1] || ""))).toUpperCase();
 }
+// ---------------------------------------------------------------- Darstellung (Hell/Dunkel)
+const THEME_KEY = "syn.theme";
+export const themePref = () => { try { return localStorage.getItem(THEME_KEY) || "system"; } catch (_) { return "system"; } };
+const mq = matchMedia("(prefers-color-scheme: dark)");
+export function applyTheme(pref = themePref()) {
+  const dark = pref === "dark" || (pref === "system" && mq.matches);
+  document.documentElement.dataset.theme = dark ? "dark" : "light";
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", dark ? "#0F1114" : "#FFD60A");
+}
+export function setTheme(pref) { try { localStorage.setItem(THEME_KEY, pref); } catch (_) {} applyTheme(pref); dispatchEvent(new Event("syn-theme")); }
+mq.addEventListener?.("change", () => { if (themePref() === "system") { applyTheme(); dispatchEvent(new Event("syn-theme")); } });
+applyTheme();
+export const isDark = () => document.documentElement.dataset.theme === "dark";
+export const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+function hueOfHex(hex) {
+  const m = /^#?([\da-f]{6})$/i.exec(hex || ""); if (!m) return 0;
+  const n = parseInt(m[1], 16); const r = (n >> 16) / 255, g = ((n >> 8) & 255) / 255, b = (n & 255) / 255;
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn; if (!d) return null;
+  const hh = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; return Math.round((hh * 60 + 360) % 360);
+}
+// Im Dunkelmodus: gleiche Farbfamilie, dunkle Fläche und helle Schrift
+function themed(bg, fg) {
+  if (!isDark()) return { bg, fg };
+  const hh = hueOfHex(fg);
+  if (hh === null) return { bg: "#262A31", fg: "#C3C8D0" };
+  return { bg: `hsl(${hh} 32% 21%)`, fg: `hsl(${hh} 80% 80%)` };
+}
 export function circleColors(cid) {
   const c = S.circles[cid]; const k = c && S.kinds[c.kind_id];
-  return k ? { bg: k.bg, fg: k.fg, abbr: k.abbr, kind: k.name } : { bg: S.lose.bg, fg: S.lose.fg, abbr: "LO", kind: "Lose" };
+  return k ? { ...themed(k.bg, k.fg), abbr: k.abbr, kind: k.name } : { ...themed(S.lose.bg, S.lose.fg), abbr: "LO", kind: "Lose" };
 }
-export function kindColors(kid) { const k = S.kinds[kid]; return k ? { bg: k.bg, fg: k.fg } : { bg: S.lose.bg, fg: S.lose.fg }; }
+export function kindColors(kid) { const k = S.kinds[kid]; return k ? themed(k.bg, k.fg) : themed(S.lose.bg, S.lose.fg); }
+export const loseColors = () => themed(S.lose.bg, S.lose.fg);
 
 export function parseISO(s) { if (!s || s.includes("?") || !/^\d{4}-\d{2}-\d{2}/.test(s)) return null; return new Date(s.slice(0, 10) + "T12:00:00"); }
 export function daysSince(s) {
@@ -210,7 +266,8 @@ export const isMobile = () => matchMedia("(max-width: 760px)").matches;
 export const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
 // ---------------------------------------------------------------- Bausteine
-export function avatar(row, size = 28, { sel = false, self = false } = {}) {
+export function avatar(row, size = 28, { sel = false, self = false, exact = false } = {}) {
+  if (!exact) size = Math.round(size * 1.4); // Profilbilder bewusst groß
   const name = row.display || row.name || row.description;
   const cc = circleColors(row.main_circle_id);
   const unsure = !row.name || row.name_uncertain;
@@ -235,21 +292,26 @@ export function nameEl(row) {
 }
 export function ringMini(level, size = 22) {
   const svg = h("svg", { viewBox: "0 0 24 24", width: size, height: size, class: "ring-mini" });
-  for (let i = 4; i >= 1; i--) svg.append(h("circle", { cx: 12, cy: 12, r: i * 2.6, fill: level && i >= level ? (i === +level ? "#FFF6CC" : "none") : "none", stroke: i === +level ? "#D4A800" : "#E3E5EA", "stroke-width": 1.2 }));
-  svg.append(h("circle", { cx: 12, cy: 12, r: 1.6, fill: "#16181D" }));
+  for (let i = 4; i >= 1; i--) svg.append(h("circle", { cx: 12, cy: 12, r: i * 2.6, fill: i === +level ? cssVar("--yellow-light") : "none", stroke: i === +level ? cssVar("--yellow-line") : cssVar("--line"), "stroke-width": 1.2 }));
+  svg.append(h("circle", { cx: 12, cy: 12, r: 1.6, fill: cssVar("--ink") }));
   return svg;
 }
 
 let toastBox;
-export function toast(msg, { err = false, undo = null, ms = 3800 } = {}) {
+export function toast(msg, { err = false, undo = null, action = null, ms = 3800 } = {}) {
   if (!toastBox) { toastBox = h("div.toast-box"); document.body.append(toastBox); }
-  const t = h("div.toast" + (err ? ".err" : ""), h("span", msg), undo ? h("button", { on: { click: () => { undo(); t.remove(); } } }, "Rückgängig") : null);
-  toastBox.append(t); setTimeout(() => t.remove(), undo ? 7000 : ms);
+  const act = action || (undo ? { label: "Rückgängig", run: undo } : null);
+  const t = h("div.toast" + (err ? ".err" : ""), h("span", msg), act ? h("button", { on: { click: () => { act.run(); t.remove(); } } }, act.label) : null);
+  while (toastBox.children.length > 2) toastBox.firstChild.remove();
+  toastBox.append(t); setTimeout(() => t.remove(), act ? 7000 : ms);
 }
 
 export function modal(title, body, buttons = [], { wide = false, onClose } = {}) {
   return new Promise((resolve) => {
-    const close = (v) => { bd.remove(); document.removeEventListener("keydown", key); onClose?.(); resolve(v); };
+    const close = (v) => {
+      document.removeEventListener("keydown", key); bd.classList.add("leaving");
+      setTimeout(() => bd.remove(), 140); onClose?.(); resolve(v);
+    };
     const key = (e) => { if (e.key === "Escape") close(null); };
     const foot = buttons.length ? h("div.dialog-f", buttons.map((b) => h("button.btn" + (b.primary ? ".primary" : "") + (b.danger ? ".danger" : ""), {
       on: { click: async () => { if (b.action) { const r = await b.action(); if (r === false) return; close(r ?? b.value ?? true); } else close(b.value ?? null); } } }, b.label))) : null;
@@ -273,6 +335,8 @@ export async function promptDlg(title, label, value = "", placeholder = "") {
 
 let openPop = null;
 export function closePop() { if (openPop) { openPop.remove(); openPop = null; } }
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && openPop && !document.querySelector(".date-pop, .hue-pop")) { e.stopPropagation(); closePop(); } }, true);
+addEventListener("hashchange", () => { closePop(); document.querySelectorAll(".date-pop, .hue-pop").forEach((x) => x.remove()); });
 export function popover(anchor, content, { align = "left", x, y } = {}) {
   closePop();
   const p = h("div.pop", content);
@@ -285,7 +349,7 @@ export function popover(anchor, content, { align = "left", x, y } = {}) {
   p.style.left = Math.max(8, left) + "px"; p.style.top = top + "px";
   openPop = p;
   setTimeout(() => {
-    const off = (e) => { if (!p.contains(e.target)) { document.removeEventListener("mousedown", off, true); if (openPop === p) closePop(); } };
+    const off = (e) => { if (!p.contains(e.target) && !e.target.closest?.(".pop")) { document.removeEventListener("mousedown", off, true); if (openPop === p) closePop(); } };
     document.addEventListener("mousedown", off, true);
   });
   return p;
@@ -304,27 +368,57 @@ export function pickPerson(anchor, { exclude = [], onPick, allowNew = true, kind
     const q = inp.value.trim().toLowerCase();
     const all = (await rows()).filter((r) => !exclude.includes(r.id) && (!kind || r.kind === kind));
     const hits = all.filter((r) => !q || [r.display, ...(r.aliases || [])].join(" ").toLowerCase().includes(q)).slice(0, 30);
-    clear(list, hits.map((r) => h("button", { on: { click: () => { closePop(); onPick(r); } } }, avatar(r, 22), h("span.grow", r.display), r.main_circle_id ? h("span.t3.small", S.circles[r.main_circle_id]?.name) : null)),
-      allowNew && q ? h("button", { on: { click: async () => { closePop(); const e = await POST("/entities", { name: inp.value.trim() }); invalidate(); onPick(e); } } }, icon("plus"), `„${inp.value.trim()}“ neu anlegen`) : null);
+    first = hits[0];
+    const exact = hits.some((r) => r.display.toLowerCase() === q);
+    clear(list, hits.length ? hits.map((r, i) => h("button" + (i === 0 && q ? ".on" : ""), { on: { click: () => { closePop(); onPick(r); } } }, avatar(r, 22), h("span.grow", r.display), r.main_circle_id ? h("span.t3.small", S.circles[r.main_circle_id]?.name) : null)) : h("div.lbl", "Niemand gefunden"),
+      allowNew && q && !exact ? h("div", { style: { borderTop: "1px solid var(--line)", marginTop: "6px", paddingTop: "6px" } },
+        h("button", { on: { click: async () => { closePop(); const e = await POST("/entities", { name: inp.value.trim() }); invalidate(); onPick(e); } } }, icon("plus"), h("span.grow", "Neue Person anlegen: ", h("b", `„${inp.value.trim()}“`)))) : null);
   };
+  let first = null;
   inp.addEventListener("input", debounce(render, 120));
+  inp.addEventListener("keydown", (e) => { if (e.key === "Enter" && first && inp.value.trim()) { e.preventDefault(); closePop(); onPick(first); } });
   const p = popover(anchor, h("div", { style: { width: "280px" } }, inp, list));
   render(); setTimeout(() => inp.focus(), 20);
   return p;
 }
 export function pickCircle(anchor, { exclude = [], onPick, allowNew = true } = {}) {
-  const inp = h("input.input", { placeholder: "Kreis suchen oder anlegen …", style: { width: "100%" } });
-  const list = h("div.menu", { style: { marginTop: "6px", maxHeight: "300px", overflow: "auto" } });
+  const inp = h("input.input", { placeholder: "Kreis suchen …", style: { width: "100%" } });
+  const list = h("div.menu", { style: { marginTop: "6px", maxHeight: "320px", overflow: "auto" } });
+  let hits = [];
   const render = () => {
     const q = inp.value.trim().toLowerCase();
-    const hits = Object.values(S.circles).filter((c) => !exclude.includes(c.id) && (!q || c.name.toLowerCase().includes(q))).sort((a, b) => a.name.localeCompare(b.name));
-    clear(list, hits.map((c) => h("button", { on: { click: () => { closePop(); onPick(c); } } }, circleChip(c.id), c.parent_id ? h("span.t3.small", "in " + (S.circles[c.parent_id]?.name || "")) : null)),
-      allowNew && q ? h("div", h("div.lbl", "Neu anlegen als …"), Object.values(S.kinds).map((k) => h("button", { on: { click: async () => {
-        closePop(); const c = await POST("/circles", { name: inp.value.trim(), kind_id: k.id }); await reloadCircles(); onPick(c); } } },
-        h("span.chip", { style: { background: k.bg, color: k.fg } }, k.name)))) : null);
+    hits = Object.values(S.circles).filter((c) => !exclude.includes(c.id) && (!q || c.name.toLowerCase().includes(q))).sort((a, b) => a.name.localeCompare(b.name));
+    const exact = Object.values(S.circles).some((c) => c.name.toLowerCase() === q);
+    clear(list,
+      hits.length ? hits.map((c, i) => h("button" + (i === 0 && q ? ".on" : ""), { on: { click: () => { closePop(); onPick(c); } } }, circleChip(c.id), h("span.grow"),
+        c.parent_id ? h("span.t3.small", "in " + (S.circles[c.parent_id]?.name || "")) : h("span.t3.small", circleColors(c.id).kind)))
+        : h("div.lbl", q ? "Kein Kreis gefunden" : "Noch keine Kreise"),
+      allowNew && q && !exact ? h("div", { style: { borderTop: "1px solid var(--line)", marginTop: "6px", paddingTop: "6px" } },
+        h("button", { on: { click: () => newCircleStep(inp.value.trim()) } }, icon("plus"), h("span.grow", "Neuen Kreis anlegen: ", h("b", `„${inp.value.trim()}“`)), icon("right"))) : null);
+  };
+  const newCircleStep = (name) => {
+    const nameIn = h("input.input", { value: name, style: { width: "100%" } });
+    let kind = Object.keys(S.kinds)[0];
+    const kinds = h("div.row.wrap", { style: { gap: "6px" } });
+    const drawKinds = () => clear(kinds, Object.values(S.kinds).map((k) => {
+      const c = kindColors(k.id);
+      return h("button.chip", { type: "button", style: { background: c.bg, color: c.fg, cursor: "pointer", border: 0, boxShadow: kind === k.id ? `0 0 0 2px var(--white), 0 0 0 4px ${c.fg}` : "none" }, on: { click: () => { kind = k.id; drawKinds(); } } }, k.name);
+    }));
+    drawKinds();
+    const create = async () => {
+      if (!nameIn.value.trim()) return nameIn.focus();
+      closePop(); const c = await POST("/circles", { name: nameIn.value.trim(), kind_id: kind }); await reloadCircles(); onPick(c);
+    };
+    nameIn.addEventListener("keydown", (e) => { if (e.key === "Enter") create(); });
+    clear(box, h("div.small.t2", "Neuer Kreis"), nameIn, h("div.small.t2", { style: { margin: "10px 0 6px" } }, "Kreis-Art"), kinds,
+      h("div.row", { style: { marginTop: "12px", justifyContent: "flex-end" } }, h("button.btn.sm.ghost", { on: { click: () => { clear(box, inp, list); render(); inp.focus(); } } }, "Zurück"),
+        h("button.btn.sm.primary", { on: { click: create } }, "Anlegen")));
+    setTimeout(() => nameIn.focus(), 20);
   };
   inp.addEventListener("input", render);
-  const p = popover(anchor, h("div", { style: { width: "280px" } }, inp, list));
+  inp.addEventListener("keydown", (e) => { if (e.key === "Enter" && hits[0] && inp.value.trim()) { e.preventDefault(); closePop(); onPick(hits[0]); } });
+  const box = h("div", { style: { width: "300px" } }, inp, list);
+  const p = popover(anchor, box);
   render(); setTimeout(() => inp.focus(), 20);
   return p;
 }

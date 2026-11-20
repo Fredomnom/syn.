@@ -1,8 +1,10 @@
 // Tabelle: Spreadsheet mit Formelleiste, Tastatur, Bereichsauswahl, Füllen per ⌘D, Kopieren/Einfügen,
 // Ring-Popup in der Zelle und Bulk-Aktionen für markierte Zeilen.
-import { S, h, icon, GET, POST, PATCH, clear, invalidate, avatar, circleChip, nameEl, rel, ringName, menu, pickCircle, toast, confirmDlg, modal, rows, MOD } from "./core.js";
+import { S, h, icon, GET, POST, PATCH, clear, invalidate, avatar, circleChip, nameEl, rel, ringName, menu, pickCircle, toast, confirmDlg, modal, rows, MOD, popover, closePop } from "./core.js";
 import { editField, plain, TYPE_NAMES } from "./fields.js";
 import { ringPopup } from "./shared.js";
+import { matches } from "./shortcuts.js";
+import { dateInput } from "./date.js";
 import { VS } from "./desktop.js";
 
 const INLINE = new Set(["text", "number", "date", "phone", "email", "address", "choice"]);
@@ -147,6 +149,12 @@ export async function table(body, list, all) {
     if (!r || c.locked) return;
     if (c.edit !== "inline" && c.edit !== "name") return cellAction();
     const td = tds[st.act.r][st.act.c];
+    if (c.def?.type === "date" && initial === undefined) {
+      const di = dateInput(r.v[c.key]?.raw || "", { onChange: (v) => { closePop(); save(r, c, v); sheet.focus(); } });
+      popover(td, h("div", { style: { width: "260px" } }, h("div.small.t2", c.label), di));
+      requestAnimationFrame(() => { di.focus(); di.open(); });
+      return;
+    }
     const inp = h("input.cell-edit", { value: initial !== undefined ? initial : rawText(r, c) });
     const sr = sheet.getBoundingClientRect(), tr = td.getBoundingClientRect();
     Object.assign(inp.style, { left: tr.left - sr.left + sheet.scrollLeft + "px", top: tr.top - sr.top + sheet.scrollTop + "px", width: Math.max(tr.width, 180) + "px", height: tr.height + "px" });
@@ -236,9 +244,9 @@ export async function table(body, list, all) {
     else if (k === "ArrowRight" || (k === "Tab" && !e.shiftKey)) { e.preventDefault(); move(0, 1, e.shiftKey && k !== "Tab"); }
     else if (k === "ArrowLeft" || (k === "Tab" && e.shiftKey)) { e.preventDefault(); move(0, -1, e.shiftKey && k !== "Tab"); }
     else if (k === "Enter" || k === "F2") { e.preventDefault(); if (e.shiftKey) move(-1, 0); else startEdit(); }
-    else if (mod && k.toLowerCase() === "d") { e.preventDefault(); fillDown(); }
-    else if (mod && k.toLowerCase() === "a") { e.preventDefault(); st.anc = { r: 0, c: 0 }; st.act = { r: list.length - 1, c: cols.length - 1 }; paint(); }
-    else if (mod && k.toLowerCase() === "o") { e.preventDefault(); location.hash = "#/p/" + list[st.act.r].id; }
+    else if (matches(e, "fill_down")) { e.preventDefault(); e.stopPropagation(); fillDown(); }
+    else if (matches(e, "select_all")) { e.preventDefault(); e.stopPropagation(); st.anc = { r: 0, c: 0 }; st.act = { r: list.length - 1, c: cols.length - 1 }; paint(); }
+    else if (matches(e, "open_row")) { e.preventDefault(); e.stopPropagation(); location.hash = "#/p/" + list[st.act.r].id; }
     else if ((k === "Delete" || k === "Backspace") && !mod) {
       e.preventDefault(); const g = range(); const cells = [];
       for (let ri = g.r1; ri <= g.r2; ri++) for (let ci = g.c1; ci <= g.c2; ci++) { const c = cols[ci]; if (c.def && !c.locked) cells.push({ id: list[ri].id, field: c.key, value: null }); else if (c.edit === "ring") cells.push({ id: list[ri].id, field: "f_level", value: null }); }
@@ -268,7 +276,7 @@ export async function table(body, list, all) {
   body.append(h("div.sheet-wrap", { style: { height: "calc(100vh - 170px)" } },
     h("div.fbar", addr, h("span.t3.mono", "ƒ"), fx, fxTag, bulk, colBtn), sheet, foot));
   paint();
-  sheet.focus();
+  requestAnimationFrame(() => sheet.focus());
 }
 
 async function chooseColumns(cols0, chosen) {

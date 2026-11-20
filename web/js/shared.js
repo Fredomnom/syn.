@@ -2,6 +2,8 @@
 import { S, h, icon, api, GET, POST, PUT, PATCH, DEL, clear, modal, confirmDlg, invalidate, avatar, circleChip, toast,
   RING, ringMini, pickCircle, reloadFields, popover, closePop } from "./core.js";
 import { fieldsFor, editField, TYPE_NAMES, inputFor } from "./fields.js";
+import { dateInput } from "./date.js";
+import { pickAndCrop } from "./crop.js";
 
 export async function editPerson(e) {
   const name = h("input.input", { value: e.name || "", placeholder: "Name" });
@@ -13,8 +15,8 @@ export async function editPerson(e) {
   let avatarUrl = e.avatar;
   const img = h("span", avatar({ ...e, avatar: avatarUrl }, 56));
   const file = h("input", { type: "file", accept: "image/*", on: { change: async () => {
-    const fd = new FormData(); fd.append("file", file.files[0]); const r = await api("POST", "/files", fd); avatarUrl = r.url; clear(img, avatar({ ...e, avatar: avatarUrl }, 56)); } } });
-  const vf = h("input.input.mono", { value: e.valid_from || "", placeholder: "leer = Erfasst-Datum" });
+    const u = await pickAndCrop(file.files[0]); file.value = ""; if (u) { avatarUrl = u; clear(img, avatar({ ...e, avatar: avatarUrl }, 56)); } } } });
+  const vf = dateInput(e.valid_from || "", { placeholder: "leer = Erfasst-Datum" });
   const body = h("div.col",
     h("div.row", img, h("div.col", file, avatarUrl ? h("button.btn.sm.ghost", { type: "button", on: { click: () => { avatarUrl = null; clear(img, avatar({ ...e, avatar: null }, 56)); } } }, "Bild entfernen") : null)),
     h("label.f", "Name", name), e.is_self ? null : h("label.check", unsure, "Name unsicher (wird mit „?“ gezeigt)"),
@@ -42,7 +44,7 @@ export async function addField(e, { onDone } = {}) {
   const used = new Set(Object.keys(e.fields || {}).filter((k) => (e.fields[k] || []).length));
   const free = fieldsFor(e.kind).filter((f) => !used.has(f.id));
   const list = h("div.menu", free.map((f) => h("button", { on: { click: async () => {
-    document.querySelector(".backdrop")?._close?.(null);
+    document.querySelector(".backdrop:not(.leaving)")?._close?.(null);
     const r = await editField(f, [], `/entities/${e.id}/fields/${f.id}`); if (r) onDone?.(r);
   } } }, h("span.grow", f.name), h("span.tag", TYPE_NAMES[f.type]))));
   const nn = h("input.input", { placeholder: "Neues Feld, z.B. Lieblingsband" });
@@ -55,7 +57,7 @@ export async function addField(e, { onDone } = {}) {
       const f = await POST("/fields", { name: nn.value.trim(), type: nt.value, scope: e.kind, multi: multi.checked,
         options: nt.value === "choice" ? { choices: [], multiple: true } : {} });
       await reloadFields();
-      document.querySelector(".backdrop")?._close?.(null);
+      document.querySelector(".backdrop:not(.leaving)")?._close?.(null);
       const r = await editField(S.fields[f.id], [], `/entities/${e.id}/fields/${f.id}`); if (r) onDone?.(r);
     } } }, icon("plus"), "Anlegen")), []);
 }
@@ -103,7 +105,7 @@ export async function addBund(e, otherRow) {
   const kind = h("select.input", S.bundKinds.map((k) => h("option", { value: k.id }, k.name)));
   const roleA = h("input.input", { placeholder: `Rolle von ${e.display}` });
   const roleB = h("input.input", { placeholder: `Rolle von ${otherRow.display}` });
-  const since = h("input.input.mono", { placeholder: "seit (optional)" });
+  const since = dateInput("", { placeholder: "seit (optional)" });
   const r = await modal(`Bund: ${e.display} & ${otherRow.display}`, h("div.col", h("label.f", "Art", kind), h("div.row", roleA, roleB), h("label.f", "Gültig von", since),
     h("p.small.t3", "Ein Bund ist eine Beziehung zwischen genau zwei Lebewesen. Rollen leer lassen = Standard der Bund-Art.")),
     [{ label: "Abbrechen" }, { label: "Anlegen", primary: true, action: () => POST("/bunds", { a_id: e.id, b_id: otherRow.id, kind_id: kind.value, role_a: roleA.value || null, role_b: roleB.value || null, valid_from: since.value || null }).catch(() => false) }]);

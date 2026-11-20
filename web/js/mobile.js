@@ -1,26 +1,42 @@
 // Handy (PWA): schnell erfassen und finden. Untere Leiste: Personen, Kreise, Plus, Suche, Ich.
-import { S, h, icon, GET, POST, PATCH, clear, rows, invalidate, avatar, circleChip, nameEl, rel, ringName, today, debounce,
+import { S, h, icon, GET, POST, PATCH, clear, rebuild, rows, themePref, setTheme, invalidate, avatar, circleChip, nameEl, rel, ringName, today, debounce,
   postOrQueue, toast, modal, logo, qs, queued, fmtDate } from "./core.js";
 import { primaryOf, valueEl, actionFor, editField, entityFieldList, runQuick, plain, bundFields } from "./fields.js";
 import { editPerson, addField, dupHint, ringPopup, setRing, editIhrZwei, bundKindName, historyText } from "./shared.js";
 
 let filt = "all", search = "";
 
+let lastPath = null;
 export async function render(app, route) {
   const [p0, p1] = route.parts;
+  const path = route.parts.join("/");
+  const same = path === lastPath; lastPath = path;
   const page = h("div.mpage");
-  const tab = !p0 ? "people" : p0;
+  const tab = !p0 ? "people" : ["settings"].includes(p0) ? "me" : p0;
+  if (!p0 || p0 === "people" || p0 === "new") await people(page);
+  else if (p0 === "p") await profile(page, p1);
+  else if (p0 === "circles") await circles(page);
+  else if (p0 === "c") await circle(page, p1);
+  else if (p0 === "search") await searchPage(page);
+  else if (p0 === "me") await mePage(page);
+  else if (p0 === "today") await todayPage(page);
+  else if (p0 === "notes") await notesPage(page);
+  else if (p0 === "settings") await settingsMobile(page, p1, route);
+  else await people(page);
+  const old = app.querySelector(".mpage");
+  const scroll = same ? scrollY : 0;
   clear(app, h("div.mob", page, tabbar(tab)));
-  if (!p0 || p0 === "people") return people(page);
-  if (p0 === "p") return profile(page, p1);
-  if (p0 === "circles") return circles(page);
-  if (p0 === "c") return circle(page, p1);
-  if (p0 === "new") { await people(page); return capture(app); }
-  if (p0 === "search") return searchPage(page);
-  if (p0 === "me") return mePage(page);
-  if (p0 === "today") return todayPage(page);
-  if (p0 === "notes") return notesPage(page);
-  return people(page);
+  scrollTo(0, scroll);
+  if (!same && old) page.classList.add("enter");
+  if (p0 === "new") capture(app);
+}
+
+async function settingsMobile(page, tab, route) {
+  const { settingsPage } = await import("./settings.js");
+  page.append(h("div.mtop", h("a.back", { href: "#/me" }, icon("left"), "Ich")));
+  const box = h("div.msettings");
+  await settingsPage(box, tab || "account", route);
+  page.append(box);
 }
 
 function tabbar(on) {
@@ -56,9 +72,9 @@ async function people(page) {
     let list = all.filter((r) => filt === "all" || (filt === "person" && r.kind === "person") || (filt === "pet" && r.kind === "pet") || (filt === "lose" && !r.circles.length));
     if (search) { const q = search.toLowerCase(); list = list.filter((r) => [r.display, r.description, ...(r.aliases || [])].join(" ").toLowerCase().includes(q)); }
     const act = (r) => [r.v.f_seen?.raw || "", (r.created_at || "").slice(0, 10)].sort().pop(); list.sort((a, b) => act(b).localeCompare(act(a)) || a.display.localeCompare(b.display));
-    clear(listBox, list.length ? list.map((r) => personRow(r, () => people(clear(page)))) : h("div.empty", filt === "lose" ? "Niemand unter „Lose“ – alles einsortiert." : "Noch niemand hier. Tippe auf +."));
+    clear(listBox, list.length ? list.map((r) => personRow(r, () => rebuild(page, people))) : h("div.empty", filt === "lose" ? "Niemand unter „Lose“ – alles einsortiert." : "Noch niemand hier. Tippe auf +."));
   };
-  const chip = (id, label) => h("span.chip" + (filt === id ? ".dark" : ".plain"), { on: { click: () => { filt = id; people(clear(page)); } } }, label);
+  const chip = (id, label) => h("span.chip" + (filt === id ? ".dark" : ".plain"), { on: { click: () => { filt = id; rebuild(page, people); } } }, label);
   const q = h("input.input", { placeholder: "Name, Kreis oder Beschreibung", value: search, on: { input: debounce((e) => { search = e.target.value; draw(); }, 100) } });
   const todayN = (await GET("/today")).items.length;
   const pending = queued();
@@ -116,7 +132,7 @@ function capture(app) {
 // ---------------------------------------------------------------- Profil
 async function profile(page, id) {
   const e = await GET("/entities/" + id);
-  const reload = () => profile(clear(page), id);
+  const reload = () => rebuild(page, (p) => profile(p, id));
   const phone = primaryOf(e.fields.f_phone), mail = primaryOf(e.fields.f_email);
   const iz = e.ihr_zwei?.fields || {};
   const ring = e.level;
@@ -206,13 +222,21 @@ async function mePage(page) {
       h("a.prow", { href: "#/", on: { click: () => { filt = "lose"; } } }, icon("layers"), h("span.grow", "Lose aufräumen"))),
     sugg.length ? h("div.list", h("div.kv", h("span.small.t2", "Vorschläge")), sugg.map((s) => h("div.prow",
       h("div.grow", h("div.nm", s.entity_name || ""), h("div.sub", `${s.field_name || (s.kind === "name" ? "Name" : s.kind)}: ${typeof s.payload.value === "object" ? JSON.stringify(s.payload.value) : s.payload.value} · ${s.payload.why || s.source}`)),
-      h("button.btn.sm", { on: { click: async () => { await POST(`/suggestions/${s.id}/accept`); invalidate(); mePage(clear(page)); } } }, "Übernehmen"),
-      h("button.btn.sm.ghost.icon", { on: { click: async () => { await POST(`/suggestions/${s.id}/reject`); mePage(clear(page)); } } }, icon("x"))))) : null,
+      h("button.btn.sm", { on: { click: async () => { await POST(`/suggestions/${s.id}/accept`); invalidate(); rebuild(page, mePage); } } }, "Übernehmen"),
+      h("button.btn.sm.ghost.icon", { on: { click: async () => { await POST(`/suggestions/${s.id}/reject`); rebuild(page, mePage); } } }, icon("x"))))) : null,
     h("div.list",
       h("div.kv", h("span.k", "Angemeldet als"), h("span.v", S.me.username)),
       h("div.kv", h("span.k", "Aufs Handy"), h("span.v", ({ all: "Jeder", rule: "Nach Regel", none: "Niemand" })[S.settings.sync?.mode])),
       h("div.kv", h("span.k", "CardDAV"), h("span.v.mono.small", location.origin + "/dav/"))),
-    h("p.small.t3", "Sortieren, Ringe, Routinen und Importe gibt es am Desktop."),
+    h("div.list",
+      h("div.kv", h("span.k", "Darstellung"), h("div.seg", [["system", "System"], ["light", "Hell"], ["dark", "Dunkel"]].map(([k, l]) =>
+        h("button" + (themePref() === k ? ".on" : ""), { on: { click: () => { setTheme(k); rebuild(page, mePage); } } }, l)))),
+      h("button.prow", { style: { width: "100%", border: 0, textAlign: "left", font: "inherit", color: "inherit" }, on: { click: () => dispatchEvent(new CustomEvent("syn-undo", { detail: "undo" })) } }, icon("undo"), h("span.grow", "Letzte Änderung rückgängig")),
+      h("a.prow", { href: "#/settings/account" }, icon("settings"), h("span.grow", "Einstellungen"), icon("right")),
+      h("a.prow", { href: "#/settings/routines" }, icon("zap"), h("span.grow", "Routinen"), icon("right")),
+      h("a.prow", { href: "#/settings/importers" }, icon("download"), h("span.grow", "Importe"), icon("right")),
+      h("a.prow", { href: "#/settings/sync" }, icon("smartphone"), h("span.grow", "Sync aufs Handy"), icon("right"))),
+    h("p.small.t3", "Ringe, Achsen, Netz und die Tabelle gibt es am Desktop."),
     h("button.btn", { on: { click: async () => { await POST("/auth/logout"); location.hash = "#/login"; } } }, icon("logout"), "Abmelden"));
 }
 
@@ -220,7 +244,7 @@ async function mePage(page) {
 export async function todayPage(page) {
   const t = await GET("/today");
   const d = new Date();
-  const reload = () => todayPage(clear(page));
+  const reload = () => rebuild(page, todayPage);
   page.append(h("div.mtop", h("a.back", { href: "#/" }, icon("left"), "Personen")),
     h("div.small.t2", d.toLocaleDateString("de-DE", { weekday: "long", day: "numeric", month: "long" })), h("h1", "Heute"));
   if (!t.items.length) page.append(h("div.card.pad.empty", "Nichts Neues. Routinen melden sich hier."));
@@ -246,9 +270,9 @@ export async function todayPage(page) {
 async function notesPage(page) {
   const { noteEditor } = await import("./notes.js");
   const notes = await GET("/notes");
-  page.append(h("div.mtop", h("a.back", { href: "#/me" }, icon("left"), "Ich"), h("button.btn.sm.primary", { on: { click: async () => { if (await noteEditor()) notesPage(clear(page)); } } }, icon("plus"), "Notiz")),
+  page.append(h("div.mtop", h("a.back", { href: "#/me" }, icon("left"), "Ich"), h("button.btn.sm.primary", { on: { click: async () => { if (await noteEditor()) rebuild(page, notesPage); } } }, icon("plus"), "Notiz")),
     h("h1", "Notizen"),
-    notes.map((n) => h("div.card.pad.col", { on: { click: async () => { if (await noteEditor(n)) notesPage(clear(page)); } } },
+    notes.map((n) => h("div.card.pad.col", { on: { click: async () => { if (await noteEditor(n)) rebuild(page, notesPage); } } },
       h("div.row.small.t2", h("span.mono", n.day), n.links.filter((l) => l.role === "dabei").map((l) => h("span.chip.sel", l.display))),
       h("div", { style: { whiteSpace: "pre-wrap" } }, n.text.replace(/@\[([^\]]+)\]\([^)]+\)/g, "$1")))));
 }

@@ -1,5 +1,7 @@
 // Felder: Anzeige und Bearbeitung aller Feldtypen (Text, Notiz, Zahl, Datum, Auswahl, Checkbox, Person, Verweis,
 // Telefon, E-Mail, Adresse, Profil, Bild). Jeder Wert: Label, Hauptwert ★, veraltet, unsicher, Quelle, gültig von/bis.
+import { dateInput } from "./date.js";
+import { pickAndCrop } from "./crop.js";
 import { S, h, icon, api, PUT, POST, clear, modal, rows, invalidate, avatar, circleChip, pickPerson, pickCircle, toast } from "./core.js";
 
 export const TYPE_NAMES = { text: "Text", note: "Notiz", number: "Zahl", date: "Datum", choice: "Auswahl", checkbox: "Checkbox",
@@ -81,7 +83,7 @@ export function inputFor(def, value, { onEnter } = {}) {
   else if (t === "number") { el = h("input.input", { type: "number", value: value ?? "", min: def.options?.min, max: def.options?.max, step: "any" }); get = () => (el.value === "" ? null : +el.value); }
   else if (t === "checkbox") { const c = h("input", { type: "checkbox", checked: !!value }); el = h("label.check", c, "Ja"); get = () => c.checked; }
   else if (t === "date") {
-    el = h("input.input.mono", { value: value ?? "", placeholder: "JJJJ-MM-TT, ????-03-14, Herbst 2025, 14.3." }); get = () => el.value;
+    el = dateInput(value ?? ""); get = () => el.value;
   } else if (t === "choice") {
     const multi = def.options?.multiple; const sel = new Set(Array.isArray(value) ? value : value ? [value] : []);
     const box = h("div.row.wrap", { style: { gap: "6px" } });
@@ -98,15 +100,16 @@ export function inputFor(def, value, { onEnter } = {}) {
     show(); el = h("div.row.wrap", lab, bP, bC, bX); get = () => cur;
   } else if (t === "profile") {
     const v = value || {};
-    const sel = h("select.input", (S.settings.services || []).map((s) => h("option", { value: s.id, selected: s.id === v.service }, s.name)), h("option", { value: "", selected: !v.service }, "anderer"));
+    const sel = h("select.input", (S.settings.services || []).map((x) => h("option", { value: x.id, selected: x.id === v.service }, x.name)), h("option", { value: "", selected: !v.service }, "anderer Dienst"));
     const handle = h("input.input", { value: v.handle || "", placeholder: "@name" });
-    const id = h("input.input.mono", { value: v.id || "", placeholder: "Dienst-ID (optional)" });
-    const url = h("input.input", { value: v.url || "", placeholder: "Link (optional)" });
-    el = h("div.col", h("div.row", sel, handle), h("div.row", id, url));
+    const id = h("input.input.mono", { value: v.id || "", placeholder: "optional" });
+    const url = h("input.input", { value: v.url || "", placeholder: "optional" });
+    const lf = (label, el) => h("label.f.fv-field", label, el);
+    el = h("div.fv-grid", lf("Dienst", sel), lf("Name / Handle", handle), lf("Dienst-ID", id), lf("Link", url));
     get = () => ({ service: sel.value, handle: handle.value.trim(), id: id.value.trim(), url: url.value.trim() });
   } else if (t === "image") {
     let cur = value; const img = h("img", { style: { maxWidth: "120px", borderRadius: "8px", display: cur ? "" : "none" }, src: cur || "" });
-    const file = h("input", { type: "file", accept: "image/*", on: { change: async () => { const fd = new FormData(); fd.append("file", file.files[0]); const r = await api("POST", "/files", fd); cur = r.url; img.src = cur; img.style.display = ""; } } });
+    const file = h("input", { type: "file", accept: "image/*", on: { change: async () => { const u = await pickAndCrop(file.files[0], { round: false, size: 1024 }); file.value = ""; if (u) { cur = u; img.src = cur; img.style.display = ""; } } } });
     el = h("div.row", img, file); get = () => cur;
   } else {
     el = h("input.input" + (t === "phone" ? ".mono" : ""), { value: value ?? "", type: t === "email" ? "email" : t === "phone" ? "tel" : "text" }); get = () => el.value;
@@ -118,38 +121,47 @@ export function inputFor(def, value, { onEnter } = {}) {
 // ---------------------------------------------------------------- Bearbeiten-Dialog für ein Feld
 // path: z.B. /entities/p_x/fields/f_phone  (Bund-Felder einer Person landen automatisch bei „Ihr zwei“)
 export async function editField(def, values, path, { title } = {}) {
-  const list = h("div.col");
+  const list = h("div.col.fv-list");
   const items = (values || []).map((v) => ({ ...v }));
   if (!items.length) items.push({ value: null, primary: true, label: null });
   const labels = def.options?.labels || [];
+  const sync = () => items.forEach((it) => { if (it._get) it.value = it._get(); });
+  const pill = (on, ic, label, onClick, title) => h("button.pill" + (on ? ".on" : ""), { type: "button", title, on: { click: onClick } }, icon(ic, "xs"), label);
   const render = () => {
     clear(list, items.map((it, idx) => {
       const inp = inputFor(def, it.value);
       it._get = inp.get;
-      const unsure = h("input", { type: "checkbox", checked: !!it.uncertain, on: { change: (e) => (it.uncertain = e.target.checked) } });
-      const depr = h("input", { type: "checkbox", checked: !!it.deprecated, on: { change: (e) => (it.deprecated = e.target.checked) } });
-      const lab = def.multi ? h("input.input", { value: it.label || "", placeholder: "Label", list: "lbl-" + def.id, style: { width: "120px" }, on: { input: (e) => (it.label = e.target.value) } }) : null;
-      const star = def.multi ? h("button.btn.sm.icon" + (it.primary ? ".active" : ""), { type: "button", title: "Hauptwert ★ – Schnellaktionen benutzen ihn ohne Nachfrage", on: { click: () => { items.forEach((x) => (x.primary = false)); it.primary = true; sync(); render(); } } }, icon("star")) : null;
-      const vf = h("input.input.mono", { value: it.valid_from || "", placeholder: "gültig von", style: { width: "120px" }, on: { input: (e) => (it.valid_from = e.target.value) } });
-      const vt = h("input.input.mono", { value: it.valid_to || "", placeholder: "bis", style: { width: "120px" }, on: { input: (e) => (it.valid_to = e.target.value) } });
-      const del = h("button.btn.sm.ghost.icon", { type: "button", title: "Wert löschen", on: { click: () => { sync(); items.splice(idx, 1); render(); } } }, icon("trash"));
-      return h("div.rblock" + (it.deprecated ? ".t3" : ""),
-        h("div.row", star, lab, h("div.grow", inp.el), del),
-        h("div.row.wrap.small.t2", { style: { gap: "14px" } },
-          h("label.check", unsure, "unsicher"), def.multi ? h("label.check", depr, "veraltet") : null,
-          h("span.row", "gültig", vf, vt),
-          it.source ? h("span.tag", SOURCE(it.source)) : null));
+      const showRange = it._range || it.valid_from || it.valid_to;
+      const labelIn = def.multi ? h("input.input.fv-label", { value: it.label || "", placeholder: "Label", list: "lbl-" + def.id, on: { input: (e) => (it.label = e.target.value) } }) : null;
+      const wide = ["profile", "address", "note", "image", "choice"].includes(def.type);
+      const top = labelIn && !wide ? h("div.fv-main", labelIn, h("div.fv-body", inp.el)) : h("div.col", { style: { gap: "8px" } }, labelIn, h("div.fv-body", inp.el));
+      const head = h("div.fv-head", h("div.fv-tags",
+        def.multi ? pill(it.primary, "star", "Hauptwert", () => { sync(); items.forEach((x) => (x.primary = false)); it.primary = true; render(); }, "Schnellaktionen benutzen den Hauptwert ohne Nachfrage") : null,
+        pill(it.uncertain, "question", "unsicher", () => { sync(); it.uncertain = !it.uncertain; render(); }, "Wird gestrichelt mit „?“ angezeigt"),
+        def.multi ? pill(it.deprecated, "history", "veraltet", () => { sync(); it.deprecated = !it.deprecated; render(); }, "Verschwindet aus der Anzeige, Importe finden die Person weiter") : null,
+        showRange ? null : h("button.fv-more", { type: "button", on: { click: () => { sync(); it._range = true; render(); } } }, icon("calendar", "xs"), "Zeitraum")),
+        h("div.fv-side", it.source ? h("span.fv-src", SOURCE(it.source)) : null,
+          h("button.btn.sm.ghost.icon", { type: "button", title: "Wert löschen", on: { click: () => { sync(); items.splice(idx, 1); render(); } } }, icon("trash"))));
+      let range = null;
+      if (showRange) {
+        const vf = dateInput(it.valid_from || "", { placeholder: "von", onChange: (v) => (it.valid_from = v) });
+        const vt = dateInput(it.valid_to || "", { placeholder: "bis", onChange: (v) => (it.valid_to = v) });
+        vf.addEventListener("input", () => (it.valid_from = vf.value)); vt.addEventListener("input", () => (it.valid_to = vt.value));
+        range = h("div.fv-range", h("span.fv-cap", "Gültig"), vf, h("span.t3", "–"), vt);
+      }
+      return h("div.fv" + (it.deprecated ? ".deprecated" : "") + (it.uncertain ? ".uncertain" : ""), top, range, head);
     }), labels.length ? h("datalist#lbl-" + def.id, labels.map((l) => h("option", { value: l }))) : null,
-    def.multi ? h("button.btn.sm", { type: "button", style: { alignSelf: "flex-start" }, on: { click: () => { sync(); items.push({ value: null, primary: !items.length }); render(); } } }, icon("plus"), "Wert") : null);
+    def.multi ? h("button.fv-add", { type: "button", on: { click: () => { sync(); items.push({ value: null, primary: !items.length }); render(); } } }, icon("plus"), "Weiteren Wert hinzufügen") : null);
   };
-  const sync = () => items.forEach((it) => { if (it._get) it.value = it._get(); });
   render();
-  const note = h("p.small.t3", def.multi ? "Alte Werte als „veraltet“ markieren statt löschen: Sie verschwinden aus der Anzeige, aber Importe und Doppelte finden die Person weiter." : "Unsichere Werte werden gestrichelt mit „?“ angezeigt.");
-  const res = await modal(title || def.name, h("div.col", h("div.row.small.t3", h("span.tag", def.id), TYPE_NAMES[def.type]), list, note),
+  setTimeout(() => list.querySelector(".fv-body input, .fv-body textarea, .fv-body select")?.focus(), 80);
+  const note = h("p.small.t3", def.multi ? "Alte Werte lieber als „veraltet“ markieren statt löschen: Importe und die Erkennung von Doppelten finden die Person weiter darüber." : "Unsichere Werte erscheinen gestrichelt mit „?“.");
+  const titleEl = h("span.row", { style: { gap: "10px" } }, title || def.name, h("span.tag", TYPE_NAMES[def.type]), h("span.tag.t3", def.id));
+  const res = await modal(titleEl, h("div.col", list, note),
     [{ label: "Abbrechen", value: null }, { label: "Speichern", primary: true, action: async () => {
       sync();
       const values = items.filter((it) => it.value !== null && it.value !== "" && !(Array.isArray(it.value) && !it.value.length))
-        .map(({ _get, ...rest }) => rest);
+        .map(({ _get, _range, ...rest }) => rest);
       try { return await PUT(path, { values }); } catch (_) { return false; }
     } }]);
   if (res) invalidate();

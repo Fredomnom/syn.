@@ -1,6 +1,6 @@
 // Räumliche Ansichten: Ringe, Achsen, Netz, Kreis-Bereiche – dazu der Zeitregler.
 import { S, h, icon, GET, POST, PUT, PATCH, clear, invalidate, avatar, circleChip, nameEl, rel, ringName, menu, toast, rows, RING,
-  circleColors, kindColors, initials, daysSince, today, qs, reloadCircles, pickCircle, modal, popover, closePop } from "./core.js";
+  circleColors, kindColors, initials, daysSince, today, qs, reloadCircles, pickCircle, modal, popover, closePop, cssVar as V, loseColors } from "./core.js";
 import { VS, filterRows, newCircle } from "./desktop.js";
 import { setRing, bundKindName } from "./shared.js";
 
@@ -12,14 +12,14 @@ const SAVE = (k, v) => { try { localStorage.setItem("syn." + k, JSON.stringify(v
 function svgPoint(svg, e) { const p = svg.createSVGPoint(); p.x = e.clientX; p.y = e.clientY; return p.matrixTransform(svg.getScreenCTM().inverse()); }
 
 function node(r, x, y, size = 15, { approx = false, sel = false } = {}) {
-  const cc = r.is_self ? { bg: "#16181D", fg: "#fff" } : circleColors(r.main_circle_id);
+  const cc = r.is_self ? { bg: V("--ink"), fg: V("--white") } : circleColors(r.main_circle_id);
   const unsure = !r.is_self && (!r.name || r.name_uncertain);
   const g = s("g.node", { transform: `translate(${x},${y})`, "data-id": r.id });
-  g.append(s("circle", { r: size, fill: unsure ? "#fff" : cc.bg, stroke: sel ? "#16181D" : unsure || approx ? cc.fg : "#fff", "stroke-width": sel ? 2.5 : 1.5, "stroke-dasharray": unsure || approx ? "3 2" : null }));
+  g.append(s("circle", { r: size, fill: unsure ? V("--white") : cc.bg, stroke: sel ? V("--ink") : unsure || approx ? cc.fg : V("--white"), "stroke-width": sel ? 2.5 : 1.5, "stroke-dasharray": unsure || approx ? "3 2" : null }));
   if (r.avatar) {
     const id = "clip" + r.id;
     g.append(s("clipPath", { id }, s("circle", { r: size - 1 })), s("image", { href: r.avatar, x: -size, y: -size, width: size * 2, height: size * 2, "clip-path": `url(#${id})`, preserveAspectRatio: "xMidYMid slice" }));
-  } else g.append(s("text", { "text-anchor": "middle", dy: "0.35em", "font-size": size * 0.72, "font-weight": 600, fill: r.is_self ? "#fff" : cc.fg }, r.is_self ? "Du" : !r.name ? "?" : initials(r.name)));
+  } else g.append(s("text", { "text-anchor": "middle", dy: "0.35em", "font-size": size * 0.72, "font-weight": 600, fill: r.is_self ? V("--white") : cc.fg }, r.is_self ? "Du" : !r.name ? "?" : initials(r.name)));
   return g;
 }
 
@@ -64,7 +64,8 @@ export async function rings(body, list0, all) {
     const list = data.filter((r) => !r.is_self && (opt.pets || r.kind !== "pet"));
     const lvl = (r) => (opt.dist === "ist" ? r.ist?.ring : r.level);
     const placed = list.filter((r) => lvl(r) != null), unplaced = list.filter((r) => lvl(r) == null);
-    const W = 760, Hh = 760, cx = W / 2, cy = Hh / 2, R = 330, band = R / 4;
+    const W = 760, Hh = 760, cx = W / 2, cy = Hh / 2, R = 330, R0 = 62, band = (R - R0) / 4;
+    const rad = (i) => R0 + band * i;
     const svg = s("svg", { viewBox: `0 0 ${W} ${Hh}` });
     // Sektoren
     const keyOf = (r) => (opt.sector === "kind" ? (S.circles[r.main_circle_id]?.kind_id || "_lose") : (r.main_circle_id || "_lose"));
@@ -74,16 +75,16 @@ export async function rings(body, list0, all) {
     const total = placed.length || 1, minShare = 0.07;
     let shares = keys.map((k) => Math.max(minShare, groups[k].length / total));
     const sum = shares.reduce((a, b) => a + b, 0) || 1; shares = shares.map((x) => x / sum);
-    for (let i = 4; i >= 1; i--) svg.append(s("circle", { cx, cy, r: band * i, fill: i <= 2 ? (i === 1 ? "#F4F5F7" : "#FAFAFB") : "#fff", stroke: "#E3E5EA" }));
-    for (let i = 1; i <= 4; i++) svg.append(s("text", { x: cx + 4, y: cy - band * i + 14, class: "label-mono" }, `${i} · ${RING()[i]}`));
+    for (let i = 4; i >= 1; i--) svg.append(s("circle", { cx, cy, r: rad(i), fill: i <= 2 ? (i === 1 ? V("--bg") : V("--bg2")) : V("--white"), stroke: V("--line") }));
+    for (let i = 1; i <= 4; i++) svg.append(s("text", { x: cx + 4, y: cy - rad(i) + 14, class: "label-mono" }, `${i} · ${RING()[i]}`));
     let a0 = -Math.PI / 2;
     const sectors = [];
     keys.forEach((k, i) => {
       const a1 = a0 + shares[i] * Math.PI * 2;
       sectors.push({ k, a0, a1 });
-      if (keys.length > 1) svg.append(s("line", { x1: cx, y1: cy, x2: cx + Math.cos(a0) * R, y2: cy + Math.sin(a0) * R, stroke: "#E3E5EA" }));
+      if (keys.length > 1) svg.append(s("line", { x1: cx, y1: cy, x2: cx + Math.cos(a0) * R, y2: cy + Math.sin(a0) * R, stroke: V("--line") }));
       const am = (a0 + a1) / 2;
-      const col = k === "_lose" ? S.lose : opt.sector === "kind" ? kindColors(k) : circleColors(k);
+      const col = k === "_lose" ? loseColors() : opt.sector === "kind" ? kindColors(k) : circleColors(k);
       const label = (k === "_lose" ? "Lose" : opt.sector === "kind" ? S.kinds[k]?.name : S.circles[k]?.name) + " · " + groups[k].length;
       const lx = cx + Math.cos(am) * (R + 22), ly = cy + Math.sin(am) * (R + 22);
       const tw = label.length * 6.4 + 16;
@@ -91,21 +92,21 @@ export async function rings(body, list0, all) {
       // Personen im Sektor verteilen
       for (let l = 1; l <= 4; l++) {
         const ps = groups[k].filter((r) => lvl(r) === l);
-        const rr = band * (l - 0.5);
+        const rr = R0 + band * (l - 0.5);
         const span = a1 - a0;
-        const perRow = Math.max(1, Math.floor((span * rr) / 34));
+        const perRow = Math.max(1, Math.floor((span * rr) / 46));
         ps.forEach((r, j) => {
           const row = Math.floor(j / perRow), idx = j % perRow, inRow = Math.min(perRow, ps.length - row * perRow);
           const a = a0 + (span * (idx + 1)) / (inRow + 1);
-          const rad = rr + (row % 2 ? 14 : row ? -14 : 0) * Math.ceil(row / 2);
-          r._x = cx + Math.cos(a) * rad; r._y = cy + Math.sin(a) * rad;
+          const rr2 = rr + (row % 2 ? 18 : row ? -18 : 0) * Math.ceil(row / 2);
+          r._x = cx + Math.cos(a) * rr2; r._y = cy + Math.sin(a) * rr2;
         });
       }
       a0 = a1;
     });
     const nodes = s("g");
-    for (const r of placed) nodes.append(node(r, r._x, r._y, 15, { approx: at && r.approx_created }));
-    svg.append(nodes, node({ is_self: true, display: "Du" }, cx, cy, 20));
+    for (const r of placed) nodes.append(node(r, r._x, r._y, 21, { approx: at && r.approx_created }));
+    svg.append(nodes, node({ is_self: true, display: "Du" }, cx, cy, 26));
     clear(vizBox, svg);
     // Ziehen: Abstand = Ring, Sektor = Kreis-Art des Hauptkreises
     let drag = null;
@@ -124,7 +125,7 @@ export async function rings(body, list0, all) {
     });
     const dropAt = async (r, p) => {
       const dist = Math.hypot(p.x - cx, p.y - cy);
-      const level = dist > R ? null : Math.min(4, Math.max(1, Math.ceil(dist / band)));
+      const level = dist > R ? null : Math.min(4, Math.max(1, Math.ceil((dist - R0) / band)));
       let ang = Math.atan2(p.y - cy, p.x - cx); if (ang < -Math.PI / 2) ang += Math.PI * 2;
       const sec = sectors.find((x) => ang >= x.a0 && ang < x.a1);
       if (opt.dist === "level" && level !== r.level) { await setRing(r.id, level); r.level = level; toast(`${r.display}: ${level ? ringName(level) : "ohne Ring"}`); }
@@ -209,21 +210,21 @@ export async function axes(body, list0) {
     if (ringAx && seenAx) {
       const rx = ringAx === "x" ? [sx(0.5), sx(cfg.zoneRing + 0.5)] : [sx(cfg.zoneDays), sx(dx[1])];
       const ry = ringAx === "y" ? [sy(cfg.zoneRing + 0.5), sy(0.5)] : [sy(dy[1]), sy(cfg.zoneDays)];
-      svg.append(s("rect", { x: Math.min(...rx), y: Math.min(...ry), width: Math.abs(rx[1] - rx[0]), height: Math.abs(ry[1] - ry[0]), fill: "#FFF6CC", stroke: "#D4A800", "stroke-dasharray": "5 4", rx: 8 }),
-        s("text", { x: Math.min(...rx) + 8, y: Math.min(...ry) + 18, "font-size": 11.5, fill: "#16181D", "font-weight": 600 }, "nah, aber lange nicht gesehen"));
+      svg.append(s("rect", { x: Math.min(...rx), y: Math.min(...ry), width: Math.abs(rx[1] - rx[0]), height: Math.abs(ry[1] - ry[0]), fill: V("--yellow-light"), stroke: V("--yellow-line"), "stroke-dasharray": "5 4", rx: 8 }),
+        s("text", { x: Math.min(...rx) + 8, y: Math.min(...ry) + 18, "font-size": 11.5, fill: V("--ink"), "font-weight": 600 }, "nah, aber lange nicht gesehen"));
     }
     // Achsen
-    svg.append(s("line", { x1: m.l, y1: H - m.b, x2: W - m.r, y2: H - m.b, stroke: "#8A8F99" }), s("line", { x1: m.l, y1: m.t, x2: m.l, y2: H - m.b, stroke: "#8A8F99" }));
+    svg.append(s("line", { x1: m.l, y1: H - m.b, x2: W - m.r, y2: H - m.b, stroke: V("--text3") }), s("line", { x1: m.l, y1: m.t, x2: m.l, y2: H - m.b, stroke: V("--text3") }));
     const ticks = (kind, d) => kind === "ring" ? [1, 2, 3, 4] : Array.from({ length: 6 }, (_, i) => Math.round(d[0] + ((d[1] - d[0]) * i) / 5));
     const tl = (kind, v) => kind === "ring" ? `${v} · ${RING()[v]}` : kind === "date" ? (v === 0 ? "heute" : `vor ${v} T`) : v;
-    for (const v of ticks(X?.kind, dx)) svg.append(s("text", { x: sx(v), y: H - m.b + 18, "text-anchor": "middle", class: "label-mono" }, tl(X?.kind, v)), s("line", { x1: sx(v), x2: sx(v), y1: m.t, y2: H - m.b, stroke: "#F0F1F4" }));
-    for (const v of ticks(Y?.kind, dy)) svg.append(s("text", { x: m.l - 8, y: sy(v) + 4, "text-anchor": "end", class: "label-mono" }, tl(Y?.kind, v)), s("line", { x1: m.l, x2: W - m.r, y1: sy(v), y2: sy(v), stroke: "#F0F1F4" }));
-    svg.append(s("text", { x: W - m.r, y: H - 10, "text-anchor": "end", "font-size": 12, fill: "#5B606B" }, X?.label + (X?.locked ? " (berechnet)" : "")),
-      s("text", { x: m.l, y: m.t - 18, "font-size": 12, fill: "#5B606B" }, Y?.label + (Y?.locked ? " (berechnet)" : "")));
+    for (const v of ticks(X?.kind, dx)) svg.append(s("text", { x: sx(v), y: H - m.b + 18, "text-anchor": "middle", class: "label-mono" }, tl(X?.kind, v)), s("line", { x1: sx(v), x2: sx(v), y1: m.t, y2: H - m.b, stroke: V("--grid") }));
+    for (const v of ticks(Y?.kind, dy)) svg.append(s("text", { x: m.l - 8, y: sy(v) + 4, "text-anchor": "end", class: "label-mono" }, tl(Y?.kind, v)), s("line", { x1: m.l, x2: W - m.r, y1: sy(v), y2: sy(v), stroke: V("--grid") }));
+    svg.append(s("text", { x: W - m.r, y: H - 10, "text-anchor": "end", "font-size": 12, fill: V("--text2") }, X?.label + (X?.locked ? " (berechnet)" : "")),
+      s("text", { x: m.l, y: m.t - 18, "font-size": 12, fill: V("--text2") }, Y?.label + (Y?.locked ? " (berechnet)" : "")));
     const g = s("g");
     // Kollisionen leicht verteilen
     const seen = {};
-    for (const p of shown) { const k = Math.round(sx(p.x) / 8) + ":" + Math.round(sy(p.y) / 8); const n = (seen[k] = (seen[k] || 0) + 1) - 1; p.px = sx(p.x) + (n % 3) * 12 - (n ? 12 : 0); p.py = sy(p.y) - Math.floor(n / 3) * 12; g.append(node(p.r, p.px, p.py, 13)); }
+    for (const p of shown) { const k = Math.round(sx(p.x) / 8) + ":" + Math.round(sy(p.y) / 8); const n = (seen[k] = (seen[k] || 0) + 1) - 1; p.px = sx(p.x) + (n % 3) * 30 - (n ? 30 : 0); p.py = sy(p.y) - Math.floor(n / 3) * 30; g.append(node(p.r, p.px, p.py, 19)); }
     svg.append(g);
     clear(box, svg);
     const locked = X?.locked || Y?.locked;
@@ -286,10 +287,10 @@ export async function net(body, list0) {
       const k = 1 - it / 300 + 0.05;
       for (let i = 0; i < nodes.length; i++) for (let j = i + 1; j < nodes.length; j++) {
         const A = P[nodes[i].id], B = P[nodes[j].id]; let dx = A.x - B.x, dy = A.y - B.y; const d2 = dx * dx + dy * dy || 1;
-        if (d2 > 250000) continue; const d = Math.sqrt(d2); const f = Math.min(30, 5000 / d2) * k; dx /= d; dy /= d;
+        if (d2 > 250000) continue; const d = Math.sqrt(d2); const f = Math.min(30, 9000 / d2) * k; dx /= d; dy /= d;
         A.x += dx * f; A.y += dy * f; B.x -= dx * f; B.y -= dy * f;
       }
-      for (const l of links) { const A = P[l.a], B = P[l.b]; const dx = B.x - A.x, dy = B.y - A.y; const d = Math.hypot(dx, dy) || 1; const f = (d - 90) * 0.03 * k; A.x += (dx / d) * f; A.y += (dy / d) * f; B.x -= (dx / d) * f; B.y -= (dy / d) * f; }
+      for (const l of links) { const A = P[l.a], B = P[l.b]; const dx = B.x - A.x, dy = B.y - A.y; const d = Math.hypot(dx, dy) || 1; const f = (d - 110) * 0.03 * k; A.x += (dx / d) * f; A.y += (dy / d) * f; B.x -= (dx / d) * f; B.y -= (dy / d) * f; }
       const cent = {};
       for (const n of nodes) if (n.main_circle_id) { const c = (cent[n.main_circle_id] ||= { x: 0, y: 0, n: 0 }); c.x += P[n.id].x; c.y += P[n.id].y; c.n++; }
       for (const n of nodes) { const c = cent[n.main_circle_id]; const p = P[n.id]; if (c) { p.x += (c.x / c.n - p.x) * 0.05 * k; p.y += (c.y / c.n - p.y) * 0.05 * k; } p.x += (W / 2 - p.x) * 0.002; p.y += (H / 2 - p.y) * 0.002; }
@@ -325,9 +326,9 @@ export async function net(body, list0) {
       const pts = hull(mem.map((n) => pos[n.id]));
       const col = circleColors(c.id);
       const d = pts.length === 2 ? `M${pts[0].x},${pts[0].y}L${pts[1].x},${pts[1].y}` : "M" + pts.map((p) => `${p.x},${p.y}`).join("L") + "Z";
-      gA.append(s("path", { d, fill: col.bg, stroke: col.bg, "stroke-width": 46, "stroke-linejoin": "round", "stroke-linecap": "round", opacity: 0.75, "data-circle": c.id }));
+      gA.append(s("path", { d, fill: col.bg, stroke: col.bg, "stroke-width": 64, "stroke-linejoin": "round", "stroke-linecap": "round", opacity: 0.75, "data-circle": c.id }));
       const top = pts.reduce((a, b) => (b.y < a.y ? b : a));
-      let ly = top.y - 26;
+      let ly = top.y - 36;
       while (areas.some((o) => Math.abs(o.lx - top.x) < 90 && Math.abs(o.ly - ly) < 13)) ly -= 14;
       areas.lastLabel = { lx: top.x, ly };
       gA.append(s("text", { x: top.x, y: ly, "text-anchor": "middle", "font-size": 11, "font-weight": 600, fill: col.fg }, c.name));
@@ -337,10 +338,10 @@ export async function net(body, list0) {
     for (const sg of sugg) {
       const mem = nodes.filter((n) => sg.members.includes(n.id)); if (mem.length < 2) continue;
       const pts = hull(mem.map((n) => pos[n.id]));
-      gA.append(s("path", { d: "M" + pts.map((p) => `${p.x},${p.y}`).join("L") + "Z", fill: "none", stroke: "#D4A800", "stroke-width": 1.5, "stroke-dasharray": "6 5", transform: "", "stroke-linejoin": "round" }));
+      gA.append(s("path", { d: "M" + pts.map((p) => `${p.x},${p.y}`).join("L") + "Z", fill: "none", stroke: V("--yellow-line"), "stroke-width": 1.5, "stroke-dasharray": "6 5", transform: "", "stroke-linejoin": "round" }));
     }
-    for (const l of links) gL.append(s("line", { x1: pos[l.a].x, y1: pos[l.a].y, x2: pos[l.b].x, y2: pos[l.b].y, stroke: "#8A8F99", "stroke-width": 1.2, "data-a": l.a, "data-b": l.b }));
-    for (const n of nodes) gN.append(node(n, pos[n.id].x, pos[n.id].y, 14, { approx: at && n.approx_created }));
+    for (const l of links) gL.append(s("line", { x1: pos[l.a].x, y1: pos[l.a].y, x2: pos[l.b].x, y2: pos[l.b].y, stroke: V("--text3"), "stroke-width": 1.2, "data-a": l.a, "data-b": l.b }));
+    for (const n of nodes) gN.append(node(n, pos[n.id].x, pos[n.id].y, 20, { approx: at && n.approx_created }));
     svg.append(gA, gL, gN);
     clear(box, svg);
     let drag = null;
@@ -403,7 +404,7 @@ export async function areas(page, all) {
     return el;
   };
   const lose = all.filter((r) => !r.is_self && !r.circles.length);
-  const loseEl = h("div", { style: { background: S.lose.bg, borderRadius: "16px", padding: "12px", flex: "0 1 360px", border: "1px dashed var(--text3)" },
+  const loseEl = h("div", { style: { background: loseColors().bg, borderRadius: "16px", padding: "12px", flex: "0 1 360px", border: "1px dashed var(--text3)" },
     on: { dragover: (e) => e.preventDefault(), drop: async (e) => {
       e.preventDefault(); const [id, from] = e.dataTransfer.getData("text/plain").split("|"); if (!from) return;
       const ent = await GET("/entities/" + id); const m = ent.memberships.find((x) => x.circle_id === from && x.active);

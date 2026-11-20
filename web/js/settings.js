@@ -1,20 +1,23 @@
 // Einstellungen: Felder, Kreis-Arten, Bund-Arten, Ringe, Routinen, Importe, Sync, Vorschläge, Module, Konto, Admin.
 import { S, h, icon, api, GET, POST, PUT, PATCH, DEL, clear, invalidate, toast, modal, confirmDlg, promptDlg, rows, reloadFields, reloadCircles,
-  loadBase, circleChip, avatar, fmtTs, rel, RING, download } from "./core.js";
+  loadBase, circleChip, avatar, fmtTs, rel, RING, download, rebuild, isMobile, themePref, setTheme } from "./core.js";
 import { TYPE_NAMES } from "./fields.js";
+import { hueInput, hueOf } from "./color.js";
+import { ACTIONS, binding, pretty, saveBinding, recordCombo } from "./shortcuts.js";
 
 const TABS = [["fields", "Felder"], ["circle-kinds", "Kreis-Arten"], ["bund-kinds", "Bund-Arten"], ["rings", "Ringe"], ["routines", "Routinen"],
-  ["importers", "Importe"], ["sync", "Sync"], ["suggestions", "Vorschläge"], ["modules", "Module"], ["account", "Konto"], ["admin", "Konten (Admin)"]];
+  ["importers", "Importe"], ["sync", "Sync"], ["suggestions", "Vorschläge"], ["modules", "Module"], ["shortcuts", "Tastenkürzel"], ["account", "Konto"], ["admin", "Konten (Admin)"]];
 
 export async function settingsPage(main, tab, route) {
   const page = h("div.page"); main.append(page);
   const body = h("div.col", { style: { gap: "16px" } });
   page.append(h("div.page-h", h("h1", "Einstellungen")),
     h("nav.tabs", TABS.filter(([k]) => k !== "admin" || S.me.is_admin).map(([k, l]) => h("a" + (k === tab ? ".on" : ""), { href: "#/settings/" + k }, l))), body);
-  const fn = { fields, "circle-kinds": circleKinds, "bund-kinds": bundKinds, rings: ringsTab, routines, importers, sync, suggestions, modules, account, admin }[tab] || fields;
+  const fn = { fields, "circle-kinds": circleKinds, "bund-kinds": bundKinds, rings: ringsTab, routines, importers, sync, suggestions, modules, shortcuts, account, admin }[tab] || fields;
   await fn(body, route);
+  requestAnimationFrame(() => page.querySelector(".tabs a.on")?.scrollIntoView({ inline: "center", block: "nearest" }));
 }
-const reloadTab = (body, fn, route) => { clear(body); fn(body, route); };
+const reloadTab = (body, fn, route) => rebuild(body, (b) => fn(b, route));
 const card = (title, ...kids) => h("div.card", h("div.card-h", h("h3", title)), h("div.card-b.col", kids));
 const saveSettings = async (patch) => { S.settings = await PATCH("/me/settings", patch); S.me.settings = S.settings; toast("Gespeichert"); };
 
@@ -75,18 +78,17 @@ async function servicesCard() {
 // ---------------------------------------------------------------- Kreis-Arten, Bund-Arten
 async function circleKinds(body) {
   const { kinds, lose } = await GET("/circle-kinds");
-  body.append(card("Kreis-Arten", h("p.small.t3", "Jede Kreis-Art hat ein Paar aus heller Fläche und dunkler Schrift. Die Paare färben Profilbilder, Chips und Sektoren."),
+  body.append(card("Kreis-Arten", h("p.small.t3", "Jede Kreis-Art hat ein Paar aus heller Fläche und dunkler Schrift aus derselben Farbfamilie. Wählbar ist nur der Farbton, damit alles zur Marke passt. Die Paare färben Profilbilder, Chips und Sektoren."),
     h("table.mtable", kinds.map((k) => {
       const prev = h("span.chip", { style: { background: k.bg, color: k.fg } }, k.name);
       const upd = async (patch) => { await PATCH("/circle-kinds/" + k.id, patch); Object.assign(k, patch); prev.style.background = k.bg; prev.style.color = k.fg; prev.textContent = k.name; await loadBase(); };
       return h("tr", h("td", h("span.av", { style: { background: k.bg, color: k.fg } }, k.abbr)), h("td", prev),
         h("td", h("input.input", { value: k.name, on: { change: (e) => upd({ name: e.target.value }) } })),
         h("td", h("input.input.mono", { value: k.abbr, style: { width: "60px" }, maxLength: 3, on: { change: (e) => upd({ abbr: e.target.value }) } })),
-        h("td", h("label.row.small", "Fläche", h("input", { type: "color", value: k.bg, on: { change: (e) => upd({ bg: e.target.value }) } }))),
-        h("td", h("label.row.small", "Schrift", h("input", { type: "color", value: k.fg, on: { change: (e) => upd({ fg: e.target.value }) } }))),
+        h("td", hueInput(hueOf(k.fg), { label: k.name, onChange: (_h, pair) => upd({ bg: pair.bg, fg: pair.fg }) })),
         h("td", h("button.btn.sm.ghost.icon", { on: { click: async () => { await DEL("/circle-kinds/" + k.id); await loadBase(); reloadTab(body, circleKinds); } } }, icon("trash"))));
-    }), h("tr", h("td", h("span.av", { style: { background: lose.bg, color: lose.fg } }, "LO")), h("td", h("span.chip", "Lose")), h("td.t3", { colSpan: 5 }, "fest – für Personen ohne Kreis"))),
-    h("button.btn.sm", { style: { alignSelf: "flex-start" }, on: { click: async () => { const n = await promptDlg("Neue Kreis-Art", "Name"); if (n) { await POST("/circle-kinds", { name: n }); await loadBase(); reloadTab(body, circleKinds); } } } }, icon("plus"), "Kreis-Art")));
+    }), h("tr", h("td", h("span.av", { style: { background: lose.bg, color: lose.fg } }, "LO")), h("td", h("span.chip", "Lose")), h("td.t3", { colSpan: 3 }, "fest – für Personen ohne Kreis"))),
+    h("button.btn.sm", { style: { alignSelf: "flex-start" }, on: { click: async () => { const n = await promptDlg("Neue Kreis-Art", "Name"); if (n) { const used = kinds.map((k) => hueOf(k.fg)); const free = [0, 30, 60, 95, 140, 175, 200, 230, 265, 300, 330].find((x) => used.every((u) => Math.abs(u - x) > 18)) ?? 200; const { pairForHue } = await import("./color.js"); await POST("/circle-kinds", { name: n, ...pairForHue(free) }); await loadBase(); reloadTab(body, circleKinds); } } } }, icon("plus"), "Kreis-Art")));
 }
 async function bundKinds(body) {
   const ks = await GET("/bund-kinds");
@@ -123,9 +125,9 @@ async function routines(body, route) {
   const list = await GET("/routines");
   const all = await rows();
   let cur = list.find((r) => r.id === route?.query?.r) || list.find((r) => r.trigger.type !== "manual") || list[0];
-  const left = h("div.col", { style: { width: "280px", flex: "none" } });
+  const left = h("div.col.rlist");
   const right = h("div.card.grow", { style: { minWidth: 0 } });
-  body.append(h("div.row", { style: { alignItems: "flex-start", gap: "16px" } }, left, right));
+  body.append(h("div.rsplit", left, right));
   const drawList = () => clear(left, h("button.btn.primary", { on: { click: () => { cur = { id: null, name: "Neue Routine", enabled: true, trigger: { type: "date", field: "f_bday", repeat: "yearly", without_year: true, time: "08:00" }, conditions: [], actions: [{ type: "card", title: "{name} hat Geburtstag", text: "{alter}" }] }; drawList(); edit(); } } }, icon("plus"), "Neue Routine"),
     list.map((r) => h("div.card.pad", { style: { cursor: "pointer", padding: "10px 12px", borderColor: cur && cur.id === r.id ? "var(--ink)" : null }, on: { click: () => { cur = r; drawList(); edit(); } } },
       h("div.row.between", h("b.ellipsis", r.name), h("span.tag" + (r.enabled ? ".yellow" : ""), r.trigger.type === "manual" ? "Knopf" : r.enabled ? "aktiv" : "aus")),
@@ -234,7 +236,7 @@ async function routines(body, route) {
 async function importers(body) {
   const list = await GET("/importers");
   body.append(h("p.small.t2", "syn zieht Leute aus Messengern und Online-Diensten. Neue Leute landen unter „Lose“. Ein Importer schreibt nur Werte aus seiner eigenen Quelle und überschreibt nie, was du von Hand gesetzt hast. Unsichere Treffer erscheinen unter „Mögliche Doppelte“."));
-  const grid = h("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(380px,1fr))", gap: "12px" } });
+  const grid = h("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(min(380px,100%),1fr))", gap: "12px" } });
   body.append(grid);
   for (const imp of list) grid.append(importerCard(imp, () => reloadTab(body, importers)));
 }
@@ -369,7 +371,9 @@ async function account(body) {
   const dn = h("input.input", { value: S.me.display_name });
   const o = h("input.input", { type: "password", placeholder: "Altes Passwort" }), n = h("input.input", { type: "password", placeholder: "Neues Passwort (mind. 8 Zeichen)" });
   const tn = h("input.input", { placeholder: "Name, z.B. n8n, Home Assistant, Türschild" }), tro = h("input", { type: "checkbox" });
-  body.append(card("Profil", h("div.row", dn, h("button.btn.sm", { on: { click: () => saveSettings({ display_name: dn.value }) } }, "Speichern"))),
+  body.append(card("Darstellung", h("div.seg", [["system", "Wie das System"], ["light", "Hell"], ["dark", "Dunkel"]].map(([k, l]) =>
+      h("button" + (themePref() === k ? ".on" : ""), { on: { click: () => setTheme(k) } }, l))), h("p.small.t3", "Gilt für dieses Gerät.")),
+    card("Profil", h("div.row", dn, h("button.btn.sm", { on: { click: () => saveSettings({ display_name: dn.value }) } }, "Speichern"))),
     card("Passwort", h("div.row.wrap", o, n, h("button.btn.sm", { on: { click: async () => { await POST("/me/password", { old: o.value, new: n.value }); o.value = n.value = ""; toast("Passwort geändert"); } } }, "Ändern"))),
     card("Long-lived Access Tokens",
       h("p.small.t3", "Für Skripte, n8n, Home Assistant und CardDAV. Jedes Token sieht nur deine Daten. Ein Token kann auf Lesen beschränkt sein."),
@@ -398,4 +402,20 @@ async function admin(body) {
     h("div.row.wrap", un, pw, h("label.check", adm, "Admin"), h("button.btn.sm.primary", { on: { click: async () => { await POST("/admin/users", { username: un.value, password: pw.value, is_admin: adm.checked }); reloadTab(body, admin); } } }, icon("plus"), "Konto anlegen"))),
     card("Importer-Module (für alle Konten)", h("p.small.t3", "Jeder Importer ist ein eigenes Modul, das man an- und ausschalten kann."),
       h("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(200px,1fr))", gap: "6px" } }, imps.map((i) => h("label.check", h("input", { type: "checkbox", checked: i.enabled, on: { change: (e) => PUT("/admin/importers/" + i.id, { enabled: e.target.checked }) } }), i.name)))));
+}
+
+// ---------------------------------------------------------------- Tastenkürzel
+async function shortcuts(body) {
+  const groups = {};
+  for (const a of ACTIONS) (groups[a[1]] ||= []).push(a);
+  body.append(h("p.small.t2", "Alle Tastenkürzel lassen sich ändern. Einfache Tasten (ohne Strg/⌘/Alt) wirken nicht, während du in ein Feld tippst."),
+    ...Object.entries(groups).map(([g, list]) => card(g, h("table.mtable", list.map(([id, , label, def]) => {
+      const cur = binding(id);
+      return h("tr", h("td", label), h("td", h("span.kbd.big", pretty(cur))), h("td.small.t3", cur !== def ? `Standard: ${pretty(def)}` : "Standard"),
+        h("td.row", { style: { justifyContent: "flex-end" } },
+          h("button.btn.sm", { on: { click: async () => { const c = await recordCombo(); if (c) { await saveBinding(id, c); reloadTab(body, shortcuts); } } } }, "Ändern"),
+          h("button.btn.sm.ghost", { on: { click: async () => { await saveBinding(id, ""); reloadTab(body, shortcuts); } } }, "Aus"),
+          cur !== def ? h("button.btn.sm.ghost", { on: { click: async () => { await saveBinding(id, null); reloadTab(body, shortcuts); } } }, "Zurücksetzen") : null));
+    })))),
+    h("button.btn", { style: { alignSelf: "flex-start" }, on: { click: async () => { await saveSettings({ shortcuts: {} }); reloadTab(body, shortcuts); } } }, icon("refresh"), "Alle auf Standard"));
 }

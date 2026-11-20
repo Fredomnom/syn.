@@ -1,4 +1,7 @@
 // syn – Start, Router, Login, Erststart und Ersteinrichtung. Handy und Desktop sind bewusst zwei Oberflächen.
+import "./date.js";
+import "./color.js";
+import { onGlobal } from "./shortcuts.js";
 import { S, h, api, GET, POST, clear, logo, loadBase, isMobile, flushQueue, toast, icon } from "./core.js";
 
 export const route = { parts: [], query: {} };
@@ -32,6 +35,7 @@ export async function render() {
 }
 
 addEventListener("hashchange", render);
+addEventListener("syn-theme", () => render());
 addEventListener("resize", () => { const m = isMobile() ? "m" : "d"; if (mode && m !== mode) render(); });
 
 export function go(hash) { if (location.hash === hash) render(); else location.hash = hash; }
@@ -88,6 +92,21 @@ async function renderSetup(app) {
   draw();
   clear(app, h("div.center", box));
 }
+
+// Universelles Rückgängig / Wiederholen
+export async function undoRedo(which) {
+  let r;
+  try { r = await api("POST", "/" + which, undefined, { quiet: true }); }
+  catch (e) { toast(e.status === 409 ? (which === "undo" ? "Nichts zum Rückgängigmachen" : "Nichts zum Wiederholen") : e.message); return; }
+  S.rows = null;
+  await loadBase();
+  await render();
+  const other = which === "undo" ? "redo" : "undo";
+  toast(`${which === "undo" ? "Rückgängig" : "Wiederholt"}: ${r.label}`, { action: { label: which === "undo" ? "Wiederholen" : "Rückgängig", run: () => undoRedo(other) } });
+}
+onGlobal("undo", () => undoRedo("undo"));
+onGlobal("redo", () => undoRedo("redo"));
+addEventListener("syn-undo", (e) => undoRedo(e.detail));
 
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
 render();

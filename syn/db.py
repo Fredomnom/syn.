@@ -1,4 +1,5 @@
 """SQLite-Zugriff. Eine Verbindung pro Thread, Schema wird beim Start angelegt."""
+import contextvars
 import json
 import sqlite3
 import threading
@@ -8,6 +9,16 @@ from . import config
 
 _local = threading.local()
 _path = None
+# Änderungsgruppe der laufenden Anfrage (für Rückgängig/Wiederholen). None = nicht protokollieren.
+BATCH = contextvars.ContextVar("syn_batch", default=None)
+# Tabellen, deren Änderungen rückgängig gemacht werden können, und wie der Besitzer ermittelt wird
+UNDO_TABLES = {
+    "entities": "user_id", "field_values": "user_id", "history": "user_id", "memberships": "user_id", "bunds": "user_id",
+    "circles": "user_id", "field_defs": "user_id", "circle_kinds": "user_id", "bund_kinds": "user_id",
+    "routines": "user_id", "notes": "user_id", "saved_views": "user_id", "suggestions": "user_id", "dup_marks": "user_id",
+    "today_items": "user_id", "contact_signals": "user_id", "users": "id",
+    "note_links": "(SELECT user_id FROM notes WHERE id={R}.note_id)",
+}
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users(
@@ -118,6 +129,15 @@ CREATE TABLE IF NOT EXISTS google_map(
   pushed TEXT, PRIMARY KEY(user_id, entity_id)
 );
 CREATE TABLE IF NOT EXISTS instance(key TEXT PRIMARY KEY, value TEXT);
+CREATE TABLE IF NOT EXISTS undo_log(
+  id INTEGER PRIMARY KEY AUTOINCREMENT, batch TEXT NOT NULL, user_id TEXT, tbl TEXT, op TEXT, pk INTEGER,
+  old TEXT, new TEXT
+);
+CREATE INDEX IF NOT EXISTS undo_batch ON undo_log(batch);
+CREATE TABLE IF NOT EXISTS undo_batches(
+  id TEXT PRIMARY KEY, user_id TEXT NOT NULL, label TEXT, at TEXT, state TEXT DEFAULT 'done'
+);
+CREATE INDEX IF NOT EXISTS undo_user ON undo_batches(user_id, state, at);
 """
 
 
@@ -128,7 +148,25 @@ def init(path=None):
     close()
     c = conn()
     c.executescript(SCHEMA)
+    install_undo_triggers(c)
     c.commit()
+
+
+def install_undo_triggers(c):
+    """Trigger protokollieren jede Zeile vor und nach der Änderung – aber nur innerhalb einer Änderungsgruppe."""
+    for tbl, owner in UNDO_TABLES.items():
+        cols = [r[1] for r in c.execute(f"PRAGMA table_info({tbl})")]
+        def obj(R):
+            return "json_object(" + ",".join(f"'{col}',{R}.{col}" for col in cols) + ")"
+        def own(R):
+            return owner.replace("{R}", R) if "{R}" in owner else f"{R}.{owner}"
+        for op, ev, R, old, new in (("I", "INSERT", "NEW", "NULL", obj("NEW")), ("U", "UPDATE", "NEW", obj("OLD"), obj("NEW")),
+                                    ("D", "DELETE", "OLD", obj("OLD"), "NULL")):
+            name = f"undo_{tbl}_{op}"
+            c.execute(f"DROP TRIGGER IF EXISTS {name}")
+            c.execute(f"CREATE TRIGGER {name} AFTER {ev} ON {tbl} WHEN syn_batch() IS NOT NULL BEGIN "
+                      f"INSERT INTO undo_log(batch,user_id,tbl,op,pk,old,new) VALUES(syn_batch(),{own(R)},'{tbl}','{op}',"
+                      f"{R}.rowid,{old},{new}); END")
 
 
 def conn() -> sqlite3.Connection:
@@ -139,6 +177,7 @@ def conn() -> sqlite3.Connection:
         c.execute("PRAGMA journal_mode=WAL")
         c.execute("PRAGMA foreign_keys=OFF")
         c.execute("PRAGMA busy_timeout=30000")
+        c.create_function("syn_batch", 0, lambda: BATCH.get(), deterministic=False)
         _local.conn = c
         _local.path = _path
     return c

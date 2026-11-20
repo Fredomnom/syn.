@@ -1,11 +1,12 @@
 // Notizen (optionales Modul): datiert, Namen werden erkannt, @ verlinkt oder legt neu an, „Dabei“-Zeile oben.
 import { S, h, icon, GET, POST, PUT, DEL, clear, modal, rows, invalidate, avatar, pickPerson, today, toast, confirmDlg } from "./core.js";
 import { fieldsFor, inputFor } from "./fields.js";
+import { dateInput } from "./date.js";
 
 export async function noteEditor(n = null) {
   const all = await rows();
   const dabei = new Set((n?.links || []).filter((l) => l.role === "dabei").map((l) => l.entity_id));
-  const day = h("input.input.mono", { value: n?.day || today(), style: { width: "140px" } });
+  const day = dateInput(n?.day || today());
   const ta = h("textarea.input", { rows: 9, value: n?.text || "", placeholder: "Was war los? Namen werden erkannt. @ verlinkt eine Person oder legt eine neue an." });
   const dabeiBox = h("div.row.wrap");
   const drawDabei = () => clear(dabeiBox, h("span.small.t2", "Dabei:"), [...dabei].map((id) => {

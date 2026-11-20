@@ -230,3 +230,34 @@ def test_felder_und_ids(client):
                                           "actions": [{"type": "list"}]})
     assert rt.status_code == 200
     assert c.delete(f"/api/v1/fields/{f['id']}").status_code == 400  # wird in Routine benutzt
+
+
+def test_rueckgaengig_und_wiederholen(client):
+    c = client
+    e = c.post("/api/v1/entities", json={"name": "Undo Ulla", "fields": {"f_city": "Köln"}}).json()
+    c.patch(f"/api/v1/entities/{e['id']}/fields/f_city", json={"value": "Bonn"})
+    c.patch(f"/api/v1/entities/{e['id']}", json={"name": "Ulla Umbenannt"})
+    r = c.post("/api/v1/undo").json()
+    assert r["label"] == "Person bearbeitet"
+    x = c.get(f"/api/v1/entities/{e['id']}").json()
+    assert x["name"] == "Undo Ulla" and x["fields"]["f_city"][0]["value"] == "Bonn"
+    c.post("/api/v1/undo")
+    x = c.get(f"/api/v1/entities/{e['id']}").json()
+    assert x["fields"]["f_city"][0]["value"] == "Köln"
+    hist = c.get(f"/api/v1/entities/{e['id']}/history").json()
+    assert not any(h["attr"] == "f_city" and h["new"] == "Bonn" for h in hist)
+    c.post("/api/v1/redo")
+    assert c.get(f"/api/v1/entities/{e['id']}").json()["fields"]["f_city"][0]["value"] == "Bonn"
+    # Rückgängig einer Löschung stellt alles wieder her
+    c.delete(f"/api/v1/entities/{e['id']}")
+    assert c.get(f"/api/v1/entities/{e['id']}").status_code == 404
+    c.post("/api/v1/undo")
+    assert c.get(f"/api/v1/entities/{e['id']}").json()["fields"]["f_city"][0]["value"] == "Bonn"
+    # neue Änderung verwirft Wiederholen
+    c.patch(f"/api/v1/entities/{e['id']}", json={"name": "Neu"})
+    assert c.get("/api/v1/undo").json()["redo"] is None
+    # Einstellungen rückgängig ändert nie das Passwort
+    c.patch("/api/v1/me/settings", json={"notes_enabled": True})
+    c.post("/api/v1/me/password", json={"old": "geheim123", "new": "geheim999"})
+    c.post("/api/v1/undo")
+    assert c.post("/api/v1/auth/login", json={"username": "fred", "password": "geheim999"}).status_code == 200
