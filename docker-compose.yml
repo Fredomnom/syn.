@@ -1,8 +1,10 @@
 # docker compose up -d   →   http://localhost:8080
 services:
   syn:
-    build: .
-    # image: ghcr.io/fredomnom/syn:latest
+    build:
+      context: .
+      target: slim        # „full“ = mit Telegram, Instagram (API), PlayStation
+    # image: ghcr.io/fredomnom/syn:latest   # oder :full
     container_name: syn
     restart: unless-stopped
     ports:

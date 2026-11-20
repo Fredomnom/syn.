@@ -25,7 +25,16 @@ docker run -d -p 8080:8080 -v syn-data:/data -e SYN_ADMIN_USER=you -e SYN_ADMIN_
 ```
 
 The image runs as its own user (not root), has a health check on `/api/v1/health` and keeps everything under `/data`.
-Build the optional importers (Telegram, Instagram, PlayStation) in with `--build-arg EXTRAS="telethon instagrapi psnawp"`.
+
+There are two variants built from the same Dockerfile:
+
+| Tag | Build | Contains |
+|---|---|---|
+| `latest` (slim) | `docker build -t ghcr.io/fredomnom/syn:latest .` | everything except the importers below |
+| `full` | `docker build --target full -t ghcr.io/fredomnom/syn:full .` | additionally Telegram (`telethon`), Instagram API (`instagrapi`, unofficial), PlayStation (`psnawp`) |
+
+The Signal importer needs `signal-cli` (Java) on the host and is not part of either image.
+More packages for both variants: `--build-arg EXTRAS="pkg1 pkg2"`.
 Business cards live at `/@name`.
 
 ### systemd
