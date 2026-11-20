@@ -1,4 +1,5 @@
 // syn – Start, Router, Login, Erststart und Ersteinrichtung. Handy und Desktop sind bewusst zwei Oberflächen.
+import { initI18n } from "./i18n.js";
 import "./date.js";
 import "./color.js";
 import "./hover.js";
@@ -250,4 +251,4 @@ onGlobal("redo", () => undoRedo("redo"));
 addEventListener("syn-undo", (e) => undoRedo(e.detail));
 
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
-render();
+initI18n().finally(render);

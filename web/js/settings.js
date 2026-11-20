@@ -2,8 +2,10 @@
 import { S, h, icon, iconButton, api, GET, POST, PUT, PATCH, DEL, clear, invalidate, toast, modal, confirmDlg, promptDlg, rows, reloadFields, reloadCircles,
   loadBase, circleChip, avatar, fmtTs, rel, RING, download, rebuild, isMobile, themePref, setTheme } from "./core.js";
 import { TYPE_NAMES, serviceIcon, GROUPS, groupOf, MAPS } from "./fields.js";
+import { LOCALE } from "./i18n.js";
 import { hueInput, hueOf } from "./color.js";
 import { runImport, stepsEl } from "./importstatus.js";
+import { LANGS, langPref, setLang } from "./i18n.js";
 import { ACTIONS, binding, pretty, saveBinding, recordCombo, keys } from "./shortcuts.js";
 
 // Navigation: gruppiert, mit Symbol und kurzer Erklärung je Seite
@@ -420,7 +422,8 @@ async function modules(body) {
 async function appearance(body) {
   body.append(
     panel("Darstellung",
-      srow("Farbschema", "Gilt für dieses Gerät.", segc([["system", "Wie das System"], ["light", "Hell"], ["dark", "Dunkel"]], themePref(), (k) => setTheme(k)))),
+      srow("Farbschema", "Gilt für dieses Gerät.", segc([["system", "Wie das System"], ["light", "Hell"], ["dark", "Dunkel"]], themePref(), (k) => setTheme(k))),
+      srow("Sprache", "Gilt für dieses Gerät. „Automatisch“ folgt der Sprache des Browsers.", h("select.input", { style: { width: "200px" }, on: { change: (e) => setLang(e.target.value) } }, LANGS.map(([k, l]) => h("option", { value: k, selected: langPref() === k }, l))))),
     panel("Namen",
       srow("Reihenfolge", "Wie Namen in Listen, Tabelle und Suche erscheinen.", segc([["first", "Vorname Nachname"], ["last", "Nachname, Vorname"]], S.settings.name_order || "first", async (k) => { await saveSettings({ name_order: k }); S.rows = null; reloadTab(body, appearance); }))),
     panel("Karten",
@@ -525,7 +528,7 @@ async function cardTab(body) {
 
 // Kreis-Art löschen: wird sie noch benutzt, erst zeigen, welche Kreise (mit wem) betroffen sind, und neu zuordnen
 async function deleteKind(k, kinds) {
-  const used = Object.values(S.circles).filter((c) => c.kind_id === k.id).sort((a, b) => a.name.localeCompare(b.name, "de"));
+  const used = Object.values(S.circles).filter((c) => c.kind_id === k.id).sort((a, b) => a.name.localeCompare(b.name, LOCALE()));
   if (!used.length) { await DEL("/circle-kinds/" + k.id); return true; }
   const others = kinds.filter((x) => x.id !== k.id);
   const all = await rows();

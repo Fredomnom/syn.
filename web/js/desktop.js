@@ -2,6 +2,7 @@
 import { S, h, icon, GET, POST, PUT, PATCH, DEL, clear, rebuild, rows, captureSegs, animateSegs, invalidate, avatar, circleChip, nameEl, rel, ringName, today, debounce,
   toast, modal, logo, qs, menu, pickPerson, pickCircle, reloadCircles, confirmDlg, ringMini, MOD, fmtTs, circleColors, kindColors, promptDlg, RING, cssVar as V } from "./core.js";
 import { primaryOf, valueEl, actionFor, editField, entityFieldList, runQuick, bundFields, TYPE_NAMES, SOURCE, plain, fieldsFor, service, serviceIcon, fieldRow, fieldSections, sourceName } from "./fields.js";
+import { LOCALE } from "./i18n.js";
 import { onPage, onGlobal, resetPage, binding, pretty, helpOverlay, keys } from "./shortcuts.js";
 import { dateInput } from "./date.js";
 import { openSpotlight, rememberPerson } from "./spotlight.js";
@@ -145,7 +146,7 @@ export function filterRows(all) {
   const key = VS.sort.replace(/^-/, ""), desc = VS.sort.startsWith("-");
   const val = (r) => key === "name" ? r.display.toLowerCase() : key === "created" ? r.created_at : key === "level" ? (r.level ?? 9) : key === "seen" ? (r.v.f_seen?.raw || "") : key === "main_circle_id" ? (S.circles[r.main_circle_id]?.name || "~") : key === "kind" ? r.kind : (r.v[key]?.raw ?? "");
   list = [...self, ...list];
-  list.sort((a, b) => { const x = val(a), y = val(b); const c = typeof x === "number" && typeof y === "number" ? x - y : String(x).localeCompare(String(y), "de"); return desc ? -c : c; });
+  list.sort((a, b) => { const x = val(a), y = val(b); const c = typeof x === "number" && typeof y === "number" ? x - y : String(x).localeCompare(String(y), LOCALE()); return desc ? -c : c; });
   return list;
 }
 
@@ -204,7 +205,7 @@ function filterMenu(anchor, redraw) {
       for (const r of S.rows || []) if (!r.is_self) origins.set(r.origin || "manual", (origins.get(r.origin || "manual") || 0) + 1);
       if (!origins.has("card")) origins.set("card", 0);
       const name = (o) => (o === "manual" ? "Von Hand angelegt" : sourceName(o));
-      return [{ label: "Quelle" }, ...[...origins].sort((a, b) => name(a[0]).localeCompare(name(b[0]), "de")).map(([o, n]) => ({
+      return [{ label: "Quelle" }, ...[...origins].sort((a, b) => name(a[0]).localeCompare(name(b[0]), LOCALE())).map(([o, n]) => ({
         label: name(o), icon: VS.hideSources?.includes(o) ? "x" : "check", hint: String(n),
         action: () => { const s = new Set(VS.hideSources || []); s.has(o) ? s.delete(o) : s.add(o); VS.hideSources = [...s]; redraw(); refreshFilterBtn(); } }))];
     })()]);

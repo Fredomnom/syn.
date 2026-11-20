@@ -1,3 +1,4 @@
+import { LOCALE } from "./i18n.js";
 // syn – Grundbausteine: API, DOM-Helfer, Icons, Zustand, Formatierung, Dialoge.
 
 export const S = { me: null, settings: {}, fields: {}, fieldList: [], kinds: {}, lose: { bg: "#ECEEF2", fg: "#4B5563" },
@@ -294,7 +295,7 @@ export function fmtDate(s) {
 }
 export function fmtTs(s) {
   if (!s) return ""; const d = new Date(s); if (isNaN(d)) return s;
-  return d.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" }) + " " + d.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+  return d.toLocaleDateString(LOCALE(), { day: "2-digit", month: "2-digit", year: "numeric" }) + " " + d.toLocaleTimeString(LOCALE(), { hour: "2-digit", minute: "2-digit" });
 }
 export const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 export const debounce = (fn, ms = 250) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };

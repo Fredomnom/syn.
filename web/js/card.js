@@ -1,3 +1,6 @@
+import { LOCALE, initI18n, t } from "./i18n.js";
+import "./controls.js";
+import { dateInput } from "./date.js";
 // Öffentliche Visitenkarte: /@name – ohne Anmeldung, ohne Rest der App.
 const $ = (tag, attrs = {}, ...kids) => {
   const el = document.createElement(tag);
@@ -31,7 +34,9 @@ function profileLink(v, services) {
   return s.link.replace("{handle}", encodeURIComponent((v.handle || "").replace(/^@/, ""))).replace("{id}", encodeURIComponent(v.id || ""));
 }
 function show(f, v, services) {
-  const x = v.value;
+  let x = v.value;
+  // Mehrfachauswahl kommt manchmal als JSON-Text an
+  if (typeof x === "string" && /^\s*[[{]/.test(x)) { try { x = JSON.parse(x); } catch (_) {} }
   if (f.type === "phone") return { text: x, href: "tel:" + String(x).replace(/[^\d+]/g, "") };
   if (f.type === "email") return { text: x, href: "mailto:" + x };
   if (f.type === "profile") {
@@ -39,7 +44,7 @@ function show(f, v, services) {
     return { text: (s ? s.name + " · " : "") + (x?.handle || x?.id || x?.url || ""), href: profileLink(x, services) };
   }
   if (f.type === "address") { const t = typeof x === "object" ? [x.street, [x.zip, x.city].filter(Boolean).join(" "), x.country].filter(Boolean).join(", ") : x; return { text: t, href: "https://www.openstreetmap.org/search?query=" + encodeURIComponent(t) }; }
-  if (f.type === "date") { const m = /^(\d{4}|\?{4})-(\d\d)-(\d\d)$/.exec(x || ""); return { text: m ? new Date(2000, +m[2] - 1, +m[3]).toLocaleDateString("de-DE", { day: "numeric", month: "long" }) + (m[1].startsWith("?") ? "" : " " + m[1]) : x }; }
+  if (f.type === "date") { const m = /^(\d{4}|\?{4})-(\d\d)-(\d\d)$/.exec(x || ""); return { text: m ? new Date(2000, +m[2] - 1, +m[3]).toLocaleDateString(LOCALE(), { day: "numeric", month: "long" }) + (m[1].startsWith("?") ? "" : " " + m[1]) : x }; }
   if (Array.isArray(x)) return { text: x.join(", ") };
   if (x && typeof x === "object") return { text: Object.values(x).filter((y) => y && typeof y !== "object").join(", ") };
   return { text: String(x) };
@@ -61,7 +66,7 @@ function input(f, services) {
   const base = { class: "input", name: f.id, "data-1p-ignore": true, autocomplete: "off" };
   if (f.type === "phone") return { el: $("input", { ...base, type: "tel", autocomplete: "tel", placeholder: "+49 …" }), get: (e) => e.value.trim() };
   if (f.type === "email") return { el: $("input", { ...base, type: "email", autocomplete: "email", placeholder: "name@beispiel.de" }), get: (e) => e.value.trim() };
-  if (f.type === "date") return { el: $("input", { ...base, type: "date" }), get: (e) => e.value };
+  if (f.type === "date") return { el: dateInput(""), get: (e) => e.value };
   if (f.type === "profile") {
     // mehrere Profile: jede Zeile Dienst + Name, darunter „+ weiteres Profil“
     const list = $("div", { class: "vk-multi" });
@@ -128,4 +133,4 @@ async function main() {
   root.replaceChildren($("div", { class: "vk-card vk-me" }, head, c.fields.length ? rows : null, save), $("div", { class: "vk-card vk-reply" }, form),
     $("a", { class: "vk-foot", href: "/" }, "Visitenkarte von ", $("span", { class: "logo" }, "syn", $("b", {}, "."))));
 }
-main();
+initI18n().finally(main);

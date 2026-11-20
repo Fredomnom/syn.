@@ -1,5 +1,6 @@
 // Freie Gruppierung für Raster, Liste und Tabelle.
 import { S, h, icon, circleChip, ringName } from "./core.js";
+import { LOCALE } from "./i18n.js";
 const LS = (k, d) => { try { return JSON.parse(localStorage.getItem("syn." + k)) ?? d; } catch (_) { return d; } };
 const SAVE = (k, v) => { try { localStorage.setItem("syn." + k, JSON.stringify(v)); } catch (_) {} };
 
@@ -58,5 +59,5 @@ export function groupRows(g, list) {
   if (!g) return [{ key: "", head: null, rows: list }];
   const m = new Map();
   for (const r of list) { const [k, head] = groupOf(g, r); if (!m.has(k)) m.set(k, { key: k, head, rows: [] }); m.get(k).rows.push(r); }
-  return [...m.values()].sort((a, b) => (a.key === "~") - (b.key === "~") || a.key.localeCompare(b.key, "de"));
+  return [...m.values()].sort((a, b) => (a.key === "~") - (b.key === "~") || a.key.localeCompare(b.key, LOCALE()));
 }

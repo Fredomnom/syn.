@@ -2,6 +2,7 @@
 import { S, h, icon, GET, POST, PUT, PATCH, clear, invalidate, avatar, circleChip, nameEl, rel, ringName, menu, toast, rows, RING,
   circleColors, kindColors, initials, daysSince, today, qs, reloadCircles, pickCircle, modal, popover, closePop, cssVar as V, loseColors } from "./core.js";
 import { VS, filterRows, newCircle } from "./desktop.js";
+import { LOCALE } from "./i18n.js";
 import { setRing, bundKindName } from "./shared.js";
 
 const NS = "http://www.w3.org/2000/svg";
@@ -28,7 +29,7 @@ async function timeSlider(onChange) {
   const range = await GET("/timeline/range");
   const d0 = new Date(range.from + "T12:00:00"), d1 = new Date(range.to + "T12:00:00");
   const days = Math.max(1, Math.round((d1 - d0) / 86400000));
-  const fmt = (d) => d.toLocaleDateString("de-DE", { day: "numeric", month: "short", year: "numeric" });
+  const fmt = (d) => d.toLocaleDateString(LOCALE(), { day: "numeric", month: "short", year: "numeric" });
   const lab = h("span.tb-pill", "Heute");
   const inp = h("input.tb-range", { type: "range", min: 0, max: days, value: days, "aria-label": "Zeitregler" });
   const now = h("button.btn.sm.ghost", { type: "button", title: "Zurück zu heute", on: { click: () => { inp.value = days; show(); apply(); } } }, "Heute");

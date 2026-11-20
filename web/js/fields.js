@@ -1,6 +1,7 @@
 // Felder: Anzeige und Bearbeitung aller Feldtypen (Text, Notiz, Zahl, Datum, Auswahl, Checkbox, Person, Verweis,
 // Telefon, E-Mail, Adresse, Profil, Bild). Jeder Wert: Label, Hauptwert ★, veraltet, unsicher, Quelle, gültig von/bis.
 import { dateInput } from "./date.js";
+import { LOCALE } from "./i18n.js";
 import { pickAndCrop } from "./crop.js";
 import { S, h, icon, api, PUT, POST, clear, modal, rows, invalidate, avatar, circleChip, pickPerson, pickCircle, toast, menu, popover, closePop } from "./core.js";
 
@@ -348,7 +349,7 @@ function knownPlaces() {
     if (raw && typeof raw === "object" && raw.type === "place" && raw.id) n.set(raw.id, (n.get(raw.id) || 0) + 1);
   }
   for (const r of S.rows || []) { const c = r.v?.f_city?.d; if (c && !n.has(c)) n.set(c, 0); }
-  return [...n].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "de")).map(([k]) => k);
+  return [...n].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], LOCALE())).map(([k]) => k);
 }
 export function pickPlace(anchor, onPick) {
   const inp = h("input.input", { placeholder: "Ort, z.B. Uni Leipzig …", style: { width: "100%" } });

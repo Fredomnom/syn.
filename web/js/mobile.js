@@ -2,6 +2,7 @@
 import { S, h, icon, GET, POST, PATCH, clear, rebuild, rows, themePref, setTheme, invalidate, avatar, circleChip, nameEl, rel, ringName, today, debounce,
   postOrQueue, toast, modal, logo, qs, queued, fmtDate } from "./core.js";
 import { primaryOf, valueEl, actionFor, editField, entityFieldList, runQuick, plain, bundFields, fieldSections, humanDate } from "./fields.js";
+import { LOCALE } from "./i18n.js";
 import { guideAttach } from "./guide.js";
 import { editPerson, addField, dupHint, ringPopup, setRing, editIhrZwei, bundKindName, historyText } from "./shared.js";
 
@@ -238,7 +239,7 @@ export async function todayPage(page) {
   const d = new Date();
   const reload = () => rebuild(page, todayPage);
   page.append(h("div.mtop", h("a.back", { href: "#/" }, icon("left"), "Personen")),
-    h("div.small.t2", d.toLocaleDateString("de-DE", { weekday: "long", day: "numeric", month: "long" })), h("h1", "Heute"));
+    h("div.small.t2", d.toLocaleDateString(LOCALE(), { weekday: "long", day: "numeric", month: "long" })), h("h1", "Heute"));
   if (!t.items.length) page.append(h("div.card.pad.empty", "Nichts Neues. Routinen melden sich hier."));
   for (const it of t.items) {
     if (it.kind === "card") {

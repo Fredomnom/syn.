@@ -1,6 +1,7 @@
 // Tabelle: Spreadsheet mit Formelleiste, Tastatur, Bereichsauswahl, Füllen per ⌘D, Kopieren/Einfügen,
 // Ring-Popup in der Zelle und Bulk-Aktionen für markierte Zeilen.
 import { S, h, icon, GET, POST, PATCH, clear, invalidate, avatar, circleChip, nameEl, rel, ringName, menu, pickCircle, toast, confirmDlg, modal, rows, MOD, popover, closePop } from "./core.js";
+import { LOCALE } from "./i18n.js";
 import { editField, plain, TYPE_NAMES } from "./fields.js";
 import { ringPopup } from "./shared.js";
 import { groupOf } from "./groups.js";
@@ -47,7 +48,7 @@ export async function table(body, list, all, grouping = "", redraw = null) {
   function colFilter(anchor, c) {
     const counts = new Map();
     for (const r of base) { const k = cellKey(r, c); counts.set(k, (counts.get(k) || 0) + 1); }
-    const vals = [...counts.keys()].sort((a, b) => (a === EMPTY) - (b === EMPTY) || a.localeCompare(b, "de", { numeric: true }));
+    const vals = [...counts.keys()].sort((a, b) => (a === EMPTY) - (b === EMPTY) || a.localeCompare(b, LOCALE(), { numeric: true }));
     const sel = new Set(CF[c.key] || vals);
     const q = h("input.input", { placeholder: "Werte suchen …", style: { width: "100%" } });
     const boxes = vals.map((v) => {
