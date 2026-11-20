@@ -20,6 +20,15 @@ def _items(data, *keys):
     return []
 
 
+def _abs(web, url):
+    """prate liefert Bilder als relativen Pfad (/media/avatars/…) – auf den Server beziehen."""
+    if not url or not isinstance(url, str):
+        return None
+    if url.startswith("//"):
+        return "https:" + url
+    return url if url.startswith("http") else web.rstrip("/") + "/" + url.lstrip("/")
+
+
 def _user(u):
     if not isinstance(u, dict):
         return None
@@ -111,7 +120,7 @@ class Prate(Importer):
             out.append(Contact(service_id=str(u.get("id") or key), handle=u.get("username"),
                                name=u.get("display_name") or u.get("name") or u.get("username"),
                                url=u.get("url") or (f"{web}/@{u.get('username')}" if u.get("username") else None),
-                               avatar_url=u.get("avatar") or u.get("avatar_url"), last_contact=p["last"], note=note or None))
+                               avatar_url=_abs(web, u.get("avatar_url") or u.get("avatar")), last_contact=p["last"], note=note or None))
         return out
 
 
