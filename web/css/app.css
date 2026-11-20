@@ -1191,3 +1191,15 @@ body.kbd-nav .pop { pointer-events: auto; }
 .card-field .small { max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .card-fields > p { grid-column: 1 / -1; margin: 6px 0 0; }
 .card-intro { width: 100%; min-height: 84px; box-sizing: border-box; padding: 10px 12px; resize: vertical; line-height: 1.45; font: inherit; }
+/* Kreis-Art löschen */
+.kd-all { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--bg); border-radius: 12px; }
+.kd-all .ctl-select, .kd-all select { flex: 1; }
+.kd-list { display: flex; flex-direction: column; max-height: 50vh; overflow: auto; }
+.kd-row { display: grid; grid-template-columns: 40px minmax(0, 1fr) 190px; align-items: center; gap: 12px; padding: 10px 2px; }
+.kd-row + .kd-row { border-top: 1px solid var(--line); }
+.kd-av { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; font: 700 13px var(--f-ui); }
+.kd-main { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.kd-people { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; }
+.kd-people .av { box-shadow: 0 0 0 2px var(--white); margin-right: -6px; }
+.kd-people .av + .small, .kd-people .small + .small { margin-left: 12px; }
+@media (max-width: 560px) { .kd-row { grid-template-columns: 40px minmax(0, 1fr); } .kd-row > :last-child { grid-column: 1 / -1; } }

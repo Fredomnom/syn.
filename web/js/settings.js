@@ -117,7 +117,7 @@ async function circleKinds(body) {
         h("td", h("input.input", { value: k.name, on: { change: (e) => upd({ name: e.target.value }) } })),
         h("td", h("input.input.mono", { value: k.abbr, style: { width: "60px" }, maxLength: 3, on: { change: (e) => upd({ abbr: e.target.value }) } })),
         h("td", hueInput(hueOf(k.fg), { label: k.name, onChange: (_h, pair) => upd({ bg: pair.bg, fg: pair.fg }) })),
-        h("td", h("button.btn.sm.ghost.icon", { on: { click: async () => { await DEL("/circle-kinds/" + k.id); await loadBase(); reloadTab(body, circleKinds); } } }, icon("trash"))));
+        h("td", h("button.btn.sm.ghost.icon", { title: "Kreis-Art löschen", on: { click: async () => { if (await deleteKind(k, kinds)) { await loadBase(); reloadTab(body, circleKinds); } } } }, icon("trash"))));
     }), h("tr", h("td", h("span.av", { style: { background: lose.bg, color: lose.fg } }, "LO")), h("td", h("span.chip", "Lose")), h("td.t3", { colSpan: 4 }, "fest – für Personen ohne Kreis"))),
     h("button.btn.sm", { style: { alignSelf: "flex-start" }, on: { click: async () => { const n = await promptDlg("Neue Kreis-Art", "Name"); if (n) { const used = kinds.map((k) => hueOf(k.fg)); const free = [0, 30, 60, 95, 140, 175, 200, 230, 265, 300, 330].find((x) => used.every((u) => Math.abs(u - x) > 18)) ?? 200; const { pairForHue } = await import("./color.js"); await POST("/circle-kinds", { name: n, ...pairForHue(free) }); await loadBase(); reloadTab(body, circleKinds); } } } }, icon("plus"), "Kreis-Art")));
 }
@@ -520,4 +520,35 @@ async function cardTab(body) {
     panel("Was andere dir schicken können", h("div.srow-full", list("ask", "Der Name ist immer dabei, dazu ein Feld für eine Nachricht. Antworten landen als neue Person mit der Quelle „Visitenkarte“ – und unter „Heute“."))),
     panel("Begrüßung", h("div.srow-full", intro)));
   refresh();
+}
+
+// Kreis-Art löschen: wird sie noch benutzt, erst zeigen, welche Kreise (mit wem) betroffen sind, und neu zuordnen
+async function deleteKind(k, kinds) {
+  const used = Object.values(S.circles).filter((c) => c.kind_id === k.id).sort((a, b) => a.name.localeCompare(b.name, "de"));
+  if (!used.length) { await DEL("/circle-kinds/" + k.id); return true; }
+  const others = kinds.filter((x) => x.id !== k.id);
+  const all = await rows();
+  const opts = (sel) => [h("option", { value: "", selected: !sel }, "Ohne Art (Lose-Farben)"), ...others.map((x) => h("option", { value: x.id, selected: sel === x.id }, x.name))];
+  const target = Object.fromEntries(used.map((c) => [c.id, others[0]?.id || ""]));
+  const items = used.map((c) => {
+    const members = all.filter((r) => r.circles_all?.includes(c.id) && !r.is_self);
+    const sel = h("select.input.kd-sel", { on: { change: (e) => { target[c.id] = e.target.value; } } }, opts(target[c.id]));
+    return { c, sel, el: h("div.kd-row",
+      h("span.av.kd-av", { style: { background: k.bg, color: k.fg } }, k.icon ? icon(k.icon) : k.abbr),
+      h("div.kd-main", h("b", c.name), h("div.kd-people", members.slice(0, 8).map((r) => avatar(r, 24, { exact: true })), members.length > 8 ? h("span.small.t3", `+${members.length - 8}`) : null,
+        !members.length ? h("span.small.t3", "noch niemand") : h("span.small.t3", members.length === 1 ? "1 Person" : `${members.length} Personen`))),
+      sel) };
+  });
+  const allSel = h("select.input", { on: { change: (e) => { for (const it of items) { target[it.c.id] = e.target.value; it.sel.value = e.target.value; it.sel.dispatchEvent(new Event("change")); } } } }, h("option", { value: "-", disabled: true, selected: true }, "Alle zuordnen zu …"), opts(null).map((o) => (o.selected = false, o)));
+  const n = used.length;
+  const ok = await modal(`„${k.name}“ löschen?`, h("div.col", { style: { gap: "12px" } },
+    h("p.small.t2", `${n === 1 ? "Ein Kreis hat" : n + " Kreise haben"} diese Art. Wähle, welche Art ${n === 1 ? "er" : "sie"} stattdessen bekommen – die Personen bleiben in ihren Kreisen.`),
+    h("div.kd-all", h("span.small.t2", "Für alle:"), allSel),
+    h("div.kd-list", items.map((it) => it.el))),
+    [{ label: "Abbrechen" }, { label: "Umziehen und löschen", danger: true, action: async () => {
+      for (const it of items) await PATCH("/circles/" + it.c.id, { kind_id: target[it.c.id] || null });
+      await DEL("/circle-kinds/" + k.id); return true;
+    } }]);
+  if (ok) { await reloadCircles(); toast(`„${k.name}“ gelöscht`); }
+  return !!ok;
 }
