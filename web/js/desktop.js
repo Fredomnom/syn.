@@ -375,8 +375,8 @@ async function personPage(main, id) {
   page.append(h("a.crumb", { href: "#/people" }, icon("left"), "Personen"), head, dupHint(e, { desktop: true, onChange: reload }),
     h("div.pgrid3",
       h("div.pcol.wide", ihr, bunds),
-      h("div.pcol.narrow", fields, notes),
-      h("div.pcol.narrow", suggBox, circles, knowsCard, verlauf, routines)));
+      h("div.pcol.narrow", fields, circles, notes),
+      h("div.pcol.narrow", suggBox, verlauf, knowsCard, routines)));
   guideAttach(e);
 }
 

@@ -1082,13 +1082,11 @@ code { font: 400 12.5px var(--f-mono); }
 .pgrid3 { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(300px, 1fr) minmax(300px, 1fr); gap: 16px; align-items: start; }
 .pcol { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 .pcol:empty { display: none; }
-@media (max-width: 1500px) { .pgrid3 { grid-template-columns: minmax(0, 1.5fr) minmax(300px, 1fr); } .pgrid3 > .pcol:nth-child(3) { grid-column: 2; } .pgrid3 > .pcol:nth-child(2) { grid-column: 1; } }
-@media (max-width: 1100px) { .pgrid3 { grid-template-columns: 1fr; } .pgrid3 > .pcol { grid-column: 1 !important; } }
-/* schmale Spalten: Label über dem Wert */
-.pcol.narrow .fr { grid-template-columns: minmax(0, 1fr) auto; gap: 0 8px; }
-.pcol.narrow .fr-key { grid-column: 1 / -1; padding-top: 2px; font-size: 12px; }
-.pcol.narrow .fr-main { grid-column: 1; }
-.pcol.narrow .fr-tools { grid-column: 2; grid-row: 2; }
+@media (max-width: 1500px) { .pgrid3 { grid-template-columns: minmax(0, 1.5fr) minmax(300px, 1fr); } .pgrid3 > .pcol:nth-child(1) { grid-column: 1; grid-row: 1 / span 2; } .pgrid3 > .pcol:nth-child(2) { grid-column: 2; grid-row: 1; } .pgrid3 > .pcol:nth-child(3) { grid-column: 2; grid-row: 2; } }
+@media (max-width: 1100px) { .pgrid3 { grid-template-columns: 1fr; } .pgrid3 > .pcol { grid-column: 1 !important; grid-row: auto !important; } }
+/* schmale Spalten: Label und erster Wert in einer Zeile, nur etwas schmaler */
+.pcol.narrow .fr { grid-template-columns: minmax(64px, 32%) minmax(0, 1fr) auto; gap: 0 10px; }
+.pcol.narrow .fr-key { font-size: 12.5px; overflow-wrap: anywhere; }
 /* Ihr zwei: großes Ringdiagramm links, Karten rechts */
 .iz-body { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 20px; align-items: start; }
 .iz-body.no-ring { grid-template-columns: 1fr; }
