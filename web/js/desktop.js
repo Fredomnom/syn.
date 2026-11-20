@@ -4,6 +4,7 @@ import { S, h, icon, GET, POST, PUT, PATCH, DEL, clear, rebuild, rows, invalidat
 import { primaryOf, valueEl, actionFor, editField, entityFieldList, runQuick, bundFields, TYPE_NAMES, SOURCE, plain, fieldsFor, service, serviceIcon } from "./fields.js";
 import { onPage, onGlobal, resetPage, binding, pretty, helpOverlay } from "./shortcuts.js";
 import { dateInput } from "./date.js";
+import { openSpotlight, rememberPerson } from "./spotlight.js";
 import { editPerson, addField, dupHint, ringPopup, setRing, editIhrZwei, editBund, bundKindName, addBund, addToCircle, historyText } from "./shared.js";
 
 const LS = (k, d) => { try { return JSON.parse(localStorage.getItem("syn." + k)) ?? d; } catch (_) { return d; } };
@@ -52,7 +53,7 @@ export function toggleSidebar() {
 }
 function setupGlobalKeys() {
   onGlobal("toggle_sidebar", toggleSidebar);
-  onGlobal("search", () => { const i = document.querySelector("#people-search"); if (i) i.focus(); else location.hash = "#/people?focus=search"; });
+  onGlobal("search", () => openSpotlight());
   onGlobal("new_person", () => newPersonDialog());
   onGlobal("help", helpOverlay);
   onGlobal("go_people", () => (location.hash = "#/people"));
@@ -70,6 +71,7 @@ async function sidebar(route) {
   const sugg = (await GET("/suggestions")).length;
   return h("aside.side",
     h("div.top", logo(), h("button.btn.ghost.icon", { title: `Seitenleiste ein-/ausklappen (${pretty(binding("toggle_sidebar"))})`, on: { click: toggleSidebar } }, icon("sidebar"))),
+    h("button.nav.spot-btn", { on: { click: () => openSpotlight() } }, icon("search"), h("span.lab", "Suchen"), h("span.n.kbd", pretty(binding("search")))),
     nav("#/people", "users", "Personen", all.filter((r) => !r.is_self).length, ["people", "p", "v", "merge"].includes(p0)),
     nav("#/circles", "circles", "Kreise", Object.keys(S.circles).length, ["circles", "c"].includes(p0)),
     S.settings.notes_enabled ? nav("#/notes", "note", "Notizen", undefined, p0 === "notes")
@@ -79,9 +81,6 @@ async function sidebar(route) {
     S.views.map((v) => h("a.view" + (route.parts[1] === v.id ? ".on" : ""), { href: "#/v/" + v.id }, h("span.ellipsis", v.name),
       v.view === "duplicates" ? null : null)),
     h("div.bottom",
-      h("div.row.undo-row", h("button.btn.ghost.sm", { title: `Rückgängig (${pretty(binding("undo"))})`, on: { click: () => dispatchEvent(new CustomEvent("syn-undo", { detail: "undo" })) } }, icon("undo"), h("span.lab", "Rückgängig")),
-        h("button.btn.ghost.sm.icon", { title: `Wiederholen (${pretty(binding("redo"))})`, on: { click: () => dispatchEvent(new CustomEvent("syn-undo", { detail: "redo" })) } }, icon("redo"))),
-      sugg ? nav("#/settings/suggestions", "zap", "Vorschläge", sugg, route.parts[1] === "suggestions") : null,
       nav("#/settings", "settings", "Einstellungen", undefined, p0 === "settings" && route.parts[1] !== "suggestions"),
       h("a.nav", { href: "#/p/" + S.me.self_id }, avatar(all.find((r) => r.is_self) || { is_self: true, display: "Du" }, 22, { self: true }), h("span.lab", "Mein Profil"))));
 }
@@ -125,8 +124,6 @@ async function people(main, view, route, saved = null) {
   const views = VIEWS.filter(([id]) => S.settings.use_levels || id !== "rings");
   const filterBtn = h("button.btn.sm", { on: { click: (e) => filterMenu(e.currentTarget, redraw) } }, icon("filter"), "Filter" + (activeFilters() ? " · " + activeFilters() : ""));
   const sortBtn = h("button.btn.sm", { on: { click: (e) => sortMenu(e.currentTarget, redraw) } }, icon("sort"), "Sortiert: " + sortLabel());
-  const search = h("input.input#people-search", { placeholder: `Suchen  ${pretty(binding("search"))}`, value: VS.q, style: { width: "220px" }, on: { input: debounce((e) => { VS.q = e.target.value; redraw(); }, 150), keydown: (e) => { if (e.key === "Escape") e.target.blur(); } } });
-  if (route?.query?.focus === "search") requestAnimationFrame(() => search.focus());
   for (const [id] of views) onPage("view_" + id, () => (location.hash = "#/people/" + id));
   onPage("save_view", () => saveView(saved));
   page.append(
@@ -136,7 +133,7 @@ async function people(main, view, route, saved = null) {
       h("span.small.t2", "Personen"), h("select.input", { on: { change: (e) => { VS.kind = e.target.value; redraw(); } } },
         [["all", "Alle Menschen & Tiere"], ["person", "Menschen"], ["pet", "Haustiere"]].map(([k, l]) => h("option", { value: k, selected: VS.kind === k }, l))),
       h("div.seg", views.map(([id, label, ic], i) => h("button" + (VS.view === id ? ".on" : ""), { title: `${label} (${pretty(binding("view_" + id))})`, on: { click: () => { location.hash = `#/people/${id}`; } } }, icon(ic), label))),
-      h("span.grow"), filterBtn, sortBtn, search,
+      h("span.grow"), filterBtn, sortBtn,
       h("button.btn.sm", { title: "Ansicht speichern", on: { click: () => saveView(saved) } }, icon("download"), saved ? "Speichern" : "Ansicht speichern")),
     body);
   redraw();
@@ -235,6 +232,7 @@ async function personPage(main, id) {
   const e = await GET("/entities/" + id);
   const page = h("div.page"); main.append(page);
   const reload = () => rebuild(main, (m) => personPage(m, id));
+  rememberPerson(id);
   if (!e.is_self) onPage("seen_today", async () => { await POST(`/seen-today/${id}`); invalidate(); toast(`${e.display}: heute gesehen`); reload(); });
   onPage("edit_person", async () => { if (await editPerson(e)) reload(); });
   onPage("add_field", () => addField(e, { onDone: reload }));
