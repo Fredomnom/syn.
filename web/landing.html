@@ -7,8 +7,8 @@
 <title>syn. – Das Kontaktbuch für alle, die du kennst</title>
 <meta name="description" content="syn ist ein selbst gehostetes Kontaktbuch: Ringe, Kreise, Bünde, Importe aus über 25 Diensten, Visitenkarte und Sync aufs Handy.">
 <link rel="icon" href="/static/icons/icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/static/css/app.css">
 <link rel="stylesheet" href="/static/css/landing.css">
+<!--SYN-CONFIG-->
 <script>
 try { const t = localStorage.getItem("syn.theme"); const d = t ? t === "dark" : matchMedia("(prefers-color-scheme: dark)").matches; document.documentElement.dataset.theme = d ? "dark" : "light"; } catch (_) {}
 </script>
@@ -48,7 +48,7 @@ try { const t = localStorage.getItem("syn.theme"); const d = t ? t === "dark" : 
       </h1>
       <p class="ld-lead reveal">Auch für die, deren Namen du noch nicht weißt. syn merkt sich, wer dir nah ist, woher ihr euch kennt und wann ihr euch zuletzt gesehen habt.</p>
       <div class="ld-cta reveal">
-        <a class="ld-btn ld-btn-primary" href="/#/login">Zur App <span aria-hidden="true">→</span></a>
+        <a class="ld-btn ld-btn-primary" href="/#/login" data-app>Zur App <span aria-hidden="true">→</span></a>
         <a class="ld-btn ld-btn-ghost" href="#github" data-github>Auf GitHub ansehen</a>
       </div>
     </div>
@@ -152,10 +152,10 @@ try { const t = localStorage.getItem("syn.theme"); const d = t ? t === "dark" : 
     <pre class="ld-code reveal"><code><span class="c"># mit Docker</span>
 docker run -d -p 8080:8080 -v syn-data:/data \
   -e SYN_ADMIN_USER=du -e SYN_ADMIN_PASSWORD=geheim123 \
-  ghcr.io/OWNER/syn:latest</code></pre>
+  <span data-image>ghcr.io/OWNER/syn:latest</span></code></pre>
     <div class="ld-cta reveal">
       <a class="ld-btn ld-btn-primary" href="#github" data-github>Repository öffnen <span aria-hidden="true">→</span></a>
-      <a class="ld-btn ld-btn-ghost" href="/#/login">Zur App</a>
+      <a class="ld-btn ld-btn-ghost" href="/#/login" data-app>Zur App</a>
     </div>
   </section>
 </main>
@@ -178,8 +178,15 @@ if (TITLES[LANG]) {
   });
   t.querySelectorAll(".ld-word").forEach((s, i) => (s.style.animationDelay = 0.25 + i * 0.08 + "s"));
 }
-// GitHub-Link: kommt gleich – bis dahin ein Platzhalter
-const GITHUB = "";
+// Links kommen von landingpage.py (SYN_GITHUB_URL, SYN_APP_URL, SYN_IMAGE); ohne Angabe: GitHub ist ein Platzhalter,
+// „Zur App“ zeigt auf dieselbe Adresse (wenn die Seite in syn selbst läuft) oder verschwindet.
+const CFG = window.SYN_LANDING || {};
+const GITHUB = CFG.github || "";
+if (CFG.image) document.querySelectorAll("[data-image]").forEach((el) => (el.textContent = CFG.image));
+for (const a of document.querySelectorAll("[data-app]")) {
+  if (CFG.app) a.href = CFG.app.replace(/\/+$/, "") + "/#/login";
+  else if (CFG.app === "") a.remove();
+}
 for (const a of document.querySelectorAll("[data-github]")) {
   if (GITHUB) { a.href = GITHUB; a.target = "_blank"; a.rel = "noopener"; }
   else a.addEventListener("click", (e) => { e.preventDefault(); a.classList.remove("ld-wiggle"); void a.offsetWidth; a.classList.add("ld-wiggle"); });

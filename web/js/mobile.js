@@ -1,6 +1,6 @@
 // Handy (PWA): schnell erfassen und finden. Untere Leiste: Personen, Kreise, Plus, Suche, Ich.
 import { S, h, icon, GET, POST, PATCH, clear, rebuild, rows, themePref, setTheme, invalidate, avatar, circleChip, nameEl, rel, ringName, today, debounce,
-  postOrQueue, toast, modal, logo, qs, queued, fmtDate } from "./core.js";
+  postOrQueue, getOrBack, toast, modal, logo, qs, queued, fmtDate } from "./core.js";
 import { primaryOf, valueEl, actionFor, editField, entityFieldList, runQuick, plain, bundFields, fieldSections, humanDate } from "./fields.js";
 import { LOCALE } from "./i18n.js";
 import { guideAttach } from "./guide.js";
@@ -134,7 +134,8 @@ function capture(app) {
 
 // ---------------------------------------------------------------- Profil
 async function profile(page, id) {
-  const e = await GET("/entities/" + id);
+  const e = await getOrBack("/entities/" + id, "#/", "Person");
+  if (!e) return;
   const reload = () => rebuild(page, (p) => profile(p, id));
   const phone = primaryOf(e.fields.f_phone), mail = primaryOf(e.fields.f_email);
   const iz = e.ihr_zwei?.fields || {};
@@ -181,7 +182,8 @@ async function circles(page) {
 }
 
 async function circle(page, id) {
-  const c = await GET("/circles/" + id);
+  const c = await getOrBack("/circles/" + id, "#/circles", "Kreis");
+  if (!c) return;
   const all = await rows();
   const members = all.filter((r) => r.circles_all.includes(id));
   page.append(h("div.mtop", h("a.back", { href: "#/circles" }, icon("left"), "Kreise")),
@@ -206,9 +208,13 @@ async function searchPage(page) {
 // ---------------------------------------------------------------- Ich
 async function mePage(page) {
   const me = await GET("/entities/" + S.me.self_id);
-  const sugg = await GET("/suggestions");
+  const [sugg, card] = await Promise.all([GET("/suggestions"), GET("/card").catch(() => null)]);
+  const cardUrl = card?.enabled ? location.origin + card.path : null;
+  const showQr = async () => { const { qrDialog } = await import("./qr.js"); qrDialog("Meine Visitenkarte", cardUrl, { hint: "Gegenüber scannt den Code mit der Kamera und sieht deine Angaben." }); };
   page.append(h("div.mtop", h("h1", "Ich"), logo()),
-    h("div.list", h("a.prow", { href: "#/p/" + me.id }, avatar({ ...me, is_self: true }, 42), h("div.grow", h("div.nm", me.display), h("div.sub", "Mein Profil")), icon("right"))),
+    h("div.list", h("a.prow", { href: "#/p/" + me.id }, avatar({ ...me, is_self: true }, 42), h("div.grow", h("div.nm", me.display), h("div.sub", "Mein Profil")), icon("right")),
+      cardUrl ? h("button.prow.m-qr", { on: { click: showQr } }, h("span.m-qr-ic", icon("qr")), h("div.grow", h("div.nm", "Visitenkarte zeigen"), h("div.sub.mono", location.host + card.path)), icon("right"))
+        : h("a.prow", { href: "#/settings/card" }, h("span.m-qr-ic", icon("idcard")), h("div.grow", h("div.nm", "Visitenkarte"), h("div.sub", "Aus – einschalten, um sie per QR-Code zu teilen")), icon("right"))),
     h("div.list",
       h("a.prow", { href: "#/today" }, icon("bell"), h("span.grow", "Heute")),
       S.settings.notes_enabled ? h("a.prow", { href: "#/notes" }, icon("note"), h("span.grow", "Notizen")) : null,
@@ -265,7 +271,7 @@ async function notesPage(page) {
   const notes = await GET("/notes");
   page.append(h("div.mtop", h("a.back", { href: "#/me" }, icon("left"), "Ich"), h("button.btn.sm.primary", { on: { click: async () => { if (await noteEditor()) rebuild(page, notesPage); } } }, icon("plus"), "Notiz")),
     h("h1", "Notizen"),
-    notes.map((n) => h("div.card.pad.col", { on: { click: async () => { if (await noteEditor(n)) rebuild(page, notesPage); } } },
+    ...notes.map((n) => h("div.card.pad.col", { on: { click: async () => { if (await noteEditor(n)) rebuild(page, notesPage); } } },
       h("div.row.small.t2", h("span.mono", n.day), n.links.filter((l) => l.role === "dabei").map((l) => h("span.chip.sel", l.display))),
       h("div", { style: { whiteSpace: "pre-wrap" } }, n.text.replace(/@\[([^\]]+)\]\([^)]+\)/g, "$1")))));
 }

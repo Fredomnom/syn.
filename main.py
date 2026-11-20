@@ -76,10 +76,6 @@ def create_app() -> FastAPI:
     def manifest():
         return FileResponse(web / "manifest.webmanifest", media_type="application/manifest+json")
 
-    @app.get("/about", include_in_schema=False)
-    def landing():
-        return FileResponse(web / "landing.html", headers={"Cache-Control": "no-cache"})
-
     @app.get("/", include_in_schema=False)
     def index():
         return FileResponse(web / "index.html", headers={"Cache-Control": "no-cache"})

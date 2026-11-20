@@ -28,6 +28,14 @@ export async function api(method, path, body, { raw = false, quiet = false } = {
   return ct.includes("json") ? res.json() : res.text();
 }
 export const GET = (p) => api("GET", p);
+// Eintrag laden; gibt es ihn nicht (mehr), zurück zur Übersicht statt einer leeren Seite
+export async function getOrBack(path, back, what = "Eintrag") {
+  try { return await api("GET", path, undefined, { quiet: true }); }
+  catch (e) {
+    if (e.status === 404 || e.status === 400) { toast(`${what} nicht gefunden`); location.replace(back); return null; }
+    toast(e.message, { err: true }); throw e;
+  }
+}
 export const POST = (p, b) => api("POST", p, b ?? {});
 export const PUT = (p, b) => api("PUT", p, b ?? {});
 export const PATCH = (p, b) => api("PATCH", p, b ?? {});
@@ -160,6 +168,7 @@ const P = {
   paw: '<circle cx="7" cy="9" r="1.8"/><circle cx="12" cy="6.5" r="1.8"/><circle cx="17" cy="9" r="1.8"/><path d="M8 17c0-2.5 1.8-5 4-5s4 2.5 4 5c0 2-1.8 2.5-4 2.5S8 19 8 17z"/>',
   link: '<path d="M10 14a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 10a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/>',
   ext: '<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
+  qr: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><path d="M14 14h3v3M21 14v.01M14 21h3M21 17v4h-1M17 17h.01"/>',
   idcard: '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2.2"/><path d="M5.5 16c.6-1.6 1.9-2.4 3.5-2.4s2.9.8 3.5 2.4M15 10h3M15 13.5h3"/>',
   copy: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/>',
   pin: '<path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/>',
@@ -388,7 +397,10 @@ let openPop = null;
 export function closePop() { if (openPop) { openPop.remove(); openPop = null; } }
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && openPop && !document.querySelector(".date-pop, .hue-pop")) { e.stopPropagation(); closePop(); } }, true);
 addEventListener("hashchange", () => { closePop(); document.querySelectorAll(".date-pop, .hue-pop").forEach((x) => x.remove()); });
+// Klick auf denselben Knopf bei offenem Popover: nur schließen, nicht gleich wieder öffnen
+let lastClosed = { anchor: null, at: 0 };
 export function popover(anchor, content, { align = "left", x, y } = {}) {
+  if (anchor && lastClosed.anchor === anchor && Date.now() - lastClosed.at < 400) { lastClosed.anchor = null; return h("div.pop", content); }
   closePop();
   const p = h("div.pop", content);
   document.body.append(p);
@@ -400,7 +412,10 @@ export function popover(anchor, content, { align = "left", x, y } = {}) {
   p.style.left = Math.max(8, left) + "px"; p.style.top = top + "px";
   openPop = p;
   setTimeout(() => {
-    const off = (e) => { if (!p.contains(e.target) && !e.target.closest?.(".pop")) { document.removeEventListener("mousedown", off, true); if (openPop === p) closePop(); } };
+    const off = (e) => { if (!p.contains(e.target) && !e.target.closest?.(".pop")) {
+      document.removeEventListener("mousedown", off, true);
+      if (anchor && anchor.contains?.(e.target)) lastClosed = { anchor, at: Date.now() };
+      if (openPop === p) closePop(); } };
     document.addEventListener("mousedown", off, true);
   });
   return p;

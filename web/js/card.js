@@ -1,6 +1,8 @@
 import { LOCALE, initI18n, t } from "./i18n.js";
 import "./controls.js";
 import { dateInput } from "./date.js";
+// Projektseite von syn („Visitenkarte von syn.“)
+const SYN_SITE = "https://syn.fredomnom.com";
 // Öffentliche Visitenkarte: /@name – ohne Anmeldung, ohne Rest der App.
 const $ = (tag, attrs = {}, ...kids) => {
   const el = document.createElement(tag);
@@ -93,7 +95,7 @@ function input(f, services) {
 async function main() {
   let c;
   try { const r = await fetch(`/api/v1/public/cards/${encodeURIComponent(slug)}`); if (!r.ok) throw 0; c = await r.json(); }
-  catch (_) { root.replaceChildren($("div", { class: "vk-card vk-404" }, $("span", { class: "logo" }, "syn", $("b", {}, ".")), $("h1", {}, "Diese Visitenkarte gibt es nicht"), $("p", {}, "Vielleicht hat sich der Link geändert."))); return; }
+  catch (_) { root.replaceChildren($("div", { class: "vk-card vk-404" }, $("a", { class: "logo", href: SYN_SITE, target: "_blank", rel: "noopener" }, "syn", $("b", {}, ".")), $("h1", {}, "Diese Visitenkarte gibt es nicht"), $("p", {}, "Vielleicht hat sich der Link geändert."))); return; }
   document.title = `${c.name} · syn.`;
   const first = c.first_name || c.name.split(" ")[0];
   const initials = c.name.split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase();
@@ -131,6 +133,6 @@ async function main() {
     $("label", { class: "f" }, "Nachricht", msg), trap, err, send);
 
   root.replaceChildren($("div", { class: "vk-card vk-me" }, head, c.fields.length ? rows : null, save), $("div", { class: "vk-card vk-reply" }, form),
-    $("a", { class: "vk-foot", href: "/" }, "Visitenkarte von ", $("span", { class: "logo" }, "syn", $("b", {}, "."))));
+    $("a", { class: "vk-foot", href: SYN_SITE, target: "_blank", rel: "noopener" }, "Visitenkarte von ", $("span", { class: "logo" }, "syn", $("b", {}, "."))));
 }
 initI18n().finally(main);

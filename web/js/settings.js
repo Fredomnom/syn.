@@ -7,6 +7,7 @@ import { hueInput, hueOf } from "./color.js";
 import { runImport, stepsEl } from "./importstatus.js";
 import { LANGS, langPref, setLang } from "./i18n.js";
 import { ACTIONS, binding, pretty, saveBinding, recordCombo, keys } from "./shortcuts.js";
+import { loadQr, qrBox, qrDialog } from "./qr.js";
 
 // Navigation: gruppiert, mit Symbol und kurzer Erklärung je Seite
 const NAV = [
@@ -26,7 +27,7 @@ export async function settingsPage(main, tab, route) {
   const page = h("div.page.settings"); main.append(page);
   const visible = (k) => k !== "admin" || S.me.is_admin;
   if (mobile && !tab) {
-    page.append(h("h1", "Einstellungen"), NAV.map(([g, items]) => h("div.set-group", h("div.set-gtitle", g),
+    page.append(h("h1", "Einstellungen"), ...NAV.map(([g, items]) => h("div.set-group", h("div.set-gtitle", g),
       h("div.list", items.filter(([k]) => visible(k)).map(([k, l, ic, d]) => h("a.prow.set-link", { href: "#/settings/" + k }, h("span.set-ic", icon(ic)), h("div.grow", h("div.nm", l), h("div.sub", d)), icon("right")))))));
     return;
   }
@@ -212,7 +213,7 @@ async function routines(body, route) {
           a.type === "webhook" ? [h("select.input", { style: { height: "30px", width: "90px" }, on: { change: (e) => (a.method = e.target.value) } }, ["POST", "PUT", "GET"].map((m) => h("option", { selected: (a.method || "POST") === m }, m))),
             h("input.input.mono.grow", { value: a.url || "", placeholder: "https://n8n.home.lan/webhook/…", on: { input: (e) => (a.url = e.target.value) } })] : null,
           ["card", "list"].includes(a.type) ? h("input.input.grow", { value: a.title || "", placeholder: a.type === "card" ? "{name} hat Geburtstag" : "Lange nicht gesehen", on: { input: (e) => (a.title = e.target.value) } }) : null,
-          a.type === "card" ? h("input.input", { value: a.text || "", placeholder: "{alter}", on: { input: (e) => (a.text = e.target.value) } }) : null,
+          a.type === "card" ? h("input.input.grow", { value: a.text || "", placeholder: "{alter}", on: { input: (e) => (a.text = e.target.value) } }) : null,
           ["set_today", "increment", "set_value"].includes(a.type) ? fieldSel(a.field, (f) => (a.type === "set_today" ? f.type === "date" : a.type === "increment" ? f.type === "number" : f.scope !== "kreis"), (v) => (a.field = v)) : null,
           a.type === "set_value" ? h("input.input", { value: a.value ?? "", placeholder: "Wert", on: { input: (e) => (a.value = e.target.value) } }) : null,
           a.type === "import" ? h("input.input.mono", { value: a.importer || "", placeholder: "Importer-ID", on: { input: (e) => (a.importer = e.target.value) } }) : null,
@@ -221,7 +222,7 @@ async function routines(body, route) {
           ["card", "list"].includes(a.type) ? h("div.tiny.t3", "Platzhalter: {name} {alter} {datum} {tage} {ring}") : null)),
         h("button.btn.sm", { style: { alignSelf: "flex-start" }, on: { click: () => { r.actions.push({ type: "webhook", url: "" }); draw(); } } }, icon("plus"), "Aktion"),
         preview,
-        h("div.row", h("button.btn.primary", { on: { click: save } }, "Speichern"),
+        h("div.row.wrap", h("button.btn.primary", { on: { click: save } }, "Speichern"),
           r.id ? h("button.btn", { on: { click: async () => { const res = await POST(`/routines/${r.id}/run`); toast(`Ausgeführt: ${res.count} Person(en). ${res.result.join("; ")}`); } } }, icon("zap"), "Jetzt ausführen") : null,
           h("span.grow"), r.id ? h("button.btn.danger", { on: { click: async () => { if (await confirmDlg("Routine löschen?", r.name, "Löschen", true)) { await DEL("/routines/" + r.id); reloadTab(body, routines, {}); } } } }, icon("trash"), "Löschen") : null),
         cur.last_run_at ? h("div.small.t3", `Zuletzt: ${fmtTs(cur.last_run_at)} – ${cur.last_status || ""}`) : null,
@@ -374,11 +375,36 @@ async function sync(body, route) {
       srow("Öffentlicher Hostname", "Damit Kontakte am Handy einen Link zur Personenseite tragen.", h("div.row", host, h("button.btn", { on: { click: save } }, "Speichern"))),
       srow("Ländervorwahl", "Für Nummern ohne Vorwahl, z.B. 0151 … → +49 151 …", h("div.row", cc, h("button.btn", { on: { click: save } }, "Speichern")))),
     panel("Handy direkt mit syn (CardDAV)",
+      srow("Per QR-Code einrichten", "Scannen statt abtippen: syn legt dafür ein eigenes Token fürs Handy an. iPhone bekommt ein Profil, Android öffnet DAVx⁵.",
+        h("button.btn.primary", { on: { click: () => davQr() } }, icon("qr"), "QR-Code zeigen")),
       srow("Server-Adresse", "Am iPhone: Einstellungen → Kontakte → Accounts → Andere → CardDAV. Android: DAVx⁵.", copy(location.origin + "/dav/")),
       srow("Benutzername", null, copy(S.me.username)),
       srow("Passwort", "Dein syn-Passwort – besser ein eigenes Token.", h("a.btn", { href: "#/settings/tokens" }, icon("key"), "Token erstellen")),
       srow("Löschen am Handy", "Entfernt den Kontakt nur vom Handy, nicht aus syn.", null)),
     await googleCard());
+}
+// CardDAV per QR: ein Token fürs Handy, für iPhone als Profil-Link, für Android als DAVx⁵-Link
+async function davQr() {
+  const r = await POST("/carddav/setup");
+  const host = location.host, secure = location.protocol === "https:";
+  const android = `${secure ? "carddavs" : "carddav"}://${encodeURIComponent(r.username)}:${encodeURIComponent(r.token)}@${host}/dav/`;
+  const ios = location.origin + r.profile_path;
+  let os = /android/i.test(navigator.userAgent) ? "android" : "ios";
+  const box = h("div.qr-dlg");
+  const seg = h("div.seg");
+  const draw = async () => {
+    clear(seg, [["ios", "iPhone"], ["android", "Android (DAVx⁵)"]].map(([k, l]) => h("button" + (os === k ? ".on" : ""), { type: "button", on: { click: () => { os = k; draw(); } } }, l)));
+    const steps = os === "ios"
+      ? ["Mit der Kamera-App scannen und den Link öffnen.", "Profil laden erlauben, dann Einstellungen → Profil geladen → Installieren.", "Fertig – die Kontakte erscheinen in der Kontakte-App."]
+      : ["DAVx⁵ installieren (F-Droid oder Play Store).", "Code mit der Kamera scannen – DAVx⁵ öffnet sich mit allen Angaben.", "Konto anlegen und das Adressbuch „kontakte“ einschalten."];
+    clear(box, await qrBox(os === "ios" ? ios : android, ".qr-big"),
+      h("ol.imp-steps", steps.map((t, i) => h("li", h("span.imp-step-n", i + 1), h("span", t)))),
+      os === "ios" ? h("p.small.t3", "Der Link gilt 15 Minuten. Das Profil ist nicht signiert – iOS weist darauf hin, das ist normal.")
+        : h("p.small.t3", "Der Code enthält das Token als Passwort. Zeig ihn nur deinem eigenen Handy."));
+  };
+  await draw();
+  await modal("Handy per QR-Code verbinden", h("div.col", { style: { gap: "14px", alignItems: "center" } }, seg, box), [], {});
+  toast("Das Token findest du unter API-Tokens – dort kannst du es jederzeit widerrufen.");
 }
 async function googleCard() {
   const g = await GET("/google");
@@ -506,7 +532,8 @@ async function cardTab(body) {
   const slug = h("input.input.mono.card-slug", { value: c.slug, spellcheck: false, on: { change: async (e) => { if (!(await save({ slug: e.target.value }))) e.target.value = c.slug; } } });
   const copy = h("button.btn.sm.primary", { on: { click: async () => { try { await navigator.clipboard.writeText(url()); toast("Link kopiert"); } catch (_) { toast(url()); } } } }, icon("copy"), "Link kopieren");
   const share = navigator.share ? h("button.btn.sm", { on: { click: () => navigator.share({ title: "Meine Visitenkarte", url: url() }).catch(() => {}) } }, icon("ext"), "Teilen") : null;
-  const box = h("div.card-link", h("div.card-link-url", icon("link"), linkTxt), h("div.row.wrap", copy, share, openA));
+  const qrBtn = h("button.btn.sm", { on: { click: () => qrDialog("Deine Visitenkarte", url(), { hint: "Gegenüber scannt den Code mit der Kamera und sieht deine Angaben." }) } }, icon("qr"), "QR-Code");
+  const box = h("div.card-link", h("div.card-link-url", icon("link"), linkTxt), h("div.row.wrap", copy, qrBtn, share, openA));
   const persons = S.fieldList.filter((f) => ["person", "both"].includes(f.scope) && !["note", "image", "ref", "person", "checkbox"].includes(f.type) && !["f_level", "f_seen", "f_via", "f_met"].includes(f.id));
   const mine = (await rows()).find((r) => r.is_self);
   const list = (key, hint) => h("div.card-fields", persons.map((f) => {
@@ -522,7 +549,7 @@ async function cardTab(body) {
       h("p.small.t3", "Kurz und frei wählbar: Kleinbuchstaben, Ziffern, Punkt, Strich und Unterstrich."), box)),
     panel("Was du teilst", h("div.srow-full", list("fields", "Die Werte kommen aus deinem eigenen Profil („Mein Profil“). Leere Felder bleiben unsichtbar."))),
     panel("Was andere dir schicken können", h("div.srow-full", list("ask", "Der Name ist immer dabei, dazu ein Feld für eine Nachricht. Antworten landen als neue Person mit der Quelle „Visitenkarte“ – und unter „Heute“."))),
-    panel("Begrüßung", h("div.srow-full", intro)));
+    h("section.set-panel", h("h3.set-ptitle", "Begrüßung"), intro));
   refresh();
 }
 
@@ -558,11 +585,6 @@ async function deleteKind(k, kinds) {
 }
 
 // ---------------------------------------------------------------- Zwei-Faktor
-async function loadQr() {
-  if (window.qrcode) return window.qrcode;
-  await new Promise((ok, bad) => document.head.append(h("script", { src: "/static/vendor/qrcode.js", on: { load: ok, error: bad } })));
-  return window.qrcode;
-}
 function codesBox(codes) {
   const txt = codes.join("\n");
   return h("div.tf-codes", h("p.small.t2", "Wiederherstellungscodes – jeder gilt einmal, falls du dein Handy nicht hast. Bewahre sie sicher auf, syn zeigt sie nur jetzt."),

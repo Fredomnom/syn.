@@ -92,6 +92,20 @@ def _book(ctx):
     return rows, cards
 
 
+def _browser_list(ctx) -> Response:
+    """Im Browser geöffnet: zeigen, was das Handy bekommt (Handys selbst fragen per PROPFIND/REPORT)."""
+    rows = sync_rules.synced_rows(ctx)
+    u = xesc(ctx.user["username"])
+    items = "".join(f'<li><a href="/dav/{u}/{BOOK}/{xesc(r["id"])}.vcf">{xesc(r["name"] or r["description"] or "Ohne Namen")}</a></li>'
+                    for r in sorted(rows, key=lambda r: (r["name"] or r["description"] or "").lower()))
+    body = (f'<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width">'
+            f'<title>syn CardDAV</title><body style="font:15px/1.5 system-ui;max-width:720px;margin:32px auto;padding:0 16px">'
+            f'<h1>syn CardDAV</h1><p>Das ist die Adresse für dein Handy, kein Ort zum Lesen. Ins Handy gehört '
+            f'<code>/dav/</code> als Server, Benutzer <code>{u}</code>, als Passwort am besten ein Token.</p>'
+            f'<p><b>{len(rows)} Kontakte</b> gehen aufs Handy (Adressbuch <code>/dav/{u}/{BOOK}/</code>):</p><ol>{items}</ol>')
+    return Response(body, media_type="text/html; charset=utf-8")
+
+
 def ctag(cards: dict) -> str:
     h = hashlib.sha1()
     for k in sorted(cards):
@@ -115,6 +129,8 @@ async def root(request: Request):
         return _unauth()
     if request.method == "OPTIONS":
         return _options()
+    if request.method in ("GET", "HEAD"):
+        return _browser_list(auth.ctx_for(user))
     home = f"/dav/{user['username']}/"
     return _ms([_resp("/dav/", {"d:current-user-principal": f"<d:href>{home}</d:href>",
                                 "c:addressbook-home-set": f"<d:href>{home}</d:href>",
@@ -134,6 +150,8 @@ async def home(username: str, request: Request):
     if request.method == "OPTIONS":
         return _options()
     ctx = auth.ctx_for(user)
+    if request.method in ("GET", "HEAD"):
+        return _browser_list(ctx)
     h = f"/dav/{username}/"
     out = [_resp(h, {"d:resourcetype": "<d:collection/><d:principal/>", "d:displayname": xesc(user["display_name"]),
                      "d:current-user-principal": f"<d:href>{h}</d:href>",
@@ -197,6 +215,8 @@ async def book(username: str, request: Request):
             out.append(_resp(f"{base}{eid}.vcf", {"d:getetag": xesc(etag(card)),
                                                   "c:address-data": xesc(card)}))
         return _ms(out)
+    if request.method in ("GET", "HEAD"):
+        return _browser_list(ctx)
     return Response(status_code=405)
 
 
@@ -287,3 +307,64 @@ def apply_phone_card(ctx, eid, c, source):
         fid = store_bytes(uid, c["photo"], "image/jpeg")
         model.patch_entity(uid, eid, {"avatar": f"/api/v1/files/{fid}"}, source)
     db.ex("UPDATE entities SET updated_at=? WHERE id=?", now(), eid)
+
+
+# ---------------------------------------------------------------- Einrichtung per QR-Code
+# Die Web-App legt ein eigenes Token fürs Handy an. Android (DAVx⁵) bekommt es direkt im Link,
+# das iPhone über ein Konfigurationsprofil, das 15 Minuten lang unter einem Einmal-Link abrufbar ist.
+import plistlib  # noqa: E402
+import secrets  # noqa: E402
+import time  # noqa: E402
+import uuid  # noqa: E402
+
+from fastapi import Depends, HTTPException  # noqa: E402
+
+from ..auth import Ctx, current  # noqa: E402
+
+_SETUP: dict[str, tuple[float, str, str]] = {}  # Code → (gültig bis, Benutzername, Token)
+SETUP_TTL = 15 * 60
+
+
+@router.post("/api/v1/carddav/setup", include_in_schema=False)
+def carddav_setup(ctx: Ctx = Depends(current)):
+    if ctx.via == "token" or ctx.read_only:
+        raise HTTPException(403, "Nur über die Web-App")
+    tok, row = auth.create_api_token(ctx.uid, "Handy (CardDAV per QR)", False)
+    t = time.time()
+    for k, (exp, *_rest) in list(_SETUP.items()):
+        if exp < t:
+            _SETUP.pop(k, None)
+    code = secrets.token_urlsafe(18)
+    _SETUP[code] = (t + SETUP_TTL, ctx.user["username"], tok)
+    return {"username": ctx.user["username"], "token": tok, "token_id": row["id"],
+            "profile_path": f"/carddav-setup/{code}.mobileconfig", "expires_in": SETUP_TTL}
+
+
+@router.get("/carddav-setup/{code}.mobileconfig", include_in_schema=False)
+def carddav_profile(code: str, request: Request):
+    hit = _SETUP.get(code)
+    if not hit or hit[0] < time.time():
+        _SETUP.pop(code, None)
+        return Response("Der Link ist abgelaufen. Erzeuge in syn unter Einstellungen → Handy & Sync einen neuen QR-Code.",
+                        status_code=410, media_type="text/plain; charset=utf-8")
+    _, username, tok = hit
+    url = request.url
+    https = url.scheme == "https"
+    port = url.port or (443 if https else 80)
+    ident = "syn.carddav." + (url.hostname or "local")
+    account = {
+        "PayloadType": "com.apple.carddav.account", "PayloadVersion": 1,
+        "PayloadIdentifier": ident + ".account", "PayloadUUID": str(uuid.uuid4()),
+        "PayloadDisplayName": "syn Kontakte", "CardDAVAccountDescription": f"syn ({url.hostname})",
+        "CardDAVHostName": url.hostname, "CardDAVPort": port, "CardDAVUseSSL": https,
+        "CardDAVPrincipalURL": "/dav/", "CardDAVUsername": username, "CardDAVPassword": tok,
+    }
+    profile = {
+        "PayloadType": "Configuration", "PayloadVersion": 1, "PayloadIdentifier": ident,
+        "PayloadUUID": str(uuid.uuid4()), "PayloadDisplayName": "syn – Kontakte",
+        "PayloadDescription": "Synchronisiert deine Kontakte aus syn mit diesem iPhone.",
+        "PayloadOrganization": "syn", "PayloadContent": [account],
+    }
+    return Response(plistlib.dumps(profile), media_type="application/x-apple-aspen-config",
+                    headers={"Content-Disposition": 'attachment; filename="syn-kontakte.mobileconfig"',
+                             "Cache-Control": "no-store"})

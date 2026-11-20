@@ -1,6 +1,6 @@
 // Desktop: sortieren und bearbeiten in großen Mengen. Seitenleiste, sechs Ansichten, Personenseite, Kreise.
 import { S, h, icon, GET, POST, PUT, PATCH, DEL, clear, rebuild, rows, captureSegs, animateSegs, invalidate, avatar, circleChip, nameEl, rel, ringName, today, debounce,
-  toast, modal, logo, qs, menu, pickPerson, pickCircle, reloadCircles, confirmDlg, ringMini, MOD, fmtTs, circleColors, kindColors, promptDlg, RING, cssVar as V } from "./core.js";
+  toast, getOrBack, modal, logo, qs, menu, pickPerson, pickCircle, reloadCircles, confirmDlg, ringMini, MOD, fmtTs, circleColors, kindColors, promptDlg, RING, cssVar as V } from "./core.js";
 import { primaryOf, valueEl, actionFor, editField, entityFieldList, runQuick, bundFields, TYPE_NAMES, SOURCE, plain, fieldsFor, service, serviceIcon, fieldRow, fieldSections, sourceName } from "./fields.js";
 import { LOCALE } from "./i18n.js";
 import { onPage, onGlobal, resetPage, binding, pretty, helpOverlay, keys } from "./shortcuts.js";
@@ -296,7 +296,8 @@ export async function newPersonDialog(prefill = {}) {
 
 // ---------------------------------------------------------------- Personenseite
 async function personPage(main, id) {
-  const e = await GET("/entities/" + id);
+  const e = await getOrBack("/entities/" + id, "#/people", "Person");
+  if (!e) return;
   const page = h("div.page"); main.append(page);
   const reload = () => rebuild(main, (m) => personPage(m, id));
   rememberPerson(id);
@@ -390,10 +391,56 @@ async function personPage(main, id) {
     h("button.btn.sm.ghost.icon", { on: { click: async () => { await POST(`/suggestions/${s.id}/reject`); reload(); } } }, icon("x")))))) : null;
   page.append(h("a.crumb", { href: "#/people" }, icon("left"), "Personen"), head, dupHint(e, { desktop: true, onChange: reload }),
     h("div.pgrid3",
-      h("div.pcol.wide", ihr, bunds),
+      h("div.pcol.wide", ihr, bunds, e.is_self ? await selfOverview(allRows) : null),
       h("div.pcol.narrow", fields, circles, notes),
       h("div.pcol.narrow", suggBox, verlauf, knowsCard, routines)));
   guideAttach(e);
+}
+
+// Mein Profil: statt „Ihr zwei“ ein Überblick über dein Umfeld und deine Visitenkarte
+async function selfOverview(allRows) {
+  const people = allRows.filter((r) => !r.is_self);
+  const card = await GET("/card").catch(() => null);
+  const seen = people.filter((r) => r.v.f_seen?.raw).sort((a, b) => b.v.f_seen.raw.localeCompare(a.v.f_seen.raw));
+  const stat = (n, label, href) => h(href ? "a.so-stat" : "div.so-stat", href ? { href } : {}, h("b", String(n)), h("span", label));
+  const levels = [1, 2, 3, 4].map((l) => people.filter((r) => r.level === l).length);
+  const ringed = levels.reduce((a, b) => a + b, 0);
+  const umfeld = h("div.card",
+    h("div.card-h", h("h3", "Dein Umfeld")),
+    h("div.card-b.col", { style: { gap: "18px" } },
+      h("div.so-stats",
+        stat(people.length, "Personen", "#/people"),
+        stat(Object.keys(S.circles).length, "Kreise", "#/circles"),
+        stat(people.filter((r) => !r.circles.length).length, "unter „Lose“"),
+        stat(people.filter((r) => r.long_unseen).length, "lange nicht gesehen")),
+      S.settings.use_levels && ringed ? h("div.col", { style: { gap: "8px" } },
+        h("div.small.t2", "Ringe"),
+        h("div.so-bar", levels.map((n, i) => n ? h("span", { style: { flex: n, "--k": i }, title: `${ringName(i + 1)}: ${n}` }) : null)),
+        h("div.so-legend", levels.map((n, i) => h("span", h("i", { style: { "--k": i } }), `${ringName(i + 1)} `, h("b", n))))) : null,
+      seen.length ? h("div.col", { style: { gap: "8px" } }, h("div.small.t2", "Zuletzt gesehen"),
+        h("div.so-seen", seen.slice(0, 8).map((r) => h("a.so-person", { href: "#/p/" + r.id }, avatar(r, 40), h("span", r.display), h("small", rel(r.v.f_seen.raw)))))) : null));
+  let vk = null;
+  if (card) {
+    const url = location.origin + card.path;
+    const { qrBox, qrDialog } = await import("./qr.js");
+    vk = card.enabled
+      ? h("div.card", h("div.card-h", h("h3", "Visitenkarte"), h("a.btn.sm.ghost", { href: "#/settings/card" }, icon("edit"), "Bearbeiten")),
+        h("div.card-b.so-card",
+          h("button.so-qr", { title: "Groß zeigen", on: { click: () => qrDialog("Deine Visitenkarte", url, { hint: "Gegenüber scannt den Code mit der Kamera und sieht deine Angaben." }) } }, await qrBox(url)),
+          h("div.col", { style: { gap: "10px", minWidth: 0 } },
+            h("div.small.t2", "Dein Link – wer ihn öffnet oder den Code scannt, sieht deine Angaben und kann dir seine eigenen schicken."),
+            h("div.mono.so-link", location.host + card.path),
+            h("div.row.wrap",
+              h("button.btn.sm.primary", { on: { click: async () => { try { await navigator.clipboard.writeText(url); toast("Link kopiert"); } catch (_) { toast(url); } } } }, icon("copy"), "Link kopieren"),
+              h("button.btn.sm", { on: { click: () => qrDialog("Deine Visitenkarte", url, { hint: "Gegenüber scannt den Code mit der Kamera und sieht deine Angaben." }) } }, icon("qr"), "QR-Code groß"),
+              h("a.btn.sm", { href: card.path, target: "_blank", rel: "noopener" }, icon("ext"), "Öffnen")))))
+      : h("div.card", h("div.card-h", h("h3", "Visitenkarte")),
+        h("div.card-b.so-card.off", h("span.so-ic", icon("idcard")),
+          h("div.col", { style: { gap: "10px" } },
+            h("div.small.t2", "Teile deine Angaben als kurzen Link oder QR-Code – wer ihn öffnet, kann dir seine eigenen zurückschicken."),
+            h("a.btn.sm.primary", { href: "#/settings/card", style: { alignSelf: "flex-start" } }, icon("idcard"), "Visitenkarte einrichten"))));
+  }
+  return [umfeld, vk];
 }
 
 // ---------------------------------------------------------------- Kreise
@@ -440,7 +487,8 @@ export async function newCircle(prefill = {}) {
 }
 
 async function circlePage(main, id) {
-  const c = await GET("/circles/" + id);
+  const c = await getOrBack("/circles/" + id, "#/circles", "Kreis");
+  if (!c) return;
   const page = h("div.page"); main.append(page);
   const reload = () => rebuild(main, (m) => circlePage(m, id));
   const all = await rows();

@@ -21,7 +21,15 @@ docker run -d -p 8080:8080 -v syn-data:/data -e SYN_ADMIN_USER=du -e SYN_ADMIN_P
 
 Das Image läuft als eigener Nutzer (nicht root), hat einen Healthcheck auf `/api/v1/health` und speichert alles unter `/data`.
 Optionale Importer (Telegram, Instagram, PlayStation) baust du mit `--build-arg EXTRAS="telethon instagrapi psnawp"` mit.
-Die Landing Page liegt unter `/about`, Visitenkarten unter `/@name`.
+Visitenkarten liegen unter `/@name`.
+**Landing Page** (eigener kleiner Server, nur Python-Standardbibliothek, liefert nur die Seite aus):
+
+```sh
+SYN_GITHUB_URL=https://github.com/… SYN_APP_URL=https://syn.example.org python landingpage.py   # http://localhost:8090
+```
+
+`LANDING_HOST`/`LANDING_PORT` (Standard `0.0.0.0:8090`), `SYN_APP_URL` (leer = „Zur App“ ausblenden), `SYN_GITHUB_URL`, `SYN_IMAGE`.
+
 **systemd:** `syn.service` anpassen (Pfade) und nach `/etc/systemd/system/` kopieren.
 
 | Variable | Bedeutung |

@@ -140,15 +140,19 @@ def card_to_contact(card) -> dict:
 
 
 def fold_line(line: str) -> str:
-    out, b = [], line.encode()
-    while len(b) > 75:
-        cut = 75
-        while cut > 0 and (b[cut] & 0xC0) == 0x80:
+    """Zeilen nach RFC 6350 auf 75 Bytes falten (ohne UTF-8-Zeichen zu zerschneiden). Linear, auch für große Fotos."""
+    b = line.encode()
+    if len(b) <= 75:
+        return line
+    out, pos, limit = [], 0, 75
+    while len(b) - pos > limit:
+        cut = pos + limit
+        while cut > pos and (b[cut] & 0xC0) == 0x80:
             cut -= 1
-        out.append(b[:cut].decode())
-        b = b" " + b[cut:]
-    out.append(b.decode())
-    return "\r\n".join(out)
+        out.append(b[pos:cut].decode())
+        pos, limit = cut, 74  # Folgezeilen beginnen mit einem Leerzeichen
+    out.append(b[pos:].decode())
+    return "\r\n ".join(out)
 
 
 def build(uid: str, name: str, phones, emails, birthday=None, photo: bytes | None = None, photo_mime="image/jpeg",
