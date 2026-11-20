@@ -124,7 +124,7 @@ async function renderSetup(app) {
     if (!same) pg.classList.add(dir > 0 ? "from-right" : "from-left");
     clear(stage, pg);
     pg.querySelectorAll(".intro-choice").forEach((c, k) => c.prepend(h("span.intro-num", String(k + 1))));
-    clear(keysHint, pg.querySelector(".intro-choice") ? [h("span.kbd", "1–" + pg.querySelectorAll(".intro-choice").length), " wählen  ", h("span.kbd", "Enter"), " weiter"] : [h("span.kbd", "Enter"), " weiter"]);
+    clear(keysHint, pg.querySelector(".intro-choice") ? [h("span.kbd", "↑↓"), " oder ", h("span.kbd", "1–" + pg.querySelectorAll(".intro-choice").length), " wählen  ", h("span.kbd", "Enter"), " weiter"] : [h("span.kbd", "Enter"), " weiter"]);
     clear(dots, steps.map((_, k) => h("span" + (k === i ? ".on" : k < i ? ".done" : ""))));
     back.style.visibility = i === 0 || i === steps.length - 1 ? "hidden" : "visible";
     clear(next, i === 0 ? "Los geht's" : i === steps.length - 1 ? "syn öffnen" : "Weiter", icon("right"));
@@ -143,6 +143,13 @@ async function renderSetup(app) {
     if (e.key === "Enter" || e.key === " ") { e.preventDefault(); next.click(); }
     else if (e.key === "ArrowRight") go(i + 1);
     else if (e.key === "ArrowLeft" || e.key === "Backspace") go(i - 1);
+    else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      const cs = [...stage.querySelectorAll(".intro-choice")]; if (!cs.length) return;
+      e.preventDefault();
+      const cur = cs.findIndex((c) => c.classList.contains("on"));
+      const n = Math.max(0, Math.min(cs.length - 1, (cur < 0 ? -1 : cur) + (e.key === "ArrowDown" ? 1 : -1)));
+      cs[n].click();
+    }
     else if (/^[1-9]$/.test(e.key)) { const c = stage.querySelectorAll(".intro-choice")[+e.key - 1]; if (c) { e.preventDefault(); c.click(); } }
   };
   addEventListener("keydown", key);
