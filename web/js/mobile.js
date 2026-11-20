@@ -2,6 +2,7 @@
 import { S, h, icon, GET, POST, PATCH, clear, rebuild, rows, themePref, setTheme, invalidate, avatar, circleChip, nameEl, rel, ringName, today, debounce,
   postOrQueue, toast, modal, logo, qs, queued, fmtDate } from "./core.js";
 import { primaryOf, valueEl, actionFor, editField, entityFieldList, runQuick, plain, bundFields, fieldSections, humanDate } from "./fields.js";
+import { guideAttach } from "./guide.js";
 import { editPerson, addField, dupHint, ringPopup, setRing, editIhrZwei, bundKindName, historyText } from "./shared.js";
 
 let filt = "all", search = "";
@@ -149,22 +150,23 @@ async function profile(page, id) {
         e.kind === "pet" ? h("span.chip.plain", icon("paw"), "Haustier") : null)),
     dupHint(e, { onChange: reload }),
     e.is_self ? null : h("div.qa",
-      h("button.btn.primary", { on: { click: async () => { await postOrQueue(`/seen-today/${e.id}`, {}, e.display); invalidate(); reload(); } } }, icon("eye"), "Heute gesehen"),
+      h("button.btn.primary.guide-seen", { on: { click: async () => { await postOrQueue(`/seen-today/${e.id}`, {}, e.display); invalidate(); reload(); } } }, icon("eye"), "Heute gesehen"),
       tel ? h("a.btn", { href: "tel:" + tel.replace(/[^\d+]/g, "") }, icon("phone"), "Anrufen") : h("button.btn", { on: { click: async () => { if (await editField(S.fields.f_phone, [], `/entities/${e.id}/fields/f_phone`)) reload(); } } }, icon("plus"), "Nummer"),
       tel ? h("a.btn", { href: "sms:" + tel.replace(/[^\d+]/g, "") }, icon("message"), "Schreiben") : mail ? h("a.btn", { href: "mailto:" + mail.value }, icon("mail"), "Schreiben") : h("button.btn", { disabled: true }, icon("message"), "Schreiben")),
     e.is_self ? null : h("div.list",
       h("div.kv", { style: { background: "var(--bg)" } }, h("span.small.t2", "Ihr zwei"), h("a.small", { href: "#", on: { click: async (ev) => { ev.preventDefault(); if (await editIhrZwei(e)) reload(); } } }, bundKindName(e.ihr_zwei?.kind_id))),
-      S.settings.use_levels ? h("div.kv", { on: { click: (ev) => ringPopup(ev.currentTarget, ring, async (l) => { await setRing(e.id, l); reload(); }) } }, h("span.k", "Ring"), h("span.v", ringName(ring),
+      S.settings.use_levels ? h("div.kv.guide-ring", { on: { click: (ev) => ringPopup(ev.currentTarget, ring, async (l) => { await setRing(e.id, l); reload(); }) } }, h("span.k", "Ring"), h("span.v", ringName(ring),
         e.ist ? h("span.tag", `Ist ${e.ist.ring}`) : null)) : null,
       bundFields().filter((d) => d.id !== "f_level").map((d) => {
         const p = primaryOf(iz[d.id]);
-        return h("div.kv", { on: { click: async () => { if (await editField(d, iz[d.id] || [], `/entities/${e.id}/fields/${d.id}`)) reload(); } } }, h("span.k", d.name), h("span.v", p ? (d.type === "date" ? humanDate(p.value) : valueEl(d, p, e.names)) : h("span.t3", "–")));
+        return h("div.kv", { "data-fid": d.id, on: { click: async () => { if (await editField(d, iz[d.id] || [], `/entities/${e.id}/fields/${d.id}`)) reload(); } } }, h("span.k", d.name), h("span.v", p ? (d.type === "date" ? humanDate(p.value) : valueEl(d, p, e.names)) : h("span.t3", "–")));
       })),
     (() => { const sec = fieldSections(e, reload, { mobile: true }); return sec.length ? h("div.card.m-fields", sec) : null; })(),
-    h("button.btn", { on: { click: () => addField(e, { onDone: reload }) } }, icon("plus"), "Feld hinzufügen"),
+    h("button.btn.guide-field", { on: { click: () => addField(e, { onDone: reload }) } }, icon("plus"), "Feld hinzufügen"),
     e.routines?.length ? h("div.small.t2", "Routinen: " + e.routines.map((r) => r.name + (r.next ? ` (${r.next})` : "")).join(", ")) : null);
   const hist = await GET(`/entities/${e.id}/history?limit=3`);
   if (hist.length) page.append(h("p.small.t3", { style: { textAlign: "center" } }, "Verlauf: " + hist.map((x) => `${historyText(x)} (${rel(x.at.slice(0, 10))})`).join(" · ")));
+  guideAttach(e, { mobile: true });
 }
 
 // ---------------------------------------------------------------- Kreise

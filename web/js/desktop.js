@@ -5,6 +5,7 @@ import { primaryOf, valueEl, actionFor, editField, entityFieldList, runQuick, bu
 import { onPage, onGlobal, resetPage, binding, pretty, helpOverlay, keys } from "./shortcuts.js";
 import { dateInput } from "./date.js";
 import { openSpotlight, rememberPerson } from "./spotlight.js";
+import { guideAttach } from "./guide.js";
 import { editPerson, addField, dupHint, ringPopup, setRing, editIhrZwei, editBund, bundKindName, addBund, addToCircle, historyText } from "./shared.js";
 
 const LS = (k, d) => { try { return JSON.parse(localStorage.getItem("syn." + k)) ?? d; } catch (_) { return d; } };
@@ -264,7 +265,7 @@ async function personPage(main, id) {
       e.kind === "pet" ? h("span.chip.plain", icon("paw"), "Haustier") : null),
       e.aliases?.length ? h("div.small.t2", "auch: " + e.aliases.join(", ")) : null,
       h("div.meta-line", h("span", "Erfasst ", h("span.mono", (e.created_at || "").slice(0, 10))), e.on_phone_effective ? h("span.meta-pill", icon("smartphone", "xs"), "Mit Handy synchronisiert") : null)),
-    e.is_self ? null : h("button.btn.primary", { on: { click: async () => { await POST(`/seen-today/${id}`); invalidate(); reload(); } } }, icon("eye"), "Heute gesehen"),
+    e.is_self ? null : h("button.btn.primary.guide-seen", { on: { click: async () => { await POST(`/seen-today/${id}`); invalidate(); reload(); } } }, icon("eye"), "Heute gesehen"),
     phone ? h("a.btn", { href: "tel:" + phone.value.replace(/[^\d+]/g, "") }, icon("phone"), "Anrufen") : null,
     mail ? h("a.btn", { href: "mailto:" + mail.value }, icon("message"), "Schreiben") : null,
     h("button.btn.icon", { on: { click: (ev) => menu(ev.currentTarget, [
@@ -281,14 +282,14 @@ async function personPage(main, id) {
     h("div.card-h", h("div.row", h("span.small.t2", "Ihr zwei"), h("button.chip.sel", { style: { cursor: "pointer" }, on: { click: async () => { if (await editIhrZwei(e)) reload(); } } }, bundKindName(e.ihr_zwei?.kind_id), " ▾")),
       e.ist ? h("span.small.t2", `Ist: Ring ${e.ist.ring} · letzter Kontakt ${rel(e.ist.last)}`, e.long_unseen ? h("span.tag.yellow", { style: { marginLeft: "6px" } }, "lange nicht gesehen") : null) : null),
     h("div.card-b.row", { style: { gap: "24px", alignItems: "flex-start" } },
-      S.settings.use_levels ? h("div.col", { style: { alignItems: "center" } },
+      S.settings.use_levels ? h("div.col.guide-ring", { style: { alignItems: "center" } },
         ringDrag(ring, async (l) => { await setRing(id, l); reload(); }),
         h("button.btn.sm.ghost", { on: { click: (ev) => ringPopup(ev.currentTarget, ring, async (l) => { await setRing(id, l); reload(); }) } }, h("b", ringName(ring)), icon("down"))) : null,
       h("div.fs-rows.grow", bundFields().filter((d) => d.id !== "f_level").map((d) => fieldRow(d, iz[d.id] || [], `/entities/${id}/fields/${d.id}`, e, reload)))));
 
   // Felder
   const sections = fieldSections(e, reload);
-  const fields = h("div.card", h("div.card-h", h("h3", "Felder"), h("button.btn.sm", { on: { click: () => addField(e, { onDone: reload }) } }, icon("plus"), "Feld")),
+  const fields = h("div.card", h("div.card-h", h("h3", "Felder"), h("button.btn.sm.guide-field", { on: { click: () => addField(e, { onDone: reload }) } }, icon("plus"), "Feld")),
     h("div.card-b", sections.length ? sections : h("div.empty", "Noch keine Felder. Ein Eintrag beginnt mit Kontext und wird nach und nach zur Person.")));
 
   // rechte Spalte: Bünde, Kreise, Verlauf, Routinen
@@ -306,7 +307,7 @@ async function personPage(main, id) {
   const knowsCard = knows.length ? h("div.card", h("div.card-h", h("h3", "Kennt vermutlich"), h("span.small.t2", knows.length)),
     h("div.card-b.col", h("p.tiny.t3", "Abgeleitet aus gemeinsamen Kreisen – nicht gespeichert."),
       h("div.row.wrap", { style: { gap: "4px" } }, knows.slice(0, 40).map((r) => h("a", { href: "#/p/" + r.id, title: r.display + " · " + r.circles.filter((c) => myC.has(c)).map((c) => S.circles[c]?.name).join(", ") }, avatar(r, 28)))))) : null;
-  const circles = h("div.card", h("div.card-h", h("h3", "Kreise"), h("button.btn.sm", { on: { click: (ev) => addToCircle(ev.currentTarget, e, () => { reloadCircles(); reload(); }) } }, icon("plus"), "Kreis")),
+  const circles = h("div.card", h("div.card-h", h("h3", "Kreise"), h("button.btn.sm.guide-circle", { on: { click: (ev) => addToCircle(ev.currentTarget, e, () => { reloadCircles(); reload(); }) } }, icon("plus"), "Kreis")),
     h("div.card-b.col", e.memberships.length ? e.memberships.map((m) => h("div.clabel" + (m.active ? "" : ".past"), { style: { "--cb": circleColors(m.circle_id).bg, "--cf": circleColors(m.circle_id).fg } },
       h("a.clabel-main", { href: "#/c/" + m.circle_id },
         m.circle_id === e.main_circle_id ? h("span.clabel-star", { title: "Hauptkreis" }, icon("star")) : null,
@@ -346,6 +347,7 @@ async function personPage(main, id) {
     h("button.btn.sm.ghost.icon", { on: { click: async () => { await POST(`/suggestions/${s.id}/reject`); reload(); } } }, icon("x")))))) : null;
   page.append(h("a.crumb", { href: "#/people" }, icon("left"), "Personen"), head, dupHint(e, { desktop: true, onChange: reload }),
     h("div.pgridx", h("div.col", { style: { gap: "16px" } }, ihr, fields, notes), h("div.col", { style: { gap: "16px" } }, suggBox, bunds, circles, knowsCard, verlauf, routines)));
+  guideAttach(e);
 }
 
 // ---------------------------------------------------------------- Kreise

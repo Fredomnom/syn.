@@ -1,7 +1,7 @@
 // Bausteine, die Handy und Desktop teilen: Person bearbeiten, Feld hinzufügen, Ring wählen, Doppelte-Hinweis.
 import { S, h, icon, rows, api, GET, POST, PUT, PATCH, DEL, clear, modal, confirmDlg, invalidate, avatar, circleChip, toast,
   RING, ringMini, pickCircle, reloadFields, popover, closePop } from "./core.js";
-import { fieldsFor, editField, TYPE_NAMES, inputFor } from "./fields.js";
+import { fieldsFor, editField, TYPE_NAMES, inputFor, sourceName } from "./fields.js";
 import { dateInput } from "./date.js";
 import { pickAndCrop } from "./crop.js";
 import { switchInput, segInput, tagInput } from "./controls.js";
@@ -176,7 +176,7 @@ export function addToCircle(anchor, e, onDone) {
 }
 
 export function historyText(ev) {
-  const v = (x) => x === null || x === undefined ? "–" : Array.isArray(x) ? (x.join(", ") || "–") : typeof x === "object" ? (x.name || x.handle || S.circles[x.id]?.name || x.id || JSON.stringify(x)) : String(x);
+  const v = (x) => x === null || x === undefined ? "–" : Array.isArray(x) ? (x.join(", ") || "–") : typeof x === "object" ? (x.type === "service" ? sourceName(x.id) : x.name || x.handle || S.circles[x.id]?.name || (S.rows || []).find((r) => r.id === x.id)?.display || x.id || JSON.stringify(x)) : String(x);
   if (ev.attr === "avatar") return ev.new ? (ev.old ? "Profilbild geändert" : "Profilbild hinzugefügt") : "Profilbild entfernt";
   if (ev.attr === "on_phone") return ev.new ? "Mit Handy synchronisiert" : "Nicht mehr mit Handy synchronisiert";
   if (ev.attr === "role_a" || ev.attr === "role_b") return `Rolle: ${v(ev.old)} → ${v(ev.new)}`;

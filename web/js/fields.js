@@ -302,7 +302,7 @@ export function fieldRow(def, vals, path, e, reload, { extra = null, label = nul
   };
   const quick = def.quick_routine_id && !e.is_self && def.scope !== "bund"
     ? h("button.btn.sm.icon.fr-btn", { title: S.fieldList.length && def.type === "number" ? "+1" : "Schnellaktion", on: { click: async (ev) => { ev.stopPropagation(); await runQuick(e.id, def.quick_routine_id); reload(); } } }, icon(def.type === "number" ? "plus" : "refresh")) : null;
-  return h("div.fr" + (inline ? ".inline" : ""),
+  return h("div.fr" + (inline ? ".inline" : ""), { "data-fid": def.id },
     h("div.fr-key", label || def.name, live.length > 1 && def.type !== "profile" ? h("span.fl-count", live.length) : null),
     h("div.fr-main", { on: { click: (ev) => { if (ev.target.closest("a, button")) return; startInline(); } } }, valueBox),
     h("div.fr-tools", quick, h("button.btn.sm.icon.fr-btn", { title: "Mehr: Werte, Label, unsicher, Zeitraum", on: { click: (ev) => { ev.stopPropagation(); dialog(); } } }, icon("more"))));

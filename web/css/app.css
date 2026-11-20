@@ -978,3 +978,42 @@ code { font: 400 12.5px var(--f-mono); }
 :root[data-theme="dark"] .api-status.err { background: #3A1B19; color: #F97066; }
 .api-out .code { max-height: 360px; margin: 6px 0 0; }
 @media (max-width: 900px) { .api-layout, .api-intro { grid-template-columns: 1fr; } .api-nav { display: none; } .api-title { display: none; } }
+/* Während die Markierung gleitet, behält der neue Eintrag seine normale Schrift; danach weicher Übergang */
+.set-item, .side a.nav, .seg button { transition: background .14s, color .22s ease; }
+.seg-anim .on { color: inherit !important; }
+.seg-anim .set-item.on { color: var(--ink) !important; }
+.seg-anim .side a.nav.on, .side.seg-anim a.nav.on { color: var(--ink) !important; }
+.seg-anim .set-item.on .set-ic { background: var(--white); border-color: var(--line); }
+.seg-anim .on .n { color: var(--text2) !important; }
+/* Einführung: Importe */
+.imp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px; }
+.imp-tile { position: relative; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 14px 8px 12px; border-radius: 16px; border: 1.5px solid var(--line);
+  background: var(--white); color: var(--ink); font: 500 12.5px var(--f-ui); cursor: pointer; transition: border-color .14s, background .14s, transform .1s; }
+.imp-tile:hover { border-color: var(--line-strong); }
+.imp-tile:active { transform: scale(.97); }
+.imp-tile.on { border-color: var(--yellow-line); background: var(--yellow-light); }
+.imp-tile.done { border-color: #22A55A; }
+.imp-logo { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 12px; background: var(--bg); flex: none; }
+.imp-name { text-align: center; line-height: 1.2; }
+.imp-badge { position: absolute; top: 6px; right: 6px; display: inline-flex; align-items: center; gap: 2px; padding: 1px 6px; border-radius: 999px; background: #22A55A; color: #fff; font-size: 11px; font-weight: 600; }
+.imp-form { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 16px; background: var(--bg); animation: logo-up .25s ease both; }
+.intro { max-height: calc(100vh - 32px); }
+.intro-stage { overflow-y: auto; margin: 0 -6px; padding: 0 6px; }
+/* Guide */
+.guide-spot { position: fixed; z-index: 75; border-radius: 16px; pointer-events: none; box-shadow: 0 0 0 4px var(--yellow), 0 0 0 9999px rgba(15,17,20,.55);
+  transition: left .3s cubic-bezier(.2,.8,.2,1), top .3s cubic-bezier(.2,.8,.2,1), width .3s, height .3s; animation: syn-fade .25s ease both; }
+.guide-spot.full { inset: 0; border-radius: 0; box-shadow: 0 0 0 9999px rgba(15,17,20,.55); }
+.guide-card { position: fixed; z-index: 76; width: min(340px, calc(100vw - 24px)); padding: 18px; border-radius: 20px; background: var(--white); border: 1px solid var(--line-strong);
+  display: flex; flex-direction: column; gap: 8px; animation: syn-dialog .28s cubic-bezier(.2,.8,.2,1) both; }
+.guide-card.leaving { animation: syn-fade-out .2s ease both; }
+.guide-card h3 { font: 600 17px var(--f-head); letter-spacing: -0.01em; margin: 0; }
+.guide-card p { margin: 0 0 4px; color: var(--text2); font-size: 13.5px; line-height: 1.45; }
+.guide-step { display: flex; align-items: center; justify-content: space-between; font: 600 11px var(--f-ui); letter-spacing: .05em; text-transform: uppercase; color: var(--text3); }
+.guide-dots { display: flex; gap: 4px; }
+.guide-dots span { width: 6px; height: 6px; border-radius: 999px; background: var(--line-strong); transition: width .25s; }
+.guide-dots span.done { background: var(--yellow-line); } .guide-dots span.on { width: 16px; background: var(--yellow); }
+.guide-card.final { width: min(400px, calc(100vw - 24px)); align-items: center; text-align: center; }
+.guide-tips { display: flex; flex-direction: column; gap: 8px; width: 100%; margin: 4px 0 8px; text-align: left; font-size: 13.5px; }
+/* Guide liegt über der Seite, aber unter Menüs, Popovers und Dialogen */
+.guide-spot { z-index: 34; } .guide-card { z-index: 35; }
+.guide-spot.full { box-shadow: none; background: rgba(15,17,20,.55); }

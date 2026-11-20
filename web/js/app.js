@@ -4,7 +4,9 @@ import "./color.js";
 import "./hover.js";
 import "./controls.js";
 import { onGlobal, keys } from "./shortcuts.js";
-import { S, h, api, GET, POST, clear, logo, loadBase, isMobile, flushQueue, toast, icon } from "./core.js";
+import { S, h, api, GET, POST, clear, logo, loadBase, isMobile, flushQueue, toast, icon, rows } from "./core.js";
+import { serviceIcon } from "./fields.js";
+import { startGuide } from "./guide.js";
 
 export const route = { parts: [], query: {} };
 let mode = null;
@@ -76,7 +78,9 @@ async function renderLogin(app) {
 // Ersteinrichtung als kurze, mehrseitige Einführung
 async function renderSetup(app) {
   const st = { use_levels: true, use_ist: false, mode: "rule", max: 3, map: "osm" };
-  const steps = ["welcome", "rings", "ist", "phone", "maps", "done"];
+  const steps = ["welcome", "rings", "ist", "phone", "maps", "imports", "done"];
+  let importers = null; const imported = {}; let openImp = null;
+  GET("/importers").then((l) => { importers = l; if (steps[i] === "imports") draw(true); }).catch(() => (importers = []));
   let i = 0, dir = 1;
   const stage = h("div.intro-stage");
   const dots = h("div.intro-dots");
@@ -96,28 +100,73 @@ async function renderSetup(app) {
         [["eye", "Erfassen ohne Namen", "„Typ aus dem Fitnessstudio“ reicht für den Anfang."], ["rings", "Ringe und Kreise", "Wer dir nah ist und wohin jemand gehört."],
           ["key", "Deine Daten", "Läuft auf deinem Server, ohne fremde Dienste."]].map(([ic, t, d], k) =>
           h("div.intro-point", { style: { animationDelay: 250 + k * 90 + "ms" } }, h("span.intro-ic", icon(ic)), h("div", h("b", t), h("div.small.t2", d))))));
-    if (name === "rings") return h("div.intro-page", h("span.intro-step", "1 von 4"), h("h2", "Willst du mit Ringen arbeiten?"),
+    if (name === "rings") return h("div.intro-page", h("span.intro-step", "1 von 5"), h("h2", "Willst du mit Ringen arbeiten?"),
       h("p.t2", "Ein Ring zeigt, wie nah dir jemand ist – von 1 (Engste) bis 4 (Weit). Du setzt ihn selbst."),
       h("div.intro-choices", choice("use_levels", true, "Ja, mit Ringen", "Mit Ringe-Ansicht und Bedingungen wie „Ring ≤ 2“.", ringsIll(4)),
         choice("use_levels", false, "Nein", "Alles andere bleibt gleich.", ringsIll(0))));
-    if (name === "ist") return h("div.intro-page", h("span.intro-step", "2 von 4"), h("h2", "Soll syn ein „Ist“ berechnen?"),
+    if (name === "ist") return h("div.intro-page", h("span.intro-step", "2 von 5"), h("h2", "Soll syn ein „Ist“ berechnen?"),
       h("p.t2", "Aus „Zuletzt gesehen“, der Zahl der Treffen und Importen wie der letzten Nachricht sieht syn, wie nah jemand gerade wirklich ist."),
       h("div.intro-choices", choice("use_ist", true, "Ja, berechnen", "Zeigt auch, wer nah ist, aber lange nicht gesehen wurde.", icon("clock")),
         choice("use_ist", false, "Nein", "Nur das, was du selbst einträgst.", icon("edit"))));
-    if (name === "phone") return h("div.intro-page", h("span.intro-step", "3 von 4"), h("h2", "Wer soll mit dem Handy synchronisiert werden?"),
+    if (name === "phone") return h("div.intro-page", h("span.intro-step", "3 von 5"), h("h2", "Wer soll mit dem Handy synchronisiert werden?"),
       h("p.t2", "Aufs Handy kommt nur, was ein Telefonbuch versteht: Name, Nummern, E-Mails, Geburtstag, Profilbild."),
       h("div.intro-choices", choice("mode", "all", "Jeder", "Alle Personen.", icon("users")),
         choice("mode", "rule", "Nach Regel", st.use_levels ? "Alle bis zu einem Ring – dazu jede, die du einzeln einschaltest." : "Alle mit Telefonnummer – dazu jede, die du einzeln einschaltest.", icon("filter")),
         choice("mode", "none", "Niemand", "Nur Personen, die du einzeln einschaltest.", icon("x"))),
       st.mode === "rule" && st.use_levels ? h("div.intro-ringpick", h("span.t2", "Bis Ring"), h("div.seg", [1, 2, 3, 4].map((n) => h("button" + (st.max === n ? ".on" : ""), { type: "button", on: { click: () => { st.max = n; draw(true); } } }, `${n} · ${["Engste", "Nah", "Mittel", "Weit"][n - 1]}`)))) : null);
-    if (name === "maps") return h("div.intro-page", h("span.intro-step", "4 von 4"), h("h2", "Womit sollen Adressen öffnen?"),
+    if (name === "maps") return h("div.intro-page", h("span.intro-step", "4 von 5"), h("h2", "Womit sollen Adressen öffnen?"),
       h("p.t2", "Ein Tipp auf eine Adresse öffnet die Karte."),
       h("div.intro-choices", choice("map", "osm", "OpenStreetMap", "Frei und ohne Konto.", icon("pin")),
         choice("map", "google", "Google Maps", "Am weitesten verbreitet.", icon("pin")), choice("map", "apple", "Apple Karten", "Auf iPhone und Mac zuhause.", icon("pin"))));
+    if (name === "imports") return importsPage();
     return h("div.intro-page.center-text", h("div.intro-check", h("svg", { viewBox: "0 0 52 52", width: 72, height: 72 }, h("circle", { cx: 26, cy: 26, r: 24, class: "ck-c" }), h("path", { d: "M15 27l7 7 15-16", class: "ck-p" }))),
       h("h2", "Fertig eingerichtet"),
-      h("p.t2", "Alles lässt sich später in den Einstellungen ändern. Leg mit „+ Person“ los oder hol dir Leute über Importe."),
+      h("p.t2", Object.keys(imported).length ? `${Object.values(imported).reduce((a, b) => a + b, 0)} Leute importiert. Als Nächstes zeige ich dir an einer Person, wie syn funktioniert.` : "Als Nächstes zeige ich dir an einer Person, wie syn funktioniert. Alles lässt sich später in den Einstellungen ändern."),
       h("div.intro-summary", [["Ringe", st.use_levels ? "an" : "aus"], ["Ist", st.use_ist ? "berechnet" : "aus"], ["Handy", { all: "Jeder", rule: st.use_levels ? `bis Ring ${st.max}` : "nach Regel", none: "Niemand" }[st.mode]], ["Karten", { osm: "OpenStreetMap", google: "Google Maps", apple: "Apple Karten" }[st.map]]].map(([k, v]) => h("div", h("span.t3.small", k), h("b", v)))));
+  };
+  const FEATURED = ["vcard", "instagram", "whatsapp", "telegram", "discord", "steam", "bluesky", "github", "anilist", "lastfm", "mastodon", "linkedin", "facebook", "snapchat", "signal", "matrix", "twitch"];
+  const importsPage = () => {
+    const pg = h("div.intro-page", h("span.intro-step", "5 von 5"), h("h2", "Hol dir deine Leute"),
+      h("p.t2", "Verbinde ein paar Dienste, dann startest du nicht mit einem leeren Kontaktbuch. Neue Leute landen unter „Lose“ – du sortierst sie später. Überspringen geht auch."));
+    if (!importers) { pg.append(h("p.t3", "Lade Dienste …")); return pg; }
+    const list = importers.filter((x) => FEATURED.includes(x.id)).sort((a, b) => FEATURED.indexOf(a.id) - FEATURED.indexOf(b.id));
+    const grid = h("div.imp-grid", list.map((imp) => h("button.imp-tile" + (openImp === imp.id ? ".on" : "") + (imported[imp.id] !== undefined ? ".done" : ""), { type: "button", tabIndex: -1, on: { click: () => { openImp = openImp === imp.id ? null : imp.id; draw(true); } } },
+      h("span.imp-logo", serviceIcon(imp.service || imp.id, 22)), h("span.imp-name", imp.name),
+      imported[imp.id] !== undefined ? h("span.imp-badge", icon("check", "xs"), imported[imp.id]) : null)));
+    pg.append(grid);
+    const imp = list.find((x) => x.id === openImp);
+    if (imp) pg.append(importForm(imp));
+    return pg;
+  };
+  const importForm = (imp) => {
+    const cfg = {};
+    const req = imp.config.filter((c) => c.required || !imp.accepts_files && imp.config.length <= 2);
+    const inputs = req.map((c) => {
+      const el = h("input.input", { type: c.type === "secret" ? "password" : "text", placeholder: c.placeholder || c.label, on: { input: (e) => (cfg[c.key] = e.target.value) } });
+      return h("label.f", c.label, el, c.help ? h("span.tiny.t3", c.help) : null);
+    });
+    const file = imp.accepts_files ? h("input", { type: "file", multiple: true }) : null;
+    const ack = imp.unofficial ? h("input", { type: "checkbox" }) : null;
+    const status = h("div.small.t2");
+    const go = h("button.btn.primary", { type: "button", on: { click: async () => {
+      if (ack && !ack.checked) return toast("Bitte erst den Hinweis bestätigen", { err: true });
+      if (file && !file.files.length && !req.length) return toast("Bitte eine Datei wählen", { err: true });
+      go.disabled = true; clear(status, "Importiere …");
+      try {
+        await api("PUT", "/importers/" + imp.id, { enabled: true, config: cfg, risk_ack: !!ack, schedule: imp.accepts_files ? { every: "never" } : { every: "daily", time: "04:00" } });
+        let fd; if (file?.files.length) { fd = new FormData(); for (const f of file.files) fd.append("files", f); }
+        const r = await api("POST", `/importers/${imp.id}/run`, fd);
+        const m = /(\d+) neu/.exec(r.status);
+        if (r.status.startsWith("Fehler") || r.status.includes(": Fehler")) { clear(status, h("span", { style: { color: "var(--danger)" } }, r.status)); go.disabled = false; return; }
+        imported[imp.id] = m ? +m[1] : 0; openImp = null; draw(true);
+        toast(`${imp.name}: ${imported[imp.id]} neu`);
+      } catch (e) { clear(status, h("span", { style: { color: "var(--danger)" } }, e.message)); go.disabled = false; }
+    } } }, icon("download"), "Importieren");
+    return h("div.imp-form", h("div.row", h("span.imp-logo", serviceIcon(imp.service || imp.id, 20)), h("div", h("b", imp.name), h("div.small.t2", imp.brings))),
+      imp.needs === "google" ? h("p.small.t2", "Google verbindest du später in den Einstellungen unter „Handy & Sync“.") : [
+        file ? h("label.f", imp.file_hint, file) : null, inputs,
+        ack ? h("label.check.small", ack, h("span", imp.risk)) : null,
+        h("div.row", go, status)]);
   };
   const draw = (same = false) => {
     const pg = page(steps[i]);
@@ -127,7 +176,7 @@ async function renderSetup(app) {
     clear(keysHint, pg.querySelector(".intro-choice") ? [keys("↑↓"), " wählen ", keys("Enter"), " weiter"] : [keys("Enter"), " weiter"]);
     clear(dots, steps.map((_, k) => h("span" + (k === i ? ".on" : k < i ? ".done" : ""))));
     back.style.visibility = i === 0 || i === steps.length - 1 ? "hidden" : "visible";
-    clear(next, i === 0 ? "Los geht's" : i === steps.length - 1 ? "syn öffnen" : "Weiter", icon("right"));
+    clear(next, i === 0 ? "Los geht's" : i === steps.length - 1 ? "Zur ersten Person" : steps[i] === "imports" && !Object.keys(imported).length ? "Überspringen" : "Weiter", icon("right"));
   };
   const go = (k) => { if (k < 0 || k >= steps.length) return; dir = k > i ? 1 : -1; i = k; draw(); };
   const finish = async () => {
@@ -135,7 +184,18 @@ async function renderSetup(app) {
     S.settings = await POST("/me/setup", { use_levels: st.use_levels, use_ist: st.use_ist, sync: { mode: st.mode, match: "any", rules } });
     S.settings = await api("PATCH", "/me/settings", { map_provider: st.map });
     S.me.settings = S.settings; card.classList.add("leaving");
-    setTimeout(() => { location.hash = "#/"; render(); }, 220);
+    // eine zufällige Person, über die man noch wenig weiß – dort führt der Guide durch syn
+    let target = null;
+    try {
+      const all = (await rows(true)).filter((r) => !r.is_self);
+      const few = all.sort((a, b) => Object.keys(a.v).length - Object.keys(b.v).length).slice(0, 8);
+      target = few[Math.floor(Math.random() * few.length)];
+    } catch (_) {}
+    setTimeout(() => {
+      if (target) { startGuide(target.id); location.hash = "#/p/" + target.id; }
+      else { location.hash = "#/"; toast("Leg mit „+ Person“ deine erste Person an – dann zeigt dir syn, wie alles funktioniert."); }
+      render();
+    }, 220);
   };
   const key = (e) => {
     if (!document.body.contains(card)) return removeEventListener("keydown", key);
