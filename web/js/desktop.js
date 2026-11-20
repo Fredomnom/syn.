@@ -1,7 +1,7 @@
 // Desktop: sortieren und bearbeiten in großen Mengen. Seitenleiste, sechs Ansichten, Personenseite, Kreise.
 import { S, h, icon, GET, POST, PUT, PATCH, DEL, clear, rebuild, rows, invalidate, avatar, circleChip, nameEl, rel, ringName, today, debounce,
   toast, modal, logo, qs, menu, pickPerson, pickCircle, reloadCircles, confirmDlg, ringMini, MOD, fmtTs, circleColors, kindColors, promptDlg, RING, cssVar as V } from "./core.js";
-import { primaryOf, valueEl, actionFor, editField, entityFieldList, runQuick, bundFields, TYPE_NAMES, SOURCE, plain, fieldsFor, service, serviceIcon } from "./fields.js";
+import { primaryOf, valueEl, actionFor, editField, entityFieldList, runQuick, bundFields, TYPE_NAMES, SOURCE, plain, fieldsFor, service, serviceIcon, fieldRow, fieldSections } from "./fields.js";
 import { onPage, onGlobal, resetPage, binding, pretty, helpOverlay } from "./shortcuts.js";
 import { dateInput } from "./date.js";
 import { openSpotlight, rememberPerson } from "./spotlight.js";
@@ -264,12 +264,12 @@ async function personPage(main, id) {
       S.settings.use_levels ? h("div.col", { style: { alignItems: "center" } },
         ringDrag(ring, async (l) => { await setRing(id, l); reload(); }),
         h("button.btn.sm.ghost", { on: { click: (ev) => ringPopup(ev.currentTarget, ring, async (l) => { await setRing(id, l); reload(); }) } }, h("b", ringName(ring)), icon("down"))) : null,
-      h("div.fields2.grow", bundFields().filter((d) => d.id !== "f_level").map((d) => fieldCell(d, iz[d.id] || [], `/entities/${id}/fields/${d.id}`, e, reload, true)))));
+      h("div.fs-rows.grow", bundFields().filter((d) => d.id !== "f_level").map((d) => fieldRow(d, iz[d.id] || [], `/entities/${id}/fields/${d.id}`, e, reload)))));
 
   // Felder
-  const fl = entityFieldList(e, { all: false });
+  const sections = fieldSections(e, reload);
   const fields = h("div.card", h("div.card-h", h("h3", "Felder"), h("button.btn.sm", { on: { click: () => addField(e, { onDone: reload }) } }, icon("plus"), "Feld")),
-    h("div.card-b", fl.length ? h("div.fields2", fl.map(({ def, vals }) => fieldCell(def, vals, `/entities/${id}/fields/${def.id}`, e, reload))) : h("div.empty", "Noch keine Felder. Ein Eintrag beginnt mit Kontext und wird nach und nach zur Person.")));
+    h("div.card-b", sections.length ? sections : h("div.empty", "Noch keine Felder. Ein Eintrag beginnt mit Kontext und wird nach und nach zur Person.")));
 
   // rechte Spalte: Bünde, Kreise, Verlauf, Routinen
   const bunds = h("div.card", h("div.card-h", h("h3", "Bünde"), h("button.btn.sm", { on: { click: (ev) => pickPerson(ev.currentTarget, { exclude: [id, S.me.self_id], onPick: async (r) => { if (await addBund(e, r)) reload(); } }) } }, icon("plus"), "Bund")),
@@ -326,30 +326,6 @@ async function personPage(main, id) {
     h("button.btn.sm.ghost.icon", { on: { click: async () => { await POST(`/suggestions/${s.id}/reject`); reload(); } } }, icon("x")))))) : null;
   page.append(h("a.crumb", { href: "#/people" }, icon("left"), "Personen"), head, dupHint(e, { desktop: true, onChange: reload }),
     h("div.pgridx", h("div.col", { style: { gap: "16px" } }, ihr, fields, notes), h("div.col", { style: { gap: "16px" } }, suggBox, bunds, circles, knowsCard, verlauf, routines)));
-}
-
-function fieldCell(def, vals, path, e, reload, compact = false) {
-  const live = vals.filter((v) => !v.deprecated);
-  const p = primaryOf(vals);
-  const ordered = p ? [p, ...live.filter((v) => v !== p)] : live;
-  const quick = def.quick_routine_id && !e.is_self && def.scope !== "bund";
-  const edit = async () => { if (await editField(def, vals, path)) reload(); };
-  const valueLine = (v, isMain) => {
-    const act = actionFor(def, v.value);
-    const svc = def.type === "profile" ? service(v.value?.service) : null;
-    const label = v.label && (!svc || v.label.toLowerCase() !== svc.name.toLowerCase()) ? v.label : null;
-    const shown = def.type === "profile" ? h("span.fl-val" + (v.uncertain ? ".unsure-val" : ""), v.value?.handle || v.value?.id || v.value?.url || "") : valueEl(def, v, e.names);
-    return h("div.fl-line" + (isMain ? ".first" : ""),
-      svc ? h("span.fl-svc", serviceIcon(svc.id, 14), svc.name) : null,
-      h("span.fl-text", shown, def.id === "f_seen" ? h("span.t3.small", " · " + rel(v.value)) : null),
-      label ? h("span.fl-lab", label) : null,
-      act ? h("a.btn.sm.icon.fl-act", { href: act.href, title: act.label, target: act.href.startsWith("http") ? "_blank" : null, rel: "noopener", on: { click: (ev) => ev.stopPropagation() } }, icon(act.icon)) : null);
-  };
-  return h("div.fld", { on: { click: edit }, style: { cursor: "pointer" } },
-    h("div.grow",
-      h("div.k", def.name, live.length > 1 ? h("span.fl-count", live.length) : null, p?.source && p.source !== "manual" ? h("span.tiny.t3", SOURCE(p.source)) : null,
-        quick ? h("button.btn.sm.icon.fl-quick", { title: "Schnellaktion", on: { click: async (ev) => { ev.stopPropagation(); await runQuick(e.id, def.quick_routine_id); reload(); } } }, icon(def.type === "number" ? "plus" : "refresh")) : null),
-      ordered.length ? h("div.fl-lines", ordered.map((v, i) => valueLine(v, i === 0))) : h("div.v.empty-v", "–")));
 }
 
 // ---------------------------------------------------------------- Kreise
@@ -416,7 +392,7 @@ async function circlePage(main, id) {
     h("div.toolbar", h("span.t2", `${c.count} Mitglieder`), c.children.length ? h("span.row", "Unterkreise:", c.children.map((x) => h("a", { href: "#/c/" + x }, circleChip(x)))) : null,
       h("span.grow"), h("label.check.small", h("input", { type: "checkbox", checked: showPast, on: { change: (e) => { SAVE("past", e.target.checked); reload(); } } }), "Ehemalige zeigen")),
     h("div.card", mem.length ? t : h("div.empty", "Noch niemand in diesem Kreis.")),
-    h("div.card", h("div.card-h", h("h3", "Kreis-Felder")), h("div.card-b.fields2", S.fieldList.filter((f) => f.scope === "kreis").map((d) => fieldCell(d, c.fields[d.id] || [], `/circles/${id}/fields/${d.id}`, { id, names: {}, is_self: true }, reload)))));
+    h("div.card", h("div.card-h", h("h3", "Kreis-Felder")), h("div.card-b.fs-rows", S.fieldList.filter((f) => f.scope === "kreis").map((d) => fieldRow(d, c.fields[d.id] || [], `/circles/${id}/fields/${d.id}`, { id, names: {}, is_self: true }, reload)))));
 }
 
 // ---------------------------------------------------------------- Heute & Notizen

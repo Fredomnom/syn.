@@ -1,7 +1,7 @@
 // Handy (PWA): schnell erfassen und finden. Untere Leiste: Personen, Kreise, Plus, Suche, Ich.
 import { S, h, icon, GET, POST, PATCH, clear, rebuild, rows, themePref, setTheme, invalidate, avatar, circleChip, nameEl, rel, ringName, today, debounce,
   postOrQueue, toast, modal, logo, qs, queued, fmtDate } from "./core.js";
-import { primaryOf, valueEl, actionFor, editField, entityFieldList, runQuick, plain, bundFields } from "./fields.js";
+import { primaryOf, valueEl, actionFor, editField, entityFieldList, runQuick, plain, bundFields, fieldSections, humanDate } from "./fields.js";
 import { editPerson, addField, dupHint, ringPopup, setRing, editIhrZwei, bundKindName, historyText } from "./shared.js";
 
 let filt = "all", search = "";
@@ -157,20 +157,9 @@ async function profile(page, id) {
         e.ist ? h("span.tag", `Ist ${e.ist.ring}`) : null)) : null,
       bundFields().filter((d) => d.id !== "f_level").map((d) => {
         const p = primaryOf(iz[d.id]);
-        return h("div.kv", { on: { click: async () => { if (await editField(d, iz[d.id] || [], `/entities/${e.id}/fields/${d.id}`)) reload(); } } }, h("span.k", d.name), h("span.v", p ? valueEl(d, p, e.names) : h("span.t3", "–")));
+        return h("div.kv", { on: { click: async () => { if (await editField(d, iz[d.id] || [], `/entities/${e.id}/fields/${d.id}`)) reload(); } } }, h("span.k", d.name), h("span.v", p ? (d.type === "date" ? humanDate(p.value) : valueEl(d, p, e.names)) : h("span.t3", "–")));
       })),
-    h("div.list",
-      h("div.kv", { style: { background: "var(--bg)" } }, h("span.small.t2", "Bisher bekannt")),
-      fieldRows.map(({ def, vals }) => {
-        const p = primaryOf(vals); const act = actionFor(def, p?.value);
-        const quick = def.quick_routine_id && !e.is_self ? h("button.btn.sm.icon", { title: "Schnellaktion", on: { click: async (ev) => { ev.stopPropagation(); await runQuick(e.id, def.quick_routine_id); reload(); } } }, icon(def.type === "number" ? "plus" : "refresh")) : null;
-        const n = vals.filter((v) => !v.deprecated).length;
-        return h("div.kv", { on: { click: async () => { if (await editField(def, vals, `/entities/${e.id}/fields/${def.id}`)) reload(); } } },
-          h("span.k", def.name, n > 1 ? h("span.t3", ` · ${n}`) : null),
-          h("span.v", p ? valueEl(def, p, e.names) : null, def.id === "f_seen" && p ? h("span.t3.small", rel(p.value)) : null, quick,
-            act ? h("a.btn.sm.icon", { href: act.href, target: act.href.startsWith("http") ? "_blank" : null, on: { click: (ev) => ev.stopPropagation() } }, icon(act.icon)) : null));
-      }),
-      e.fields.f_note?.length ? h("div.kv", { on: { click: async () => { if (await editField(S.fields.f_note, e.fields.f_note, `/entities/${e.id}/fields/f_note`)) reload(); } } }, h("span.k", "Notiz"), h("span.v", { style: { whiteSpace: "pre-wrap", textAlign: "left" } }, e.fields.f_note[0].value)) : null),
+    (() => { const sec = fieldSections(e, reload, { mobile: true }); return sec.length ? h("div.card.m-fields", sec) : null; })(),
     h("button.btn", { on: { click: () => addField(e, { onDone: reload }) } }, icon("plus"), "Feld hinzufügen"),
     e.routines?.length ? h("div.small.t2", "Routinen: " + e.routines.map((r) => r.name + (r.next ? ` (${r.next})` : "")).join(", ")) : null);
   const hist = await GET(`/entities/${e.id}/history?limit=3`);

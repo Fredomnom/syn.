@@ -40,7 +40,8 @@ DEFAULT_SETTINGS = {
     "unseen_days": {"1": 14, "2": 30, "3": 90, "4": 365},
     "services": SERVICES,
     "routine_time": "08:00",
-    "shortcuts": {},  # Aktion -> Tastenkombination, überschreibt die Standardbelegung
+    "shortcuts": {},
+    "map_provider": "osm",  # osm | google | apple – wohin Adressen verlinken  # Aktion -> Tastenkombination, überschreibt die Standardbelegung
 }
 
 CIRCLE_KINDS = [

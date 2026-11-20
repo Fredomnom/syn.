@@ -89,11 +89,19 @@ export function actionFor(def, v) {
   if (v === null || v === undefined) return null;
   if (def.type === "phone") return { icon: "phone", label: "Anrufen", href: "tel:" + String(v).replace(/[^\d+]/g, "") };
   if (def.type === "email") return { icon: "mail", label: "Schreiben", href: "mailto:" + v };
-  if (def.type === "address") return { icon: "pin", label: "Karte", href: "https://www.openstreetmap.org/search?query=" + encodeURIComponent(v) };
+  if (def.type === "address") return { icon: "pin", label: "Auf der Karte zeigen", href: mapLink(v) };
   if (def.type === "profile") { const l = profileLink(v); return l ? { icon: "ext", label: "Öffnen", href: l } : null; }
   return null;
 }
 
+export const MAPS = [["osm", "OpenStreetMap"], ["google", "Google Maps"], ["apple", "Apple Karten"]];
+export function mapLink(addr) {
+  const q = encodeURIComponent(String(addr).replace(/\n/g, ", "));
+  const p = S.settings.map_provider || "osm";
+  if (p === "google") return "https://www.google.com/maps/search/?api=1&query=" + q;
+  if (p === "apple") return "https://maps.apple.com/?q=" + q;
+  return "https://www.openstreetmap.org/search?query=" + q;
+}
 export const primaryOf = (vals) => { const live = (vals || []).filter((v) => !v.deprecated); return live.find((v) => v.primary) || live[0] || null; };
 
 // ---------------------------------------------------------------- Eingaben
@@ -205,4 +213,125 @@ export function entityFieldList(e, { all = false } = {}) {
 export async function runQuick(eid, rid) {
   const r = await POST(`/entities/${eid}/actions/${rid}`);
   invalidate(); return r.entity;
+}
+
+// ---------------------------------------------------------------- Abschnitte und Zeilen-Darstellung
+export const GROUPS = [["kontakt", "Kontakt"], ["persoenlich", "Persönliches"], ["gemeinsam", "Gemeinsam"], ["weitere", "Weitere"], ["notiz", "Notizen"]];
+const BASE_GROUP = { f_phone: "kontakt", f_email: "kontakt", f_addr: "kontakt", f_profile: "kontakt",
+  f_bday: "persoenlich", f_city: "persoenlich", f_company: "persoenlich", f_position: "persoenlich", f_study: "persoenlich",
+  f_food: "persoenlich", f_train: "persoenlich", f_traits: "persoenlich", f_species: "persoenlich", f_breed: "persoenlich",
+  f_seen: "gemeinsam", f_meet: "gemeinsam", f_intro: "gemeinsam", f_note: "notiz" };
+export function groupOf(d) {
+  if (d.options?.group) return d.options.group;
+  if (BASE_GROUP[d.id]) return BASE_GROUP[d.id];
+  if (d.type === "note") return "notiz";
+  if (["phone", "email", "address", "profile"].includes(d.type)) return "kontakt";
+  return "weitere";
+}
+
+const MONTHS_LONG = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"];
+// „10. September 2009 · 17 Jahre“, „14. März“, „Herbst 2025“, „Mai 2025“
+export function humanDate(s, { age = false } = {}) {
+  const m = /^(\d{4}|\?{4})-(\d{2}|\?{2})-(\d{2}|\?{2})$/.exec(s || "");
+  const ms = /^(\d{4}|\?{4})-(Frühling|Sommer|Herbst|Winter)$/.exec(s || "");
+  if (ms) return `${ms[2]}${ms[1].includes("?") ? "" : " " + ms[1]}`;
+  if (!m) return s || "";
+  const y = m[1].includes("?") ? null : +m[1], mo = m[2].includes("?") ? null : +m[2], d = m[3].includes("?") ? null : +m[3];
+  let out = d && mo ? `${d}. ${MONTHS_LONG[mo - 1]}${y ? " " + y : ""}` : mo ? `${MONTHS_LONG[mo - 1]}${y ? " " + y : ""}` : y ? String(y) : "?";
+  if (age && y && mo && d) {
+    const t = new Date(); let a = t.getFullYear() - y; if (t.getMonth() + 1 < mo || (t.getMonth() + 1 === mo && t.getDate() < d)) a--;
+    out += ` · ${a} Jahre`;
+  }
+  return out;
+}
+
+const INLINE_TYPES = new Set(["text", "number", "date", "phone", "email"]);
+// Eine Feldzeile: Label links, Werte rechts, Aktionen beim Überfahren. Klick auf einen einfachen Wert bearbeitet ihn direkt.
+export function fieldRow(def, vals, path, e, reload, { extra = null, label = null } = {}) {
+  const live = (vals || []).filter((v) => !v.deprecated);
+  const p = primaryOf(vals);
+  const ordered = p ? [p, ...live.filter((v) => v !== p)] : live;
+  const dialog = async () => { if (await editField(def, vals || [], path)) reload(); };
+  const inline = !def.multi && INLINE_TYPES.has(def.type) && path.startsWith("/entities/");
+  const svcCount = {};
+  if (def.type === "profile") for (const v of live) svcCount[v.value?.service] = (svcCount[v.value?.service] || 0) + 1;
+
+  const srcDot = (v) => (v.source && v.source !== "manual" ? h("span.src-dot", { title: SOURCE(v.source) }) : null);
+  const human = (v) => {
+    if (def.type === "date") {
+      const t = h("span", { title: v.value }, humanDate(v.value, { age: def.id === "f_bday" }), def.id === "f_seen" ? h("span.t3", ` · ${relDays(v.value)}`) : null);
+      return v.uncertain ? h("span.unsure-val", t) : t;
+    }
+    return valueEl(def, v, e.names);
+  };
+  const line = (v) => {
+    const act = actionFor(def, v.value);
+    if (def.type === "profile") {
+      const s = service(v.value?.service);
+      const href = profileLink(v.value);
+      const chip = h(href ? "a.pchip" : "span.pchip", href ? { href, target: "_blank", rel: "noopener", on: { click: (ev) => ev.stopPropagation() } } : {},
+        s ? serviceIcon(s.id, 15) : null, h("span", v.value?.handle || v.value?.id || v.value?.url || ""),
+        svcCount[v.value?.service] > 1 && v.label ? h("span.t3", v.label) : null, href ? icon("ext", "xs") : null, srcDot(v));
+      return v.uncertain ? h("span.unsure-val", chip) : chip;
+    }
+    return h("div.fr-line", h("span.fr-text", human(v)), def.multi && live.length > 1 && v.label ? h("span.fr-lab", v.label) : null, srcDot(v),
+      act ? h("a.fr-act", { href: act.href, title: act.label, target: act.href.startsWith("http") ? "_blank" : null, rel: "noopener", on: { click: (ev) => ev.stopPropagation() } }, icon(act.icon)) : null);
+  };
+  const valueBox = h("div.fr-val" + (def.type === "profile" ? ".chips" : ""),
+    ordered.length ? ordered.map(line) : h("span.t3", "–"), extra);
+  const startInline = () => {
+    if (!inline) return dialog();
+    const inp = inputFor(def, p?.value ?? "");
+    const ed = h("div.fr-edit", inp.el);
+    let done = false;
+    const save = async () => {
+      if (done) return; done = true;
+      const v = inp.get();
+      if ((v ?? "") === (p?.value ?? "")) return reload();
+      try { await api("PATCH", path, { value: v === "" ? null : v }); invalidate(); } catch (_) {}
+      reload();
+    };
+    const cancel = () => { if (done) return; done = true; valueBox.replaceWith(valueBoxOrig); };
+    const valueBoxOrig = valueBox;
+    valueBox.replaceWith(ed);
+    const field = ed.querySelector("input");
+    field?.focus(); field?.select?.();
+    ed.addEventListener("keydown", (ev) => { if (ev.key === "Enter") { ev.preventDefault(); save(); } if (ev.key === "Escape") { ev.preventDefault(); ev.stopPropagation(); cancel(); } });
+    if (def.type === "date") { ed.querySelector("syn-date")?.addEventListener("change", save); requestAnimationFrame(() => ed.querySelector("syn-date")?.open?.()); }
+    else field?.addEventListener("blur", () => setTimeout(() => { if (!ed.contains(document.activeElement) && !document.querySelector(".date-pop")) save(); }, 120));
+  };
+  const quick = def.quick_routine_id && !e.is_self && def.scope !== "bund"
+    ? h("button.btn.sm.icon.fr-btn", { title: S.fieldList.length && def.type === "number" ? "+1" : "Schnellaktion", on: { click: async (ev) => { ev.stopPropagation(); await runQuick(e.id, def.quick_routine_id); reload(); } } }, icon(def.type === "number" ? "plus" : "refresh")) : null;
+  return h("div.fr" + (inline ? ".inline" : ""),
+    h("div.fr-key", label || def.name, live.length > 1 && def.type !== "profile" ? h("span.fl-count", live.length) : null),
+    h("div.fr-main", { on: { click: (ev) => { if (ev.target.closest("a, button")) return; startInline(); } } }, valueBox),
+    h("div.fr-tools", quick, h("button.btn.sm.icon.fr-btn", { title: "Mehr: Werte, Label, unsicher, Zeitraum", on: { click: (ev) => { ev.stopPropagation(); dialog(); } } }, icon("more"))));
+}
+function relDays(s) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s || ""); if (!m) return "";
+  const d = Math.round((Date.now() - new Date(+m[1], +m[2] - 1, +m[3], 12)) / 86400000);
+  return d <= 0 ? "heute" : d === 1 ? "gestern" : d < 14 ? `vor ${d} Tagen` : d < 70 ? `vor ${Math.round(d / 7)} Wochen` : d < 600 ? `vor ${Math.round(d / 30)} Monaten` : `vor ${Math.round(d / 365)} Jahren`;
+}
+
+// Felder einer Person in Abschnitten
+export function fieldSections(e, reload, { mobile = false } = {}) {
+  const defs = fieldsFor(e.kind);
+  const has = (d) => (e.fields[d.id] || []).some((v) => !v.deprecated);
+  const out = [];
+  for (const [g, title] of GROUPS) {
+    const rows = [];
+    for (const d of defs.filter((x) => groupOf(x) === g && has(x))) {
+      if (d.id === "f_meet" && has(S.fields.f_seen || {})) continue; // Treffen steht bei „Zuletzt gesehen“
+      let extra = null;
+      if (d.id === "f_seen" && (e.fields.f_meet || []).length) {
+        const meet = primaryOf(e.fields.f_meet);
+        const md = S.fields.f_meet;
+        extra = h("span.fr-meet", `${meet?.value ?? 0} Treffen`,
+          md?.quick_routine_id && !e.is_self ? h("button.btn.sm.icon.fr-btn.show", { title: "+1 Treffen", on: { click: async (ev) => { ev.stopPropagation(); await runQuick(e.id, md.quick_routine_id); reload(); } } }, icon("plus")) : null);
+      }
+      rows.push(fieldRow(d, e.fields[d.id], `/entities/${e.id}/fields/${d.id}`, e, reload, { extra }));
+    }
+    if (rows.length) out.push(h("section.fs", h("h4.fs-title", title), h("div.fs-rows", rows)));
+  }
+  return out;
 }

@@ -1,7 +1,7 @@
 // Einstellungen: Felder, Kreis-Arten, Bund-Arten, Ringe, Routinen, Importe, Sync, Vorschläge, Module, Konto, Admin.
 import { S, h, icon, api, GET, POST, PUT, PATCH, DEL, clear, invalidate, toast, modal, confirmDlg, promptDlg, rows, reloadFields, reloadCircles,
   loadBase, circleChip, avatar, fmtTs, rel, RING, download, rebuild, isMobile, themePref, setTheme } from "./core.js";
-import { TYPE_NAMES, serviceIcon } from "./fields.js";
+import { TYPE_NAMES, serviceIcon, GROUPS, groupOf, MAPS } from "./fields.js";
 import { hueInput, hueOf } from "./color.js";
 import { ACTIONS, binding, pretty, saveBinding, recordCombo } from "./shortcuts.js";
 
@@ -27,11 +27,13 @@ async function fields(body) {
   const routines = await GET("/routines");
   const manual = routines.filter((r) => r.trigger.type === "manual");
   const scopes = [["both", "Mensch & Haustier"], ["person", "Mensch"], ["pet", "Haustier"], ["bund", "Bund (z.B. Ihr zwei)"], ["kreis", "Kreis"]];
-  const table = h("table.mtable", h("tr", h("th", "Name"), h("th", "ID"), h("th", "Typ"), h("th", "Gilt für"), h("th", "Mehrere Werte"), h("th", "Schnellaktion"), h("th")),
+  const table = h("table.mtable", h("tr", h("th", "Name"), h("th", "ID"), h("th", "Typ"), h("th", "Abschnitt"), h("th", "Gilt für"), h("th", "Mehrere Werte"), h("th", "Schnellaktion"), h("th")),
     S.fieldList.map((f, i) => h("tr",
       h("td", h("input.input", { value: f.name, style: { height: "28px" }, on: { change: async (e) => { await PATCH("/fields/" + f.id, { name: e.target.value }); await reloadFields(); toast("Umbenannt – Regeln nutzen die ID, nichts bricht"); } } })),
       h("td", h("span.tag", f.id), f.is_base ? h("span.tiny.t3", " Basis") : null),
       h("td", TYPE_NAMES[f.type]),
+      h("td", ["bund", "kreis"].includes(f.scope) ? h("span.t3", f.scope === "bund" ? "Ihr zwei" : "Kreis") : h("select.input", { on: { change: async (e) => { await PATCH("/fields/" + f.id, { options: { ...f.options, group: e.target.value } }); await reloadFields(); } } },
+        GROUPS.map(([k, l]) => h("option", { value: k, selected: groupOf(f) === k }, l)))),
       h("td", h("select.input", { style: { height: "28px" }, on: { change: async (e) => { try { await PATCH("/fields/" + f.id, { scope: e.target.value }); await reloadFields(); } catch (_) { e.target.value = f.scope; } } } }, scopes.map(([k, l]) => h("option", { value: k, selected: f.scope === k }, l)))),
       h("td", h("input", { type: "checkbox", checked: f.multi, on: { change: async (e) => { await PATCH("/fields/" + f.id, { multi: e.target.checked }); await reloadFields(); } } })),
       h("td", ["date", "number"].includes(f.type) ? h("select.input", { style: { height: "28px" }, on: { change: async (e) => { await PATCH("/fields/" + f.id, { quick_action: e.target.value }); await reloadFields(); reloadTab(body, fields); } } },
@@ -373,6 +375,8 @@ async function account(body) {
   const tn = h("input.input", { placeholder: "Name, z.B. n8n, Home Assistant, Türschild" }), tro = h("input", { type: "checkbox" });
   body.append(card("Darstellung", h("div.seg", [["system", "Wie das System"], ["light", "Hell"], ["dark", "Dunkel"]].map(([k, l]) =>
       h("button" + (themePref() === k ? ".on" : ""), { on: { click: () => setTheme(k) } }, l))), h("p.small.t3", "Gilt für dieses Gerät.")),
+    card("Karten", h("p.small.t3", "Wohin Adressen verlinken."), h("div.seg", MAPS.map(([k, l]) =>
+      h("button" + ((S.settings.map_provider || "osm") === k ? ".on" : ""), { on: { click: async () => { await saveSettings({ map_provider: k }); reloadTab(body, account); } } }, l)))),
     card("Profil", h("div.row", dn, h("button.btn.sm", { on: { click: () => saveSettings({ display_name: dn.value }) } }, "Speichern"))),
     card("Passwort", h("div.row.wrap", o, n, h("button.btn.sm", { on: { click: async () => { await POST("/me/password", { old: o.value, new: n.value }); o.value = n.value = ""; toast("Passwort geändert"); } } }, "Ändern"))),
     card("Long-lived Access Tokens",

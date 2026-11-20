@@ -179,6 +179,7 @@ export function historyText(ev) {
   const v = (x) => x === null || x === undefined ? "–" : Array.isArray(x) ? (x.join(", ") || "–") : typeof x === "object" ? (x.name || x.handle || S.circles[x.id]?.name || x.id || JSON.stringify(x)) : String(x);
   if (ev.attr === "avatar") return ev.new ? (ev.old ? "Profilbild geändert" : "Profilbild hinzugefügt") : "Profilbild entfernt";
   if (ev.attr === "on_phone") return ev.new ? "Mit Handy synchronisiert" : "Nicht mehr mit Handy synchronisiert";
+  if (ev.attr === "role_a" || ev.attr === "role_b") return `Rolle: ${v(ev.old)} → ${v(ev.new)}`;
   if (ev.attr === "kind_id") return `Bund-Art: ${bundKindName(ev.new)}`;
   if (ev.attr === "created") return `Angelegt als „${ev.new?.name || ev.new?.description}“`;
   if (ev.attr === "membership") return ev.new?.until ? `Kreis ${ev.new.name}: bis ${ev.new.until}` : ev.new ? `Kreis ${ev.new.name} hinzugefügt` : `Kreis entfernt`;
