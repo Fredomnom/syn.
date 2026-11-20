@@ -6,7 +6,7 @@ Umgebungsvariablen:
   LANDING_HOST, LANDING_PORT   Adresse (Standard 0.0.0.0:8090)
   SYN_APP_URL                  Adresse einer laufenden syn-Instanz für „Zur App“ (leer = Knopf ausblenden)
   SYN_GITHUB_URL               Link zum Repository (leer = Platzhalter „kommt gleich“)
-  SYN_IMAGE                    Docker-Image im Beispiel (Standard ghcr.io/OWNER/syn:latest)
+  SYN_IMAGE                    Docker-Image im Beispiel (Standard ghcr.io/fredomnom/syn:latest)
 
 Ausgeliefert werden nur die Dateien, die die Seite braucht (Whitelist) – nichts aus data/ oder dem Code.
 Für HTTPS einen Reverse-Proxy (Caddy, nginx) davor setzen.

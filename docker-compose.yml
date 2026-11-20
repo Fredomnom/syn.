@@ -2,7 +2,7 @@
 services:
   syn:
     build: .
-    # image: ghcr.io/OWNER/syn:latest
+    # image: ghcr.io/fredomnom/syn:latest
     container_name: syn
     restart: unless-stopped
     ports:

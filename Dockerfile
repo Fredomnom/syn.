@@ -22,7 +22,7 @@ RUN /venv/bin/pip install -r /tmp/requirements.txt \
 FROM python:${PYTHON}-slim
 LABEL org.opencontainers.image.title="syn" \
       org.opencontainers.image.description="Das Kontaktbuch für alle, die du kennst – selbst gehostet." \
-      org.opencontainers.image.source="https://github.com/OWNER/syn"
+      org.opencontainers.image.source="https://github.com/Fredomnom/syn."
 
 ENV PATH="/venv/bin:$PATH" \
     PYTHONDONTWRITEBYTECODE=1 \
