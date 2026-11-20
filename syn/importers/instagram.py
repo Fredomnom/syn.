@@ -21,6 +21,13 @@ def _entries(obj):
 
 class Instagram(Importer):
     id = "instagram"
+    steps = [
+        'Öffne Instagram → Einstellungen → Kontenübersicht → „Deine Informationen herunterladen“.',
+        'Wähl „Einige deiner Informationen“: Follower und Gefolgte, Nachrichten.',
+        'Format: JSON. Zeitraum: Gesamter Zeitraum. Anfordern.',
+        'Lade die ZIP-Datei aus der Mail herunter.',
+        'Wähl die ZIP hier aus und klick auf „Importieren“.',
+    ]
     name = "Instagram"
     way = "Datenexport (JSON)"
     official = "Export ja"

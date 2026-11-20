@@ -159,14 +159,14 @@ def new_kind(body: dict, ctx: Ctx = Depends(current)):
     n = db.val("SELECT COUNT(*) FROM bund_kinds WHERE user_id=?", ctx.uid)
     db.insert("bund_kinds", {"user_id": ctx.uid, "id": kid, "name": body["name"],
                              "role_a": body.get("role_a") or body["name"], "role_b": body.get("role_b") or body["name"],
-                             "position": n})
+                             "position": n, "icon": body.get("icon")})
     return db.q1("SELECT * FROM bund_kinds WHERE user_id=? AND id=?", ctx.uid, kid)
 
 
 @router.patch("/bund-kinds/{kid}")
 def patch_kind(kid: str, body: dict, ctx: Ctx = Depends(current)):
     db.update("bund_kinds", {"user_id": ctx.uid, "id": kid},
-              {k: body[k] for k in ("name", "role_a", "role_b", "position") if k in body})
+              {k: body[k] for k in ("name", "role_a", "role_b", "position", "icon") if k in body})
     return db.q1("SELECT * FROM bund_kinds WHERE user_id=? AND id=?", ctx.uid, kid)
 
 

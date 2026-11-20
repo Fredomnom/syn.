@@ -15,6 +15,12 @@ QUERY = """<?xml version="1.0"?><c:addressbook-query xmlns:d="DAV:" xmlns:c="urn
 
 class CardDAV(Importer):
     id = "carddav"
+    steps = [
+        'Such die CardDAV-Adresse deines Anbieters (Nextcloud: Kontakte → Einstellungen → Adressbuch-Link; iCloud: https://contacts.icloud.com).',
+        'Bei iCloud brauchst du ein App-spezifisches Passwort: appleid.apple.com → Anmelden und Sicherheit → App-spezifische Passwörter.',
+        'Trag Adresse, Benutzername und Passwort hier ein.',
+        'Klick auf „Importieren“ – syn findet das Adressbuch selbst.',
+    ]
     name = "iCloud, Nextcloud, Radicale"
     way = "CardDAV"
     official = "ja, Standard"

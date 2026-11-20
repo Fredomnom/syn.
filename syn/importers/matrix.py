@@ -5,6 +5,12 @@ from ..importe import Contact, Importer, to_date
 
 class Matrix(Importer):
     id = "matrix"
+    steps = [
+        'Öffne Element (oder deinen Matrix-Client).',
+        'Einstellungen → Hilfe & Info → „Zugriffstoken“ anzeigen und kopieren.',
+        'Trag Homeserver (z.B. https://matrix.org) und Token hier ein.',
+        'Optional: Bis zu welcher Größe kleine Räume als Gruppen gelten sollen.',
+    ]
     name = "Matrix"
     way = "Client-Server-API"
     official = "ja"
@@ -72,7 +78,8 @@ class Matrix(Importer):
             except Exception:
                 pass
             out.append(Contact(service_id=uid, handle=uid, name=name or uid.split(":")[0].lstrip("@"),
-                               last_contact=last, groups=groups.get(uid, [])))
+                               last_contact=last, groups=groups.get(uid, []),
+                               bot=uid.split(":")[0].lstrip("@").lower().endswith("bot")))
         return out
 
 

@@ -8,6 +8,13 @@ LINE = re.compile(r"^\[?(\d{1,2})[./](\d{1,2})[./](\d{2,4}),?\s+(\d{1,2}:\d{2})(
 
 class WhatsApp(Importer):
     id = "whatsapp"
+    steps = [
+        'Öffne in WhatsApp einen Chat oder eine Gruppe.',
+        'Tippe auf den Namen → „Chat exportieren“ → „Ohne Medien“.',
+        'Schick dir die .txt- oder .zip-Datei an den Rechner. Wiederhole das für weitere Chats.',
+        'Trag optional deinen Namen ein, so wie er im Export steht.',
+        'Wähl die Dateien aus und klick auf „Importieren“. Gruppen schlägt syn danach als Kreise vor.',
+    ]
     name = "WhatsApp"
     way = "Chat-Export oder WhatsApp-Web-Bridge (z.B. Baileys)"
     official = "nein"

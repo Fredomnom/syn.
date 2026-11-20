@@ -3,6 +3,11 @@ from ..importe import Contact, Importer
 
 class GitHub(Importer):
     id = "github"
+    steps = [
+        'Trag deinen GitHub-Benutzernamen ein.',
+        'Optional: Ein Token (Einstellungen → Developer settings → Personal access tokens) erhöht das Abfrage-Limit.',
+        'Klick auf „Importieren“.',
+    ]
     name = "GitHub"
     way = "REST API"
     official = "ja"
@@ -27,7 +32,7 @@ class GitHub(Importer):
         people = {a["id"]: a for a in self._all(run, f"https://api.github.com/users/{u}/followers", h)}
         people.update({a["id"]: a for a in self._all(run, f"https://api.github.com/users/{u}/following", h)})
         return [Contact(service_id=str(i), handle=a["login"], name=a["login"], url=a.get("html_url"),
-                        avatar_url=a.get("avatar_url")) for i, a in people.items()]
+                        avatar_url=a.get("avatar_url"), bot=a.get("type") == "Bot") for i, a in people.items()]
 
 
 IMPORTER = GitHub()

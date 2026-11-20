@@ -41,6 +41,8 @@ class Contact:
     service: str | None = None  # Dienst fürs Profil-Feld, falls abweichend vom Importer
     only_existing: bool = False  # nur bekannte Personen aktualisieren, keine neuen anlegen
     groups: list = field(default_factory=list)  # Gruppen/Räume, in denen die Person mit dir ist (→ Kreis-Vorschläge)
+    note: str | None = None  # Notiz aus dem Dienst (z.B. vCard NOTE, Google, Discord, prate)
+    bot: bool = False  # Bots werden nie importiert
 
 
 class Importer:
@@ -58,6 +60,7 @@ class Importer:
     needs = None  # z.B. "google" für die OAuth-Verbindung
     rate = 0.0  # Sekunden Pause zwischen Anfragen (inoffizielle Wege: niedrige Rate)
     requires = []  # optionale Python-Pakete
+    steps = []  # Schritt-für-Schritt-Anleitung zum Einrichten
 
     def fetch(self, cfg: dict, run: "Run"):
         raise NotImplementedError
@@ -72,14 +75,15 @@ class Importer:
         return {"id": self.id, "name": self.name, "way": self.way, "official": self.official,
                 "brings": self.brings, "unofficial": self.unofficial, "risk": self.risk, "config": self.config,
                 "accepts_files": self.accepts_files, "file_hint": self.file_hint, "needs": self.needs,
-                "missing_packages": missing, "service": self.service}
+                "missing_packages": missing, "service": self.service, "steps": self.steps}
 
 
 class Run:
     """Kontext eines Laufs: Log, hochgeladene Dateien, Zustand, HTTP mit Rate-Limit."""
 
-    def __init__(self, ctx, imp: Importer, files=None, state=None):
+    def __init__(self, ctx, imp: Importer, files=None, state=None, job=None):
         self.ctx = ctx
+        self.job = job if job is not None else {}
         self.imp = imp
         self.files = files or []  # [(name, bytes)]
         self.state = state or {}
@@ -87,6 +91,15 @@ class Run:
         self._last = 0.0
         self.http = httpx.Client(timeout=30, follow_redirects=True,
                                  headers={"User-Agent": "syn-contacts/1.0 (+self-hosted)"})
+
+    def progress(self, done=None, total=None, phase=None):
+        """Fortschritt für das Statusfenster: Phase, erledigt, gesamt."""
+        if phase is not None:
+            self.job["phase"] = phase
+        if total is not None:
+            self.job["total"] = total
+        if done is not None:
+            self.job["done"] = done
 
     def log(self, msg):
         self.lines.append(f"{datetime.now().strftime('%H:%M:%S')} {msg}")
@@ -219,10 +232,17 @@ def apply_contacts(ctx, imp: Importer, contacts, run: Run):
     me = model.self_id(uid)
     blocked = {(b["kind"], b["key"]) for b in db.q("SELECT kind, key FROM import_blocks WHERE user_id=?", uid)}
     stats["blocked"] = 0
+    stats["bots"] = 0
+    contacts = list(contacts)
+    run.progress(0, len(contacts), "Zuordnen")
     group_members = {}
     for c in contacts:
         stats["seen"] += 1
+        run.progress(stats["seen"])
         service = c.service or imp.service
+        if c.bot:
+            stats["bots"] += 1
+            continue
         if blocked and _is_blocked(c, service, imp, blocked, country):
             stats["blocked"] += 1
             continue
@@ -331,6 +351,8 @@ def apply_contacts(ctx, imp: Importer, contacts, run: Run):
                         stats["suggestions"] += 1
             for g in c.groups or []:
                 group_members.setdefault(g, set()).add(eid)
+            if c.note and c.note.strip() and "f_note" in defs:
+                _set_if_allowed(ctx, eid, defs["f_note"], c.note.strip(), src, stats)
             for kind, val in (("message", c.last_contact), ("seen", c.seen)):
                 if val:
                     d = str(val)[:10]
@@ -351,6 +373,12 @@ def _is_blocked(c, service, imp, blocked, country) -> bool:
             if k and ("svc", f"{service}:{str(k).lower()}") in blocked:
                 return True
     if c.service_id and ("srcid", f"{imp.id}:{c.service_id}") in blocked:
+        return True
+    # über alle Dienste hinweg: gleicher Handle oder gleicher voller Name
+    if c.handle and ("handle", str(c.handle).lower().lstrip("@")) in blocked:
+        return True
+    from .util import fold
+    if c.name and len(c.name.split()) > 1 and ("name", fold(c.name)) in blocked:
         return True
     for p in c.phones or []:
         num = p if isinstance(p, str) else p[0]
@@ -406,7 +434,10 @@ def backfill_via():
     db.ex("INSERT OR REPLACE INTO instance(key,value) VALUES('backfill_via_v1', ?)", now())
 
 
-def run_importer(ctx, iid, files=None) -> str:
+JOBS = {}  # laufende Importe: job_id -> Fortschritt (für das Statusfenster)
+
+
+def run_importer(ctx, iid, files=None, job=None) -> str:
     imp = registry().get(iid)
     if not imp:
         return f"Importer {iid} ist ausgeschaltet oder unbekannt"
@@ -415,7 +446,8 @@ def run_importer(ctx, iid, files=None) -> str:
         return f"{imp.name}: nicht eingerichtet"
     cfg = crypto.unseal(ctx.uid, row["config_enc"], {})
     state = db.jl(row["state"], {}) or {}
-    run = Run(ctx, imp, files, state)
+    run = Run(ctx, imp, files, state, job)
+    run.progress(0, None, "Abrufen")
     status = "ok"
     stats = {}
     try:
@@ -428,6 +460,7 @@ def run_importer(ctx, iid, files=None) -> str:
         run.log(f"{len(contacts)} Kontakte gelesen")
         stats = apply_contacts(ctx, imp, contacts, run)
         status = (f"{stats['seen']} gelesen, {stats['new']} neu, {stats['matched']} erkannt, "
+                  + (f"{stats['bots']} Bots übersprungen, " if stats.get("bots") else "") + 
                   f"{stats['values']} Werte, {stats['suggestions']} Vorschläge"
                   + (f", {stats['groups']} Gruppen-Vorschläge" if stats.get("groups") else "")
                   + (f", {stats['blocked']} gesperrt übersprungen" if stats.get("blocked") else ""))

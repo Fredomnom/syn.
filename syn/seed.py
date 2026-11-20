@@ -62,6 +62,19 @@ DEFAULT_CIRCLES = [("Familie", "familie"), ("Freunde", "freundschaft"), ("Arbeit
                    ("Sport & Hobby", "hobby")]
 
 
+KIND_ICONS = {"familie": "home", "freundschaft": "heart", "schule": "book", "arbeit": "briefcase", "hobby": "dumbbell"}
+BUND_ICONS = {"freundschaft": "heart", "partnerschaft": "rings2", "eltern_kind": "baby", "geschwister": "users", "verwandt": "tree",
+              "kollegen": "briefcase", "bekannt": "wave", "mentor": "graduation", "halter": "paw", "trainingspartner": "dumbbell"}
+
+
+def backfill_icons():
+    """Symbole für die mitgelieferten Arten, wo noch keines gesetzt ist."""
+    for kid, ic in KIND_ICONS.items():
+        db.ex("UPDATE circle_kinds SET icon=? WHERE id=? AND icon IS NULL", ic, kid)
+    for kid, ic in BUND_ICONS.items():
+        db.ex("UPDATE bund_kinds SET icon=? WHERE id=? AND icon IS NULL", ic, kid)
+
+
 def seed_circles(uid):
     t = now()
     for name, kind in DEFAULT_CIRCLES:
@@ -83,6 +96,18 @@ def backfill_services():
                 s["link"] = defaults[s["id"]]["link"]
         db.ex("UPDATE users SET settings=? WHERE id=?", db.jd(st), u["id"])
     db.ex("INSERT OR REPLACE INTO instance(key,value) VALUES('services_links_v1', ?)", now())
+
+
+def backfill_views():
+    """Einmalig: Konten bekommen die Standardansicht „Neue Personen“."""
+    if db.val("SELECT value FROM instance WHERE key='view_new_v1'"):
+        return
+    for u in db.q("SELECT id FROM users"):
+        if not db.val("SELECT 1 FROM saved_views WHERE user_id=? AND config LIKE '%\"filter\":\"new\"%'", u["id"]):
+            db.ex("UPDATE saved_views SET position=position+1 WHERE user_id=?", u["id"])
+            db.insert("saved_views", {"id": new_id("v"), "user_id": u["id"], "name": "Neue Personen", "tab": "people", "view": "grid",
+                                      "config": db.jd({"filter": "new", "sort": "-created"}), "position": 0})
+    db.ex("INSERT OR REPLACE INTO instance(key,value) VALUES('view_new_v1', ?)", now())
 
 
 def backfill_circles():
@@ -154,6 +179,7 @@ def seed_user(uid: str, display_name: str = "Ich"):
         db.insert("field_defs", {"user_id": uid, "id": fid, "scope": scope, "name": name, "type": typ,
                                  "options": db.jd(opts), "multi": multi, "position": i, "is_base": 1})
     seed_circles(uid)
+    backfill_icons()
     # dein eigener Eintrag
     db.insert("entities", {"id": new_id("p"), "user_id": uid, "kind": "person", "is_self": 1,
                            "name": display_name or "Ich", "created_at": t, "updated_at": t})
@@ -182,6 +208,7 @@ def seed_user(uid: str, display_name: str = "Ich"):
     db.ex("UPDATE field_defs SET quick_routine_id=? WHERE user_id=? AND id='f_seen'", r_seen, uid)
     db.ex("UPDATE field_defs SET quick_routine_id=? WHERE user_id=? AND id='f_meet'", r_meet, uid)
     views = [
+        ("Neue Personen", "people", "grid", {"filter": "new", "sort": "-created"}),
         ("Lose aufräumen", "people", "table", {"filter": "lose", "sort": "-created"}),
         ("Mögliche Doppelte", "people", "duplicates", {}),
         ("Engste Leute", "people", "list", {"max_level": 2}),

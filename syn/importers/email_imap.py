@@ -18,6 +18,12 @@ def _dec(h):
 
 class Imap(Importer):
     id = "imap"
+    steps = [
+        'Such die IMAP-Daten deines Mail-Anbieters (Server, meist Port 993).',
+        'Bei Gmail, iCloud oder Outlook brauchst du ein App-Passwort statt deines normalen Passworts.',
+        'Trag Server, Benutzername und Passwort hier ein; Ordnernamen nur, wenn sie anders heißen.',
+        'Wähl, ob neue Leute angelegt werden sollen, und klick auf „Importieren“.',
+    ]
     name = "E-Mail"
     way = "IMAP"
     official = "ja, Standard"

@@ -3,6 +3,11 @@ from ..importe import Contact, Importer
 
 class Xbox(Importer):
     id = "xbox"
+    steps = [
+        'Melde dich auf xbl.io mit deinem Xbox-Konto an.',
+        'Kopiere dort deinen API-Key.',
+        'Füge ihn hier ein und bestätige den Hinweis.',
+    ]
     name = "Xbox"
     way = "OpenXBL"
     official = "nein"

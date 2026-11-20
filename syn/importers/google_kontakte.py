@@ -3,6 +3,11 @@ from ..importe import Contact, Importer
 
 class Google(Importer):
     id = "google"
+    steps = [
+        'Verbinde zuerst Google unter Einstellungen → Handy & Sync → „Mit Google verbinden“.',
+        'Schalte danach diesen Import ein.',
+        'Klick auf „Importieren“.',
+    ]
     name = "Google Kontakte"
     way = "People API mit OAuth"
     official = "ja"
@@ -14,7 +19,7 @@ class Google(Importer):
         from ..modules.google_sync import access_token
         tok = access_token(run.ctx)
         out, page = [], None
-        fields = "names,phoneNumbers,emailAddresses,birthdays,photos,organizations,addresses,metadata"
+        fields = "names,phoneNumbers,emailAddresses,birthdays,photos,organizations,addresses,metadata,biographies"
         while True:
             params = {"personFields": fields, "pageSize": 1000}
             if page:
@@ -47,7 +52,8 @@ def person_to_contact(p):
                    emails=[(x["value"], lab.get(x.get("type"))) for x in p.get("emailAddresses", [])
                            if x.get("value")],
                    birthday=bday, avatar_url=photo,
-                   fields={"f_company": org.get("name"), "f_position": org.get("title"), "f_addr": addr})
+                   fields={"f_company": org.get("name"), "f_position": org.get("title"), "f_addr": addr},
+                   note=(p.get("biographies") or [{}])[0].get("value"))
 
 
 IMPORTER = Google()

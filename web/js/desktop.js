@@ -6,7 +6,8 @@ import { onPage, onGlobal, resetPage, binding, pretty, helpOverlay, keys } from 
 import { dateInput } from "./date.js";
 import { openSpotlight, rememberPerson } from "./spotlight.js";
 import { guideAttach } from "./guide.js";
-import { deletePerson, editPerson, addField, dupHint, ringPopup, setRing, editIhrZwei, editBund, bundKindName, addBund, addToCircle, historyText } from "./shared.js";
+import { GROUPINGS, groupingOf, setGrouping, groupLabel, groupRows } from "./groups.js";
+import { deletePerson, editPerson, addField, dupHint, ringPopup, setRing, editIhrZwei, editBund, ringBig, bundKindName, bundKindIcon, addBund, addToCircle, historyText } from "./shared.js";
 
 const LS = (k, d) => { try { return JSON.parse(localStorage.getItem("syn." + k)) ?? d; } catch (_) { return d; } };
 const SAVE = (k, v) => { try { localStorage.setItem("syn." + k, JSON.stringify(v)); } catch (_) {} };
@@ -93,7 +94,15 @@ async function sidebar(route) {
   return h("aside.side", { "data-seg": "side" },
     h("div.top", logo(), h("button.btn.ghost.icon", { title: `Seitenleiste ein-/ausklappen (${pretty(binding("toggle_sidebar"))})`, on: { click: toggleSidebar } }, icon("sidebar"))),
     h("button.nav.spot-btn", { on: { click: () => openSpotlight() } }, icon("search"), h("span.lab", "Suchen"), h("span.n", keys(binding("search")))),
-    nav("#/people", "users", "Personen", all.filter((r) => !r.is_self).length, ["people", "p", "v", "merge"].includes(p0)),
+    (() => { const a = nav("#/people", "users", "Personen", all.filter((r) => !r.is_self).length, ["people", "p", "v", "merge"].includes(p0));
+      // nochmal klicken, wenn man schon in der Liste ist: Filter und Suche zurücksetzen
+      a.addEventListener("click", (ev) => {
+        if (!["people", "v"].includes(p0)) return;
+        ev.preventDefault();
+        Object.assign(VS, { filter: "", kind: "all", q: "", circle: "", max_level: "", via: "", savedId: null });
+        if (location.hash.startsWith("#/people")) import("./app.js").then((m) => m.render()); else location.hash = "#/people";
+      });
+      return a; })(),
     nav("#/circles", "circles", "Kreise", Object.keys(S.circles).length, ["circles", "c"].includes(p0)),
     S.settings.notes_enabled ? nav("#/notes", "note", "Notizen", undefined, p0 === "notes")
       : h("a.nav", { href: "#/settings/modules", title: "Notizen" }, icon("note"), h("span.lab.t3", "Notizen"), h("span.n.tag", "Modul aus")),
@@ -117,10 +126,13 @@ async function savedView(main, id, route) {
 }
 
 export function filterRows(all) {
-  let list = all.filter((r) => !r.is_self || VS.view === "net" || VS.view === "rings");
+  // Du selbst bleibst von Filtern unberührt – nur „Dich zeigen“ im Netz blendet dich aus
+  const self = VS.view === "net" || VS.view === "rings" ? all.filter((r) => r.is_self) : [];
+  let list = all.filter((r) => !r.is_self);
+  if (VS.filter === "new") list = list.filter((r) => !r.edited);
   if (VS.kind !== "all") list = list.filter((r) => r.kind === VS.kind);
-  if (VS.filter === "lose") list = list.filter((r) => !r.circles.length && !r.is_self);
-  if (VS.filter === "no_ring") list = list.filter((r) => r.level == null && !r.is_self);
+  if (VS.filter === "lose") list = list.filter((r) => !r.circles.length);
+  if (VS.filter === "no_ring") list = list.filter((r) => r.level == null);
   if (VS.filter === "uncertain") list = list.filter((r) => !r.name || r.name_uncertain || Object.values(r.v).some((x) => x.u));
   if (VS.filter === "long_unseen") list = list.filter((r) => r.long_unseen);
   if (VS.circle) list = list.filter((r) => r.circles_all.includes(VS.circle));
@@ -129,6 +141,7 @@ export function filterRows(all) {
   if (VS.q) { const q = VS.q.toLowerCase(); list = list.filter((r) => [r.display, r.description, ...(r.aliases || []), ...r.circles_all.map((c) => S.circles[c]?.name), ...Object.values(r.v).map((x) => x.d)].join(" ").toLowerCase().includes(q)); }
   const key = VS.sort.replace(/^-/, ""), desc = VS.sort.startsWith("-");
   const val = (r) => key === "name" ? r.display.toLowerCase() : key === "created" ? r.created_at : key === "level" ? (r.level ?? 9) : key === "seen" ? (r.v.f_seen?.raw || "") : (r.v[key]?.raw ?? "");
+  list = [...self, ...list];
   list.sort((a, b) => { const x = val(a), y = val(b); const c = typeof x === "number" && typeof y === "number" ? x - y : String(x).localeCompare(String(y), "de"); return desc ? -c : c; });
   return list;
 }
@@ -146,6 +159,9 @@ async function people(main, view, route, saved = null) {
   const views = VIEWS.filter(([id]) => S.settings.use_levels || id !== "rings");
   const filterBtn = h("button.btn.sm", { on: { click: (e) => filterMenu(e.currentTarget, redraw) } }, icon("filter"), "Filter" + (activeFilters() ? " · " + activeFilters() : ""));
   const sortBtn = h("button.btn.sm", { on: { click: (e) => sortMenu(e.currentTarget, redraw) } }, icon("sort"), "Sortiert: " + sortLabel());
+  const groupBtn = ["grid", "list", "table"].includes(VS.view) ? h("button.btn.sm", { on: { click: (e) => menu(e.currentTarget, [{ label: "Gruppieren nach" },
+    ...GROUPINGS.filter((g) => !g[2] || g[2]()).map(([k, l]) => ({ label: l, on: groupingOf(VS.view, VS.cfg) === k, action: () => { setGrouping(VS.view, VS.cfg, k, !!VS.savedId); groupBtn.lastChild.textContent = "Gruppiert: " + groupLabel(k); redraw(); } }))]) } },
+    icon("layers"), h("span", "Gruppiert: " + groupLabel(groupingOf(VS.view, VS.cfg)))) : null;
   for (const [id] of views) onPage("view_" + id, () => (location.hash = "#/people/" + id));
   onPage("save_view", () => saveView(saved));
   page.append(
@@ -155,10 +171,10 @@ async function people(main, view, route, saved = null) {
       h("span.small.t2", "Personen"), h("select.input", { on: { change: (e) => { VS.kind = e.target.value; redraw(); } } },
         [["all", "Alle Menschen & Tiere"], ["person", "Menschen"], ["pet", "Haustiere"]].map(([k, l]) => h("option", { value: k, selected: VS.kind === k }, l))),
       h("div.seg", { "data-seg": "views" }, views.map(([id, label, ic], i) => h("button" + (VS.view === id ? ".on" : ""), { title: `${label} (${pretty(binding("view_" + id))})`, on: { click: () => { location.hash = `#/people/${id}`; } } }, icon(ic), label))),
-      h("span.grow"), filterBtn, sortBtn,
+      h("span.grow"), filterBtn, groupBtn, sortBtn,
       h("button.btn.sm", { title: "Ansicht speichern", on: { click: () => saveView(saved) } }, icon("download"), saved ? "Speichern" : "Ansicht speichern")),
     body);
-  redraw();
+  await redraw(); // erst fertig zeichnen, dann einblenden
 }
 
 function activeFilters() { return [VS.filter, VS.circle, VS.max_level, VS.via].filter(Boolean).length || ""; }
@@ -166,7 +182,7 @@ function sortLabel() { const k = VS.sort.replace("-", ""); return ({ name: "Name
 
 function filterMenu(anchor, redraw) {
   const it = (label, key, val) => ({ label, on: VS[key] === val, action: () => { VS[key] = VS[key] === val ? "" : val; redraw(); refreshToolbar(); } });
-  menu(anchor, [{ label: "Zeigen" }, it("Lose (ohne Kreis)", "filter", "lose"), S.settings.use_levels ? it("Ohne Ring", "filter", "no_ring") : null, it("Mit unsicheren Angaben", "filter", "uncertain"),
+  menu(anchor, [{ label: "Zeigen" }, it("Neue Personen (noch unbearbeitet)", "filter", "new"), it("Lose (ohne Kreis)", "filter", "lose"), S.settings.use_levels ? it("Ohne Ring", "filter", "no_ring") : null, it("Mit unsicheren Angaben", "filter", "uncertain"),
     S.settings.use_ist ? it("Nah, aber lange nicht gesehen", "filter", "long_unseen") : null,
     S.settings.use_levels ? { label: "Ring höchstens" } : null, ...(S.settings.use_levels ? [1, 2, 3, 4].map((n) => it(ringName(n), "max_level", String(n))) : []),
     { label: "Kreis" }, ...Object.values(S.circles).sort((a, b) => a.name.localeCompare(b.name)).map((c) => it(c.name, "circle", c.id)),
@@ -199,7 +215,10 @@ async function drawView(body, all) {
   const box = document.createDocumentFragment();
   if (VS.view === "grid") grid(box, list);
   else if (VS.view === "list") listView(box, list);
-  else if (VS.view === "table") await (await import("./table.js")).table(box, list, all);
+  else if (VS.view === "table") {
+    const g = groupingOf("table", VS.cfg);
+    await (await import("./table.js")).table(box, g ? groupRows(g, list).flatMap((x) => x.rows) : list, all, g);
+  }
   else {
     const viz = await import("./viz.js");
     if (VS.view === "rings") await viz.rings(box, list, all);
@@ -210,26 +229,34 @@ async function drawView(body, all) {
 }
 
 function grid(body, list) {
-  const g = h("div.pgrid");
-  for (const r of list) {
+  if (!list.length) return body.append(h("div.card.empty", "Keine Personen für diese Auswahl."));
+  const gs = groupRows(groupingOf("grid", VS.cfg), list);
+  for (const grp of gs) {
+    const g = h("div.pgrid");
+    for (const r of grp.rows) gridCell(g, r);
+    body.append(grp.head ? h("section.pgroup", h("div.pgroup-h", grp.head, h("span.small.t3", grp.rows.length)), g) : g);
+  }
+}
+function gridCell(g, r) {
+  {
     const seen = r.v.f_seen?.raw;
     g.append(h("a.pcell", { href: "#/p/" + r.id }, avatar(r, 56), h("div.nm.ellipsis", nameEl(r)), h("div.small.t2", seen ? rel(seen) : "–"),
       h("button.btn.sm.seen-btn", { title: "Heute gesehen", on: { click: async (e) => { e.preventDefault(); await POST(`/seen-today/${r.id}`); invalidate(); toast(`${r.display}: heute gesehen`); r.v.f_seen = { raw: today(), d: today() }; } } }, icon("eye"))));
   }
-  body.append(list.length ? g : h("div.card.empty", "Keine Personen für diese Auswahl."));
 }
 
 function listView(body, list) {
-  const groups = {};
-  for (const r of list) (groups[r.main_circle_id || "_lose"] ||= []).push(r);
+  const gs = groupRows(groupingOf("list", VS.cfg), list);
   const closed = new Set(LS("closed", []));
   const box = h("div.card.plist");
-  const keys = Object.keys(groups).sort((a, b) => (a === "_lose") - (b === "_lose") || (S.circles[a]?.name || "").localeCompare(S.circles[b]?.name || ""));
-  for (const k of keys) {
-    const items = h("div" + (closed.has(k) ? ".hidden" : ""), groups[k].map((r) => h("a.item", { href: "#/p/" + r.id }, avatar(r, 26), h("span.grow", nameEl(r)),
-      S.settings.use_levels ? h("span.small.t2", ringName(r.level)) : null, h("span.small.t2", { style: { width: "120px", textAlign: "right" } }, r.v.f_seen ? rel(r.v.f_seen.raw) : "–"))));
+  const row = (r) => h("a.item", { href: "#/p/" + r.id }, avatar(r, 26), h("span.grow", nameEl(r)),
+    S.settings.use_levels ? h("span.small.t2", ringName(r.level)) : null, h("span.small.t2", { style: { width: "120px", textAlign: "right" } }, r.v.f_seen ? rel(r.v.f_seen.raw) : "–"));
+  for (const grp of gs) {
+    if (!grp.head) { box.append(...grp.rows.map(row)); continue; }
+    const k = groupingOf("list", VS.cfg) + ":" + grp.key;
+    const items = h("div" + (closed.has(k) ? ".hidden" : ""), grp.rows.map(row));
     const head = h("div.grp-h", { on: { click: () => { items.classList.toggle("hidden"); closed.has(k) ? closed.delete(k) : closed.add(k); SAVE("closed", [...closed]); } } },
-      icon(closed.has(k) ? "right" : "down"), k === "_lose" ? h("span.chip", "Lose") : circleChip(k), h("span.small.t2", groups[k].length));
+      icon(closed.has(k) ? "right" : "down"), grp.head, h("span.small.t2", grp.rows.length));
     box.append(h("div.grp", head, items));
   }
   body.append(list.length ? box : h("div.card.empty", "Keine Personen."));
@@ -281,13 +308,15 @@ async function personPage(main, id) {
   // Ihr zwei
   const ring = e.level;
   const ihr = e.is_self ? null : h("div.card",
-    h("div.card-h", h("div.row", h("span.small.t2", "Ihr zwei"), h("button.chip.sel", { style: { cursor: "pointer" }, on: { click: async () => { if (await editIhrZwei(e)) reload(); } } }, bundKindName(e.ihr_zwei?.kind_id), " ▾")),
-      e.ist ? h("span.small.t2", `Ist: Ring ${e.ist.ring} · letzter Kontakt ${rel(e.ist.last)}`, e.long_unseen ? h("span.tag.yellow", { style: { marginLeft: "6px" } }, "lange nicht gesehen") : null) : null),
-    h("div.card-b.row", { style: { gap: "24px", alignItems: "flex-start" } },
-      S.settings.use_levels ? h("div.col.guide-ring", { style: { alignItems: "center" } },
-        ringDrag(ring, async (l) => { await setRing(id, l); reload(); }),
+    h("div.card-h", h("div.row", h("span.small.t2", "Ihr zwei"), h("button.chip.sel", { style: { cursor: "pointer" }, on: { click: async () => { if (await editIhrZwei(e)) reload(); } } }, bundKindIcon(e.ihr_zwei?.kind_id), bundKindName(e.ihr_zwei?.kind_id), " ▾")),
+      e.long_unseen ? h("span.tag.yellow", "lange nicht gesehen") : null),
+    h("div.card-b.iz-body" + (S.settings.use_levels ? "" : ".no-ring"),
+      S.settings.use_levels ? h("div.iz-ring.guide-ring",
+        ringBig(ring, async (l) => { await setRing(id, l); reload(); }),
         h("button.btn.sm.ghost", { on: { click: (ev) => ringPopup(ev.currentTarget, ring, async (l) => { await setRing(id, l); reload(); }) } }, h("b", ringName(ring)), icon("down"))) : null,
-      h("div.fs-rows.grow", bundFields().filter((d) => d.id !== "f_level").map((d) => fieldRow(d, iz[d.id] || [], `/entities/${id}/fields/${d.id}`, e, reload)))));
+      h("div.iz-tiles",
+        bundFields().filter((d) => d.id !== "f_level").map((d) => h("div.iz-tile", fieldRow(d, iz[d.id] || [], `/entities/${id}/fields/${d.id}`, e, reload))),
+        e.ist ? h("div.iz-tile.static", h("div.iz-k", "Ist (berechnet)"), h("div.iz-v", `Ring ${e.ist.ring}`), h("div.iz-sub", `letzter Kontakt ${rel(e.ist.last)}`, e.long_unseen ? " · lange nicht gesehen" : "")) : null)));
 
   // Felder
   const sections = fieldSections(e, reload);
@@ -295,14 +324,8 @@ async function personPage(main, id) {
     h("div.card-b", sections.length ? sections : h("div.empty", "Noch keine Felder. Ein Eintrag beginnt mit Kontext und wird nach und nach zur Person.")));
 
   // rechte Spalte: Bünde, Kreise, Verlauf, Routinen
-  const bunds = h("div.card", h("div.card-h", h("h3", "Bünde"), h("button.btn.sm", { on: { click: (ev) => pickPerson(ev.currentTarget, { exclude: [id, S.me.self_id], onPick: async (r) => { if (await addBund(e, r)) reload(); } }) } }, icon("plus"), "Bund")),
-    h("div.card-b.col", e.bunds.length ? e.bunds.map((b) => h("div.row", avatar({ display: b.other_name, name: b.other_name, main_circle_id: (S.rows || []).find((r) => r.id === b.other_id)?.main_circle_id }, 24),
-      h("a.grow", { href: "#/p/" + b.other_id }, b.other_name), h("span.small.t2", b.role_other ? `${b.role_other}` : bundKindName(b.kind_id)),
-      h("button.btn.sm.ghost.icon", { on: { click: (ev) => menu(ev.currentTarget, [
-        { label: "Bund bearbeiten", icon: "edit", action: async () => { if (await editBund(e, b)) reload(); } },
-        { label: "Bund-Felder (z.B. Jahrestag)", action: async () => { const d = S.fields.f_anniv; if (d && await editField(d, b.fields.f_anniv || [], `/bunds/${b.id}/fields/f_anniv`)) reload(); } },
-        { label: "Bund löschen", icon: "trash", action: async () => { if (await confirmDlg("Bund löschen?", `Bund mit ${b.other_name} löschen.`, "Löschen", true)) { await DEL("/bunds/" + b.id); invalidate(); reload(); } } }], { align: "right" }) } }, icon("more"))))
-      : h("div.t3.small", "Noch keine Bünde zu anderen.")));
+  const allRowsB = await rows();
+  const bunds = e.is_self ? null : bundWidget(e, allRowsB, reload); // du hast zu jedem einen Bund – hier nicht nötig
   const allRows = await rows();
   const myC = new Set(e.memberships.filter((m) => m.active).map((m) => m.circle_id));
   const knows = e.is_self ? [] : allRows.filter((r) => r.id !== id && !r.is_self && r.circles.some((c) => myC.has(c)));
@@ -348,7 +371,10 @@ async function personPage(main, id) {
     h("button.btn.sm", { on: { click: async () => { await POST(`/suggestions/${s.id}/accept`); invalidate(); reload(); } } }, "Übernehmen"),
     h("button.btn.sm.ghost.icon", { on: { click: async () => { await POST(`/suggestions/${s.id}/reject`); reload(); } } }, icon("x")))))) : null;
   page.append(h("a.crumb", { href: "#/people" }, icon("left"), "Personen"), head, dupHint(e, { desktop: true, onChange: reload }),
-    h("div.pgridx", h("div.col", { style: { gap: "16px" } }, ihr, fields, notes), h("div.col", { style: { gap: "16px" } }, suggBox, bunds, circles, knowsCard, verlauf, routines)));
+    h("div.pgrid3",
+      h("div.pcol.wide", ihr, bunds),
+      h("div.pcol.narrow", fields, notes),
+      h("div.pcol.narrow", suggBox, circles, knowsCard, verlauf, routines)));
   guideAttach(e);
 }
 
@@ -465,4 +491,46 @@ function ringDrag(level, onSet) {
   });
   svg.dataset.tip = "Ziehen setzt den Ring";
   return svg;
+}
+
+// Großes Ringdiagramm: Überfahren hebt den Ring hervor, Klick oder Ziehen setzt ihn
+// Bünde als großes Widget: du – die Person – ihre Verbindungen
+function bundWidget(e, all, reload) {
+  const byId = Object.fromEntries(all.map((r) => [r.id, r]));
+  const me = all.find((r) => r.is_self) || { is_self: true, display: "Du" };
+  const others = e.bunds.filter((b) => byId[b.other_id]);
+  const graph = h("div.bw-graph");
+  const lines = h("svg.bw-lines", { viewBox: "0 0 100 100", preserveAspectRatio: "none" });
+  graph.append(lines);
+  const node = (row, x, y, cls, label, sub, href) => h("a.bw-node" + cls, { href, style: { left: x + "%", top: y + "%" } },
+    avatar(row, cls.includes("center") ? 58 : 40, { exact: true, self: row.is_self }), h("span.bw-name", label), sub ? h("span.bw-sub", sub) : null);
+  const link = (x1, y1, x2, y2, text, dashed) => {
+    lines.append(h("line", { x1, y1, x2, y2, "vector-effect": "non-scaling-stroke", class: dashed ? "dashed" : "" }));
+    if (text) graph.append(h("span.bw-tag", { style: { left: (x1 + x2) / 2 + "%", top: (y1 + y2) / 2 + "%" } }, text));
+  };
+  const cx = others.length ? 46 : 62, cy = 50;
+  if (!e.is_self) {
+    const meX = others.length ? 11 : 22;
+    link(meX, cy, cx, cy, e.ihr_zwei?.kind_id ? bundKindName(e.ihr_zwei.kind_id) : "Ihr zwei", !e.ihr_zwei?.kind_id);
+    graph.append(node(me, meX, cy, ".me", "Du", null, "#/p/" + S.me.self_id));
+  }
+  const n = others.length;
+  others.forEach((b, i) => {
+    const ang = n === 1 ? 0 : -70 + (140 * i) / (n - 1);
+    const rad = (ang * Math.PI) / 180;
+    const x = cx + Math.cos(rad) * 38, y = cy + Math.sin(rad) * 38;
+    link(cx, cy, x, y, b.role_other || bundKindName(b.kind_id));
+    graph.append(node(byId[b.other_id], Math.min(90, x), y, "", byId[b.other_id].display.split(" ")[0], null, "#/p/" + b.other_id));
+  });
+  graph.append(node(e, cx, cy, ".center", e.is_self ? "Du" : (e.name || e.description || "").split(" ")[0], null, "#/p/" + e.id));
+  const list = others.length ? h("div.bw-list", others.map((b) => h("div.bw-row", avatar(byId[b.other_id], 28, { exact: true }),
+    h("a.grow", { href: "#/p/" + b.other_id }, byId[b.other_id].display), h("span.small.t2.row", { style: { gap: "4px" } }, bundKindIcon(b.kind_id), [b.role_other, bundKindName(b.kind_id)].filter(Boolean)[0] || ""),
+    h("button.btn.sm.ghost.icon", { on: { click: (ev) => menu(ev.currentTarget, [
+      { label: "Bund bearbeiten", icon: "edit", action: async () => { if (await editBund(e, b)) reload(); } },
+      { label: "Bund-Felder (z.B. Jahrestag)", action: async () => { const d = S.fields.f_anniv; if (d && await editField(d, b.fields.f_anniv || [], `/bunds/${b.id}/fields/f_anniv`)) reload(); } },
+      { label: "Bund löschen", icon: "trash", action: async () => { if (await confirmDlg("Bund löschen?", `Bund mit ${b.other_name} löschen.`, "Löschen", true)) { await DEL("/bunds/" + b.id); invalidate(); reload(); } } }], { align: "right" }) } }, icon("more"))))) : null;
+  const height = Math.max(240, Math.min(380, 160 + n * 34));
+  graph.style.height = height + "px";
+  return h("div.card.bw", h("div.card-h", h("h3", "Bünde"), h("button.btn.sm", { on: { click: (ev) => pickPerson(ev.currentTarget, { exclude: [e.id, S.me.self_id], onPick: async (r) => { if (await addBund(e, r)) reload(); } }) } }, icon("plus"), "Bund")),
+    h("div.card-b", graph, list || h("p.small.t3", { style: { margin: 0 } }, "Noch keine Bünde zu anderen. Mit „+ Bund“ verbindest du diese Person mit jemandem.")));
 }

@@ -6,6 +6,12 @@ from ._common import iter_files
 
 class Android(Importer):
     id = "android"
+    steps = [
+        'Installiere am Android-Handy „SMS Backup & Restore“.',
+        'Erstelle ein Backup von Anrufen und/oder SMS.',
+        'Kopiere die XML-Dateien (calls-….xml, sms-….xml) an den Rechner.',
+        'Wähl sie hier aus, entscheide, ob neue Leute angelegt werden, und importiere.',
+    ]
     name = "Android-Anrufe und SMS"
     way = "Backup-Export als XML (SMS Backup & Restore)"
     official = "Datei"

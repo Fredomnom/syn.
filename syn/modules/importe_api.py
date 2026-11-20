@@ -106,14 +106,36 @@ async def run(iid: str, request: Request, ctx: Ctx = Depends(current)):
     if imp.accepts_files and not files and not any(c.get("required") for c in imp.config):
         raise Bad("Bitte eine Datei auswählen")
     import asyncio
-    status = await asyncio.to_thread(_run_thread, ctx, iid, files)
-    row = db.q1("SELECT last_status, last_log FROM importer_configs WHERE user_id=? AND importer_id=?", ctx.uid, iid)
-    return {"status": status, "log": row["last_log"] if row else ""}
+    import threading
+    from ..importe import JOBS
+    job_id = new_id("job", 10)
+    job = JOBS[job_id] = {"id": job_id, "user": ctx.uid, "importer": iid, "phase": "Starten", "done": 0, "total": None,
+                          "finished": False, "status": None, "log": ""}
+    if request.query_params.get("background") in ("1", "true"):
+        threading.Thread(target=_run_thread, args=(ctx, iid, files, job), daemon=True).start()
+        return {"job": job_id}
+    status = await asyncio.to_thread(_run_thread, ctx, iid, files, job)
+    return {"status": status, "log": job["log"]}
 
 
-def _run_thread(ctx, iid, files):
+@router.get("/importers/jobs/{job_id}")
+def job_state(job_id: str, ctx: Ctx = Depends(current)):
+    from ..importe import JOBS
+    j = JOBS.get(job_id)
+    if not j or j["user"] != ctx.uid:
+        raise HTTPException(404, "Import nicht gefunden")
+    return {k: v for k, v in j.items() if k != "user"}
+
+
+def _run_thread(ctx, iid, files, job):
     try:
-        return run_importer(ctx, iid, files)
+        status = run_importer(ctx, iid, files, job)
+        row = db.q1("SELECT last_log FROM importer_configs WHERE user_id=? AND importer_id=?", ctx.uid, iid)
+        job.update({"finished": True, "status": status, "log": row["last_log"] if row else ""})
+        return status
+    except Exception as e:
+        job.update({"finished": True, "status": f"Fehler: {e}"})
+        raise
     finally:
         db.close()
 

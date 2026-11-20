@@ -24,7 +24,7 @@ def vcards_to_contacts(text, with_uid=True):
         out.append(Contact(service_id=c["uid"] if with_uid else None, name=c["name"] or c["nickname"],
                            phones=c["phones"], emails=c["emails"], birthday=c["birthday"],
                            avatar_bytes=photo if isinstance(photo, bytes) else None,
-                           avatar_url=photo if isinstance(photo, str) else None, fields=fields))
+                           avatar_url=photo if isinstance(photo, str) else None, fields=fields, note=c.get("note")))
     return out
 
 

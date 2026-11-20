@@ -3,6 +3,11 @@ from ..importe import Contact, Importer
 
 class LastFm(Importer):
     id = "lastfm"
+    steps = [
+        'Erstelle auf last.fm/api/account/create einen API-Account und kopiere den API-Key.',
+        'Trag deinen Last.fm-Namen und den Key hier ein.',
+        'Klick auf „Importieren“.',
+    ]
     name = "Last.fm"
     way = "API"
     official = "ja"

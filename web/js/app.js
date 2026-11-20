@@ -7,7 +7,7 @@ import { onGlobal, keys } from "./shortcuts.js";
 import { S, h, api, GET, POST, clear, logo, loadBase, isMobile, flushQueue, toast, icon, rows } from "./core.js";
 import { serviceIcon } from "./fields.js";
 import { startGuide } from "./guide.js";
-import { importStarted } from "./importstatus.js";
+import { runImport, stepsEl } from "./importstatus.js";
 
 export const route = { parts: [], query: {} };
 let mode = null;
@@ -156,9 +156,12 @@ async function renderSetup(app) {
       try {
         await api("PUT", "/importers/" + imp.id, { enabled: true, config: cfg, risk_ack: !!ack, schedule: imp.accepts_files ? { every: "never" } : { every: "daily", time: "04:00" } });
         let fd; if (file?.files.length) { fd = new FormData(); for (const f of file.files) fd.append("files", f); }
-        const stw = importStarted(imp);
-        const r = await api("POST", `/importers/${imp.id}/run`, fd, { quiet: true }).catch((e) => { stw.fail(e.message); throw e; });
-        stw.done(r.status, r.log);
+        const pb = h("div.imp-bar", h("span"));
+        clear(status, h("div.col", { style: { gap: "4px" } }, h("span.ip-st", "Importiere …"), pb));
+        const r = await runImport(imp, fd, { onProgress: (j) => {
+          status.querySelector(".ip-st").textContent = j.total ? `${j.phase || "Importiere"} · ${j.done} von ${j.total}` : `${j.phase || "Importiere"} …`;
+          if (j.total) pb.classList.add("det"), pb.firstChild.style.width = Math.round((j.done / j.total) * 100) + "%";
+        } });
         const m = /(\d+) neu/.exec(r.status);
         if (r.status.startsWith("Fehler") || r.status.includes(": Fehler")) { clear(status, h("span", { style: { color: "var(--danger)" } }, r.status)); go.disabled = false; return; }
         imported[imp.id] = m ? +m[1] : 0; openImp = null; draw(true);
@@ -167,7 +170,7 @@ async function renderSetup(app) {
     } } }, icon("download"), "Importieren");
     return h("div.imp-form", h("div.row", h("span.imp-logo", serviceIcon(imp.service || imp.id, 20)), h("div", h("b", imp.name), h("div.small.t2", imp.brings))),
       imp.needs === "google" ? h("p.small.t2", "Google verbindest du später in den Einstellungen unter „Handy & Sync“.") : [
-        file ? h("label.f", imp.file_hint, file) : null, inputs,
+        stepsEl(imp), file ? h("label.f", imp.file_hint, file) : null, inputs,
         ack ? h("label.check.small", ack, h("span", imp.risk)) : null,
         h("div.row", go, status)]);
   };

@@ -1,5 +1,5 @@
 // Kleines Statusfenster unten rechts für laufende Importe – bleibt beim Seitenwechsel stehen.
-import { h, icon, clear, invalidate } from "./core.js";
+import { h, icon, clear, invalidate, api, GET } from "./core.js";
 import { serviceIcon } from "./fields.js";
 
 let dock = null;
@@ -18,6 +18,14 @@ export function importStarted(imp) {
   const tick = setInterval(() => { if (box.classList.contains("running")) text.textContent = `Importiere … ${Math.round((Date.now() - t0) / 1000)} s`; }, 1000);
   const close = () => { clearInterval(tick); box.classList.add("leaving"); setTimeout(() => box.remove(), 200); };
   return {
+    progress(j) {
+      if (!box.classList.contains("running")) return;
+      const pct = j.total ? Math.min(100, Math.round((j.done / j.total) * 100)) : null;
+      bar.classList.toggle("det", pct != null);
+      if (pct != null) bar.firstChild.style.width = pct + "%";
+      clearInterval(tick);
+      text.textContent = j.total ? `${j.phase || "Importiere"} · ${j.done} von ${j.total}` : `${j.phase || "Importiere"} …`;
+    },
     done(status, log) {
       clearInterval(tick); invalidate();
       const err = /Fehler/.test(status);
@@ -31,4 +39,24 @@ export function importStarted(imp) {
     },
     fail(msg) { this.done("Fehler: " + msg); },
   };
+}
+
+// Import im Hintergrund starten und den Fortschritt abfragen. Liefert {status, log}.
+export async function runImport(imp, fd, { onProgress } = {}) {
+  const st = importStarted(imp);
+  try {
+    const { job } = await api("POST", `/importers/${imp.id}/run?background=1`, fd, { quiet: true });
+    for (;;) {
+      await new Promise((r) => setTimeout(r, 450));
+      const j = await GET("/importers/jobs/" + job);
+      st.progress(j); onProgress?.(j);
+      if (j.finished) { st.done(j.status || "", j.log); return { status: j.status || "", log: j.log }; }
+    }
+  } catch (e) { st.fail(e.message); throw e; }
+}
+
+// Schritt-für-Schritt-Anleitung eines Importers
+export function stepsEl(imp) {
+  if (!imp.steps?.length) return null;
+  return h("ol.imp-steps", imp.steps.map((t, i) => h("li", h("span.imp-step-n", i + 1), h("span", t))));
 }

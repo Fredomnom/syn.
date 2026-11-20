@@ -169,8 +169,41 @@ const P = {
   smartphone: '<rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M11 18h2"/>', clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
   layers: '<path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/>',
   swap: '<path d="M4 8h15M15 4l4 4-4 4"/><path d="M20 16H5M9 12l-4 4 4 4"/>',
+  // Symbole für Kreis- und Bund-Arten
+  home: '<path d="M3 11 12 4l9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/>',
+  heart: '<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>',
+  briefcase: '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M3 13h18"/>',
+  book: '<path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 19a2 2 0 0 1 2-2h13"/>',
+  graduation: '<path d="m2 9 10-5 10 5-10 5z"/><path d="M6 11v5c3 2 9 2 12 0v-5M22 9v6"/>',
+  dumbbell: '<path d="M6 7v10M3 9v6M18 7v10M21 9v6M6 12h12"/>',
+  ball: '<circle cx="12" cy="12" r="9"/><path d="M12 3a14 14 0 0 1 0 18M3.5 9h17M3.5 15h17"/>',
+  music: '<path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/>',
+  gamepad: '<rect x="2" y="7" width="20" height="11" rx="5"/><path d="M7 11v3M5.5 12.5h3M15 12h.01M18 13h.01"/>',
+  coffee: '<path d="M4 9h13v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5z"/><path d="M17 11h1.5a2.5 2.5 0 0 1 0 5H17M8 2v3M12 2v3"/>',
+  plane: '<path d="M10 20l2-6-7-3v-2l8 1 3-6h2l-1 7 5 1v2l-5 1-3 5z"/>',
+  car: '<path d="M5 16l1.5-5A2 2 0 0 1 8.4 9.5h7.2a2 2 0 0 1 1.9 1.5L19 16"/><rect x="3" y="15" width="18" height="4" rx="1.5"/><circle cx="7" cy="19.5" r="1"/><circle cx="17" cy="19.5" r="1"/>',
+  tree: '<path d="M12 3 6 11h3l-4 6h14l-4-6h3z"/><path d="M12 17v4"/>',
+  flag: '<path d="M5 21V4M5 4h11l-2 4 2 4H5"/>',
+  camera: '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7l2-3h4l2 3"/><circle cx="12" cy="13.5" r="3.5"/>',
+  code: '<path d="m8 8-4 4 4 4M16 8l4 4-4 4M14 5l-4 14"/>',
+  palette: '<path d="M12 3a9 9 0 1 0 0 18c1.5 0 2-1 2-2s-1-1.5-1-2.5 1-1.5 2-1.5h2a4 4 0 0 0 4-4c0-4.4-4-8-9-8z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10" cy="7" r="1"/><circle cx="15" cy="7.5" r="1"/>',
+  globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
+  building: '<rect x="5" y="3" width="14" height="18" rx="1"/><path d="M9 7h2M13 7h2M9 11h2M13 11h2M9 15h2M13 15h2M10 21v-3h4v3"/>',
+  baby: '<circle cx="12" cy="8" r="4"/><path d="M10 7.5h.01M14 7.5h.01M10.5 10c1 .7 2 .7 3 0M6 21c0-3.3 2.7-6 6-6s6 2.7 6 6"/>',
+  wave: '<path d="M7 11V6.5a1.5 1.5 0 0 1 3 0V11M10 10V4.5a1.5 1.5 0 0 1 3 0V10M13 10V5.5a1.5 1.5 0 0 1 3 0V12M16 9.5a1.5 1.5 0 0 1 3 0V14a7 7 0 0 1-7 7h-1a6 6 0 0 1-5-2.7L3.5 14.6a1.5 1.5 0 0 1 2.4-1.8L7 14"/>',
+  gift: '<rect x="3" y="8" width="18" height="4" rx="1"/><path d="M5 12v9h14v-9M12 8v13M12 8S10.5 3 8 4s0 4 4 4zM12 8s1.5-5 4-4 0 4-4 4z"/>',
+  rings2: '<circle cx="9" cy="14" r="5"/><circle cx="15" cy="14" r="5"/><path d="m10 5 2-2 2 2"/>',
+  church: '<path d="M12 2v4M10 4h4M6 21V11l6-5 6 5v10M3 21h18M10 21v-4a2 2 0 0 1 4 0v4"/>',
+  shield: '<path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z"/>',
+  sparkle: '<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6"/>',
+  mountain: '<path d="m3 20 6-11 4 7 2-3 6 7z"/>',
+  bike: '<circle cx="6" cy="16" r="3.5"/><circle cx="18" cy="16" r="3.5"/><path d="M6 16l4-7h5l3 7M10 9l2 7h-6M14 6h2"/>',
   undo: '<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>', redo: '<path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/>',
 };
+export const ICON_NAMES = () => Object.keys(P);
+export const KIND_ICON_SET = ["home", "heart", "users", "briefcase", "book", "graduation", "dumbbell", "ball", "bike", "music", "gamepad",
+  "coffee", "plane", "car", "tree", "mountain", "flag", "camera", "code", "palette", "globe", "building", "church", "baby", "wave", "gift",
+  "rings2", "shield", "sparkle", "paw", "star", "pin", "message", "circles", "bund"];
 export function icon(name, cls = "") {
   const s = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   s.setAttribute("viewBox", "0 0 24 24"); s.setAttribute("class", "i " + cls);
@@ -284,7 +317,8 @@ export function avatar(row, size = 28, { sel = false, self = false, exact = fals
 }
 export function circleChip(cid, { star = false, onRemove = null, role = null } = {}) {
   const c = S.circles[cid]; const cc = circleColors(cid);
-  return h("span.chip", { style: { background: cc.bg, color: cc.fg } }, star ? icon("star", "xs") : null, c ? c.name : "?", role ? h("span.t3", ` · ${role}`) : null,
+  const ki = c && S.kinds[c.kind_id]?.icon;
+  return h("span.chip", { style: { background: cc.bg, color: cc.fg } }, star ? icon("star", "xs") : ki ? icon(ki, "xs") : null, c ? c.name : "?", role ? h("span.t3", ` · ${role}`) : null,
     onRemove ? h("button", { title: "Entfernen", on: { click: (e) => { e.preventDefault(); e.stopPropagation(); onRemove(); } } }, icon("x")) : null);
 }
 export function nameEl(row) {
@@ -369,6 +403,52 @@ export function popover(anchor, content, { align = "left", x, y } = {}) {
   });
   return p;
 }
+// Pfeiltasten in jedem Popover: ↑/↓ wandern durch die Einträge, Enter wählt.
+// Solange man tippt, zählt die Maus nicht – erst wenn sie sich wieder bewegt.
+function popItems() { return openPop ? [...openPop.querySelectorAll(".menu button:not([disabled]), .menu a, .ip-grid button")].filter((b) => b.offsetParent) : []; }
+document.addEventListener("keydown", (e) => {
+  if (!openPop || !["ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "Enter", "Home", "End"].includes(e.key)) return;
+  const its = popItems(); if (!its.length) return;
+  const grid = openPop.querySelector(".ip-grid");
+  const inText = e.target.matches?.("input,textarea") && e.target.closest(".pop");
+  if (inText && ["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
+  let i = its.findIndex((b) => b.classList.contains("kfocus"));
+  if (e.key === "Enter") { if (i < 0) return; e.preventDefault(); e.stopPropagation(); its[i].click(); return; }
+  if (!grid && (e.key === "ArrowLeft" || e.key === "ArrowRight")) return;
+  e.preventDefault(); e.stopPropagation();
+  document.body.classList.add("kbd-nav");
+  if (i < 0) i = its.findIndex((b) => b.classList.contains("on"));
+  const cols = grid && its.every((b) => grid.contains(b)) ? Math.round(grid.offsetWidth / (its[0].offsetWidth || 1)) || 1 : 1;
+  const step = { ArrowDown: cols, ArrowUp: -cols, ArrowRight: 1, ArrowLeft: -1 }[e.key];
+  const n = e.key === "Home" ? 0 : e.key === "End" ? its.length - 1 : i < 0 ? (step > 0 ? 0 : its.length - 1) : Math.min(its.length - 1, Math.max(0, i + step));
+  its.forEach((b) => b.classList.remove("kfocus"));
+  its[n].classList.add("kfocus"); its[n].scrollIntoView({ block: "nearest" });
+}, true);
+document.addEventListener("mousemove", () => { if (document.body.classList.contains("kbd-nav")) { document.body.classList.remove("kbd-nav"); openPop?.querySelectorAll(".kfocus").forEach((b) => b.classList.remove("kfocus")); } }, true);
+
+// Symbolwahl für Kreis- und Bund-Arten: oben die passende Auswahl, darunter jedes Symbol von syn
+export function iconPicker(anchor, { value, onPick } = {}) {
+  const pick = (n) => { closePop(); onPick(n); };
+  const btn = (n) => h("button" + (n === value ? ".on" : ""), { type: "button", title: n, on: { click: () => pick(n) } }, icon(n));
+  const rest = ICON_NAMES().filter((n) => !KIND_ICON_SET.includes(n)).sort();
+  const q = h("input.input", { placeholder: "Symbol suchen …", style: { width: "100%" } });
+  const all = h("div.ip-grid", rest.map(btn));
+  q.addEventListener("input", () => { const t = q.value.trim().toLowerCase(); [...all.children].forEach((b) => (b.style.display = !t || b.title.includes(t) ? "" : "none")); });
+  const p = popover(anchor, h("div.ip", q,
+    h("div.lbl", "Vorschläge"), h("div.ip-grid", KIND_ICON_SET.map(btn)),
+    h("div.lbl", "Alle Symbole"), all,
+    value ? h("div.menu", h("button", { type: "button", on: { click: () => pick(null) } }, icon("x"), h("span.grow", "Kein Symbol"))) : null));
+  setTimeout(() => q.focus(), 20);
+  return p;
+}
+export function iconButton(value, onPick, { title = "Symbol wählen" } = {}) {
+  const b = h("button.btn.sm.icon.ip-btn", { type: "button", title });
+  const set = (v) => { value = v; clear(b, v ? icon(v) : h("span.t3", "–")); };
+  set(value);
+  b.addEventListener("click", () => iconPicker(b, { value, onPick: (n) => { set(n); onPick(n); } }));
+  return b;
+}
+
 export function menu(anchor, items, opts) {
   const m = h("div.menu", items.filter(Boolean).map((it) => it.label && !it.action && !it.href ? h("div.lbl", it.label)
     : it.href ? h("a", { href: it.href, on: { click: closePop } }, it.icon ? icon(it.icon) : null, it.label)
@@ -450,7 +530,7 @@ export function captureSegs(root) {
   root.querySelectorAll("[data-seg]").forEach((c) => {
     const on = c.querySelector(".on"); if (!on) return;
     const a = c.getBoundingClientRect(), b = on.getBoundingClientRect();
-    out[c.dataset.seg] = { x: b.left - a.left + c.scrollLeft, y: b.top - a.top + c.scrollTop, w: b.width, h: b.height };
+    out[c.dataset.seg] = { x: b.left - a.left - c.clientLeft + c.scrollLeft, y: b.top - a.top - c.clientTop + c.scrollTop, w: b.width, h: b.height };
   });
   return out;
 }
@@ -460,12 +540,15 @@ export function animateSegs(root, prev) {
     const old = prev[c.dataset.seg]; const on = c.querySelector(".on");
     if (!old || !on) return;
     const a = c.getBoundingClientRect(), b = on.getBoundingClientRect();
-    const now = { x: b.left - a.left + c.scrollLeft, y: b.top - a.top + c.scrollTop, w: b.width, h: b.height };
+    const now = { x: b.left - a.left - c.clientLeft + c.scrollLeft, y: b.top - a.top - c.clientTop + c.scrollTop, w: b.width, h: b.height };
     if (Math.abs(now.x - old.x) < 1 && Math.abs(now.y - old.y) < 1) return;
     const ind = document.createElement("span"); ind.className = "seg-ind";
     Object.assign(ind.style, { left: old.x + "px", top: old.y + "px", width: old.w + "px", height: old.h + "px" });
     c.classList.add("seg-anim"); c.prepend(ind);
     requestAnimationFrame(() => requestAnimationFrame(() => Object.assign(ind.style, { left: now.x + "px", top: now.y + "px", width: now.w + "px", height: now.h + "px" })));
-    setTimeout(() => { c.classList.remove("seg-anim"); ind.remove(); }, 300);
+    let done = false;
+    const finish = () => { if (done) return; done = true; c.classList.remove("seg-anim"); ind.remove(); };
+    ind.addEventListener("transitionend", (e) => { if (e.propertyName === "left" || e.propertyName === "top") finish(); });
+    setTimeout(finish, 450); // Sicherheitsnetz
   });
 }

@@ -1,5 +1,5 @@
 // Bausteine, die Handy und Desktop teilen: Person bearbeiten, Feld hinzufügen, Ring wählen, Doppelte-Hinweis.
-import { S, h, icon, rows, api, GET, POST, PUT, PATCH, DEL, clear, modal, confirmDlg, invalidate, avatar, circleChip, toast,
+import { S, h, icon, iconButton, rows, api, GET, POST, PUT, PATCH, DEL, clear, modal, confirmDlg, invalidate, avatar, circleChip, toast,
   RING, ringMini, pickCircle, reloadFields, popover, closePop } from "./core.js";
 import { fieldsFor, editField, TYPE_NAMES, inputFor, sourceName } from "./fields.js";
 import { dateInput } from "./date.js";
@@ -119,17 +119,53 @@ export async function addField(e, { onDone } = {}) {
 }
 
 export function ringPopup(anchor, current, onPick) {
-  const names = RING();
+  const done = (l) => { closePop(); onPick(l); };
   const box = h("div.ring-pop",
-    h("div.small.t2", { style: { marginBottom: "8px" } }, "Ring"),
-    h("div.ring-opts", [1, 2, 3, 4].map((n) => h("button.btn" + (current === n ? ".primary" : ""), {
-      on: { click: () => { closePop(); onPick(n); } } }, h("b", n), h("span.tiny", names[n])))),
-    h("button.btn.sm.ghost", { style: { marginTop: "6px", width: "100%" }, on: { click: () => { closePop(); onPick(null); } } }, "Ohne Ring"),
-    h("div.tiny.t3", { style: { marginTop: "6px" } }, "Tasten 1–4 im Diagramm, oder ziehen."));
+    h("div.small.t2", { style: { marginBottom: "4px" } }, "Ring"),
+    ringBig(current ?? null, done, { size: 180 }),
+    h("div.ring-opts", [1, 2, 3, 4].map((n) => h("button.btn.sm" + (current === n ? ".primary" : ""), { on: { click: () => done(n) } }, h("b", n)))),
+    h("button.btn.sm.ghost", { style: { marginTop: "6px", width: "100%" }, on: { click: () => done(null) } }, "Ohne Ring"),
+    h("div.tiny.t3", { style: { marginTop: "6px" } }, "Klick in den Ring oder Taste 1–4."));
   const p = popover(anchor, box);
-  const key = (ev) => { if (/^[1-4]$/.test(ev.key)) { closePop(); onPick(+ev.key); } if (ev.key === "Escape" || !document.body.contains(p)) document.removeEventListener("keydown", key); };
+  const key = (ev) => { if (/^[1-4]$/.test(ev.key)) done(+ev.key); if (ev.key === "Escape" || !document.body.contains(p)) document.removeEventListener("keydown", key); };
   document.addEventListener("keydown", key);
   return p;
+}
+
+export function ringBig(level, onSet, { size = 236 } = {}) {
+  const c = size / 2, R0 = Math.round(size * 0.068), band = (c - Math.round(size * 0.1) - R0) / 4;
+  const names = RING();
+  const svg = h("svg.ring-big", { viewBox: `0 0 ${size} ${size}`, width: size, height: size });
+  const bands = [];
+  for (let i = 4; i >= 1; i--) {
+    const g = h("circle.rb-band" + (i === +level ? ".cur" : ""), { cx: c, cy: c, r: R0 + band * i, "data-l": i });
+    bands[i] = g; svg.append(g);
+  }
+  for (let i = 1; i <= 4; i++) svg.append(h("text.rb-num", { x: c, y: c - (R0 + band * (i - 0.5)) + 4, "text-anchor": "middle" }, i));
+  svg.append(h("circle.rb-me", { cx: c, cy: c, r: R0 - 4 }), h("text.rb-du", { x: c, y: c + 4, "text-anchor": "middle" }, "Du"));
+  const dotPos = (l) => (l ? c + R0 + band * (l - 0.5) : c + R0 + band * 4 + 4);
+  const dot = h("circle.rb-dot", { cx: dotPos(level), cy: c, r: Math.max(6, size * 0.038) });
+  svg.append(dot);
+  const label = h("div.rb-label", level ? `${level} · ${names[level]}` : "Ohne Ring");
+  const wrap = h("div.rb-wrap", svg, label);
+  const lvlAt = (e) => {
+    const r = svg.getBoundingClientRect(); const x = ((e.clientX - r.left) / r.width) * size - c, y = ((e.clientY - r.top) / r.height) * size - c;
+    const d = Math.hypot(x, y); return { d, x, y, l: d > R0 + band * 4 + 6 ? null : Math.min(4, Math.max(1, Math.ceil((d - R0) / band))) };
+  };
+  let drag = false, hover = null;
+  const hi = (l) => { if (l === hover) return; hover = l; bands.forEach((b, i) => b && b.classList.toggle("hov", i === l)); label.textContent = l ? `${l} · ${names[l]}` : level ? `${level} · ${names[level]}` : "Ohne Ring"; label.classList.toggle("preview", !!l && l !== +level); };
+  svg.addEventListener("pointermove", (e) => {
+    const p = lvlAt(e); hi(p.l);
+    if (drag) { const k = Math.min(p.d, R0 + band * 4 + 4) / (p.d || 1); dot.setAttribute("cx", c + p.x * k); dot.setAttribute("cy", c + p.y * k); }
+  });
+  svg.addEventListener("pointerleave", () => { if (!drag) hi(null); });
+  svg.addEventListener("pointerdown", (e) => { drag = true; svg.setPointerCapture(e.pointerId); });
+  svg.addEventListener("pointerup", (e) => {
+    drag = false; const p = lvlAt(e);
+    if (p.l !== (level ?? null)) { dot.setAttribute("cx", dotPos(p.l)); dot.setAttribute("cy", c); onSet(p.l); }
+    else { dot.setAttribute("cx", dotPos(level)); dot.setAttribute("cy", c); }
+  });
+  return wrap;
 }
 
 export async function setRing(eid, level) {
@@ -149,6 +185,7 @@ export function dupHint(e, { desktop = false, onChange } = {}) {
 }
 
 export function bundKindName(id) { return S.bundKinds.find((k) => k.id === id)?.name || "–"; }
+export function bundKindIcon(id) { const ic = S.bundKinds.find((k) => k.id === id)?.icon; return ic ? icon(ic, "xs") : null; }
 
 // Bund-Editor: links die eine, rechts die andere Seite, dazwischen die Linie mit der Bund-Art.
 // Unter den Namen stehen die Rollen; der Knopf in der Mitte tauscht sie.
@@ -180,11 +217,12 @@ async function newBundKind() {
   const b = h("input.input", { placeholder: "z.B. Patenkind" });
   n.addEventListener("input", () => { if (!a.dataset.touched) a.placeholder = n.value || "Rolle"; if (!b.dataset.touched) b.placeholder = n.value || "Rolle"; });
   [a, b].forEach((x) => x.addEventListener("input", () => (x.dataset.touched = "1")));
-  const k = await modal("Neue Bund-Art", h("div.col", h("label.f", "Name", n), h("div.pd-names", h("label.f", "Rolle der einen Seite", a), h("label.f", "Rolle der anderen Seite", b)),
+  let ic = null;
+  const k = await modal("Neue Bund-Art", h("div.col", h("div.row", { style: { gap: "10px", alignItems: "flex-end" } }, h("label.f", "Symbol", iconButton(null, (v) => (ic = v))), h("label.f.grow", "Name", n)), h("div.pd-names", h("label.f", "Rolle der einen Seite", a), h("label.f", "Rolle der anderen Seite", b)),
     h("p.small.t3", "Leer gelassene Rollen heißen wie die Bund-Art – passend für gleichrangige Beziehungen wie Freundschaft.")),
     [{ label: "Abbrechen" }, { label: "Anlegen", primary: true, action: async () => {
       if (!n.value.trim()) { n.focus(); return false; }
-      return POST("/bund-kinds", { name: n.value.trim(), role_a: a.value.trim() || null, role_b: b.value.trim() || null });
+      return POST("/bund-kinds", { name: n.value.trim(), role_a: a.value.trim() || null, role_b: b.value.trim() || null, icon: ic });
     } }]);
   if (k) S.bundKinds = await GET("/bund-kinds");
   return k || null;

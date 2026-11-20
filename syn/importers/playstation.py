@@ -3,6 +3,12 @@ from ..importe import Contact, Importer
 
 class PlayStation(Importer):
     id = "playstation"
+    steps = [
+        'Melde dich auf playstation.com an.',
+        'Öffne https://ca.account.sony.com/api/v1/ssocookie im selben Browser.',
+        'Kopiere den Wert hinter „npsso“.',
+        'Füge ihn hier ein und bestätige den Hinweis. Auf dem Server muss das Paket psnawp installiert sein.',
+    ]
     name = "PlayStation"
     way = "PSN-API mit NPSSO-Token (psnawp, Python-Gegenstück zu psn-api)"
     official = "nein"

@@ -28,19 +28,34 @@ async function timeSlider(onChange) {
   const range = await GET("/timeline/range");
   const d0 = new Date(range.from + "T12:00:00"), d1 = new Date(range.to + "T12:00:00");
   const days = Math.max(1, Math.round((d1 - d0) / 86400000));
-  const lab = h("span.mono", { style: { width: "90px" } }, "heute");
-  const inp = h("input", { type: "range", min: 0, max: days, value: days });
-  const apply = () => {
-    const d = new Date(d0.getTime() + +inp.value * 86400000);
-    const iso = d.toISOString().slice(0, 10);
-    const isToday = +inp.value === days;
-    lab.textContent = isToday ? "heute" : iso;
-    onChange(isToday ? null : iso);
+  const fmt = (d) => d.toLocaleDateString("de-DE", { day: "numeric", month: "short", year: "numeric" });
+  const lab = h("span.tb-pill", "Heute");
+  const inp = h("input.tb-range", { type: "range", min: 0, max: days, value: days, "aria-label": "Zeitregler" });
+  const now = h("button.btn.sm.ghost", { type: "button", title: "Zurück zu heute", on: { click: () => { inp.value = days; show(); apply(); } } }, "Heute");
+  // Jahresmarken unter der Leiste
+  const ticks = h("div.tb-ticks");
+  for (let y = d0.getFullYear() + 1; y <= d1.getFullYear(); y++) {
+    const t = (new Date(y, 0, 1) - d0) / 86400000 / days;
+    if (t > 0.03 && t < 0.97) ticks.append(h("span", { style: { left: t * 100 + "%" } }, y));
+  }
+  const show = () => {
+    const v = +inp.value, d = new Date(d0.getTime() + v * 86400000), isToday = v === days;
+    inp.style.setProperty("--p", (v / days) * 100 + "%");
+    lab.textContent = isToday ? "Heute" : fmt(d);
+    lab.classList.toggle("past", !isToday); now.style.display = isToday ? "none" : "";
   };
+  const apply = () => {
+    const isToday = +inp.value === days;
+    onChange(isToday ? null : new Date(d0.getTime() + +inp.value * 86400000).toISOString().slice(0, 10));
+  };
+  inp.addEventListener("input", show);
   inp.addEventListener("change", apply);
-  inp.addEventListener("input", () => { const d = new Date(d0.getTime() + +inp.value * 86400000); lab.textContent = +inp.value === days ? "heute" : d.toISOString().slice(0, 10); });
-  return h("div.timebar", icon("clock"), h("span.small.t2", "Zeitregler"), h("span.mono.t3.small", range.from), inp, lab,
-    h("span.tiny.t3", { title: "Ohne „Gültig von“ zählt das Erfasst-Datum – solche Punkte sind gestrichelt" }, "ungefähr = gestrichelt"));
+  show();
+  return h("div.timebar",
+    h("span.tb-k", { title: "Ohne „Gültig von“ zählt das Erfasst-Datum – solche Punkte sind gestrichelt" }, icon("clock"), "Zeitregler"),
+    h("span.tb-end", fmt(d0)),
+    h("div.tb-track", inp, ticks),
+    lab, now);
 }
 
 // ---------------------------------------------------------------- Ringe
@@ -48,7 +63,7 @@ export async function rings(body, list0, all) {
   const opt = Object.assign({ dist: "level", sector: "kind", pets: true }, LS("ringopt", {}));
   let at = null, data = list0;
   const vizBox = h("div.viz", { style: { height: "calc(100vh - 230px)", minHeight: "460px" } });
-  const side = h("div.col", { style: { gap: "16px" } });
+  const side = h("div.col.rs-side", { style: { gap: "16px" } });
   const wrap = h("div.col", { style: { gap: 0 } }, vizBox, await timeSlider(async (d) => { at = d; data = d ? filterRows(await GET("/entities" + qs({ at: d }))) : list0; draw(); }));
   body.append(h("div.split", wrap, side));
   const draw = () => {
@@ -130,13 +145,8 @@ export async function rings(body, list0, all) {
     };
     svg.addEventListener("dragover", (e) => e.preventDefault());
     svg.addEventListener("drop", async (e) => { e.preventDefault(); const id = e.dataTransfer.getData("text/syn-id"); const r = list.find((x) => x.id === id); if (r) { r.level = null; await dropAt(r, svgPoint(svg, e)); } });
-    // Seitenleiste: Ohne Ring + Ansicht
+    // Seitenleiste: oben die Ansicht, darunter „Ohne Ring“ – nur diese Liste scrollt
     clear(side,
-      h("div.card", h("div.card-h", h("h3", "Ohne Ring"), h("span.small.t2", unplaced.length)),
-        h("div.card-b.col", h("p.small.t2", "Ins Diagramm ziehen. Der Abstand setzt den Ring, der Sektor den Kreis."),
-          unplaced.slice(0, 40).map((r) => h("div.row", { draggable: true, style: { cursor: "grab", padding: "6px 8px", border: "1px solid var(--line)", borderRadius: "10px" },
-            on: { dragstart: (e) => e.dataTransfer.setData("text/syn-id", r.id) } }, avatar(r, 26), h("div.grow", h("div", nameEl(r)), h("div.tiny.t2", r.main_circle_id ? S.circles[r.main_circle_id]?.name : "erfasst " + rel(r.created_at.slice(0, 10))))))),
-        unplaced.length > 40 ? h("div.small.t3", `… und ${unplaced.length - 40} weitere`) : null),
       h("div.card", h("div.card-h", h("h3", "Ansicht")), h("div.card-b.col",
         h("div.row.between", h("span", "Mitte"), h("span.chip.plain", "Du")),
         h("div.row.between", h("span", "Abstand"), h("select.input", { style: { height: "28px" }, on: { change: (e) => { opt.dist = e.target.value; SAVE("ringopt", opt); draw(); } } },
@@ -145,7 +155,12 @@ export async function rings(body, list0, all) {
           h("option", { value: "kind", selected: opt.sector === "kind" }, "Kreis-Art"), h("option", { value: "circle", selected: opt.sector === "circle" }, "Hauptkreis"),
           h("option", { value: "via", selected: opt.sector === "via" }, "Kennengelernt über"))),
         h("label.check.between", h("span.grow", "Haustiere zeigen"), h("input", { type: "checkbox", checked: opt.pets, on: { change: (e) => { opt.pets = e.target.checked; SAVE("ringopt", opt); draw(); } } })),
-        at ? h("div.hint", "Stand vom ", h("b.mono", at), " – Ziehen ist im Rückblick aus.") : null)));
+        at ? h("div.hint", "Stand vom ", h("b.mono", at), " – Ziehen ist im Rückblick aus.") : null)),
+      h("div.card.rs-unplaced", h("div.card-h", h("h3", "Ohne Ring"), h("span.small.t2", unplaced.length)),
+        h("p.small.t2.rs-hint", "Ins Diagramm ziehen. Der Abstand setzt den Ring, der Sektor den Kreis."), h("div.card-b.col.rs-list",
+          unplaced.slice(0, 200).map((r) => h("div.row", { draggable: true, style: { cursor: "grab", padding: "6px 8px", border: "1px solid var(--line)", borderRadius: "10px" },
+            on: { dragstart: (e) => e.dataTransfer.setData("text/syn-id", r.id) } }, avatar(r, 26), h("div.grow", h("div", nameEl(r)), h("div.tiny.t2", r.main_circle_id ? S.circles[r.main_circle_id]?.name : "erfasst " + rel(r.created_at.slice(0, 10))))))),
+        unplaced.length > 200 ? h("div.small.t3", `… und ${unplaced.length - 200} weitere`) : null));
   };
   async function moveSector(r, k) {
     if (k === "_lose") return;

@@ -1,9 +1,9 @@
 // Einstellungen: Felder, Kreis-Arten, Bund-Arten, Ringe, Routinen, Importe, Sync, Vorschläge, Module, Konto, Admin.
-import { S, h, icon, api, GET, POST, PUT, PATCH, DEL, clear, invalidate, toast, modal, confirmDlg, promptDlg, rows, reloadFields, reloadCircles,
+import { S, h, icon, iconButton, api, GET, POST, PUT, PATCH, DEL, clear, invalidate, toast, modal, confirmDlg, promptDlg, rows, reloadFields, reloadCircles,
   loadBase, circleChip, avatar, fmtTs, rel, RING, download, rebuild, isMobile, themePref, setTheme } from "./core.js";
 import { TYPE_NAMES, serviceIcon, GROUPS, groupOf, MAPS } from "./fields.js";
 import { hueInput, hueOf } from "./color.js";
-import { importStarted } from "./importstatus.js";
+import { runImport, stepsEl } from "./importstatus.js";
 import { ACTIONS, binding, pretty, saveBinding, recordCombo, keys } from "./shortcuts.js";
 
 // Navigation: gruppiert, mit Symbol und kurzer Erklärung je Seite
@@ -107,21 +107,25 @@ async function servicesCard() {
 async function circleKinds(body) {
   const { kinds, lose } = await GET("/circle-kinds");
   body.append(card("Kreis-Arten", h("p.small.t3", "Jede Kreis-Art hat ein Paar aus heller Fläche und dunkler Schrift aus derselben Farbfamilie. Wählbar ist nur der Farbton, damit alles zur Marke passt. Die Paare färben Profilbilder, Chips und Sektoren."),
-    h("table.mtable", h("tr", h("th", { colSpan: 2 }, "Vorschau"), h("th", "Name"), h("th", "Kürzel"), h("th", "Farbton"), h("th")), kinds.map((k) => {
-      const prev = h("span.chip", { style: { background: k.bg, color: k.fg } }, k.name);
-      const upd = async (patch) => { await PATCH("/circle-kinds/" + k.id, patch); Object.assign(k, patch); prev.style.background = k.bg; prev.style.color = k.fg; prev.textContent = k.name; await loadBase(); };
+    h("table.mtable", h("tr", h("th", { colSpan: 2 }, "Vorschau"), h("th", "Symbol"), h("th", "Name"), h("th", "Kürzel"), h("th", "Farbton"), h("th")), kinds.map((k) => {
+      const prev = h("span.chip", { style: { background: k.bg, color: k.fg } });
+      const paint = () => { prev.style.background = k.bg; prev.style.color = k.fg; clear(prev, k.icon ? icon(k.icon, "xs") : null, k.name); };
+      paint();
+      const upd = async (patch) => { await PATCH("/circle-kinds/" + k.id, patch); Object.assign(k, patch); paint(); await loadBase(); };
       return h("tr", h("td", h("span.av", { style: { background: k.bg, color: k.fg } }, k.abbr)), h("td", prev),
+        h("td", iconButton(k.icon, (n) => upd({ icon: n }))),
         h("td", h("input.input", { value: k.name, on: { change: (e) => upd({ name: e.target.value }) } })),
         h("td", h("input.input.mono", { value: k.abbr, style: { width: "60px" }, maxLength: 3, on: { change: (e) => upd({ abbr: e.target.value }) } })),
         h("td", hueInput(hueOf(k.fg), { label: k.name, onChange: (_h, pair) => upd({ bg: pair.bg, fg: pair.fg }) })),
         h("td", h("button.btn.sm.ghost.icon", { on: { click: async () => { await DEL("/circle-kinds/" + k.id); await loadBase(); reloadTab(body, circleKinds); } } }, icon("trash"))));
-    }), h("tr", h("td", h("span.av", { style: { background: lose.bg, color: lose.fg } }, "LO")), h("td", h("span.chip", "Lose")), h("td.t3", { colSpan: 3 }, "fest – für Personen ohne Kreis"))),
+    }), h("tr", h("td", h("span.av", { style: { background: lose.bg, color: lose.fg } }, "LO")), h("td", h("span.chip", "Lose")), h("td.t3", { colSpan: 4 }, "fest – für Personen ohne Kreis"))),
     h("button.btn.sm", { style: { alignSelf: "flex-start" }, on: { click: async () => { const n = await promptDlg("Neue Kreis-Art", "Name"); if (n) { const used = kinds.map((k) => hueOf(k.fg)); const free = [0, 30, 60, 95, 140, 175, 200, 230, 265, 300, 330].find((x) => used.every((u) => Math.abs(u - x) > 18)) ?? 200; const { pairForHue } = await import("./color.js"); await POST("/circle-kinds", { name: n, ...pairForHue(free) }); await loadBase(); reloadTab(body, circleKinds); } } } }, icon("plus"), "Kreis-Art")));
 }
 async function bundKinds(body) {
   const ks = await GET("/bund-kinds");
   body.append(card("Bund-Arten", h("p.small.t3", "Ein Bund ist eine Beziehung zwischen genau zwei Lebewesen. Jede Seite hat eine Rolle."),
-    h("table.mtable", h("tr", h("th", "Name"), h("th", "Rolle der einen Seite"), h("th", "Rolle der anderen Seite"), h("th")), ks.map((k) => h("tr",
+    h("table.mtable", h("tr", h("th", "Symbol"), h("th", "Name"), h("th", "Rolle der einen Seite"), h("th", "Rolle der anderen Seite"), h("th")), ks.map((k) => h("tr",
+      h("td", iconButton(k.icon, async (n) => { await PATCH("/bund-kinds/" + k.id, { icon: n }); await loadBase(); })),
       ...["name", "role_a", "role_b"].map((f) => h("td", h("input.input", { value: k[f] || "", on: { change: async (e) => { await PATCH("/bund-kinds/" + k.id, { [f]: e.target.value }); await loadBase(); } } }))),
       h("td", h("button.btn.sm.ghost.icon", { on: { click: async () => { await DEL("/bund-kinds/" + k.id); await loadBase(); reloadTab(body, bundKinds); } } }, icon("trash")))))),
     h("button.btn.sm", { style: { alignSelf: "flex-start" }, on: { click: async () => { const n = await promptDlg("Neue Bund-Art", "Name"); if (n) { await POST("/bund-kinds", { name: n }); await loadBase(); reloadTab(body, bundKinds); } } } }, icon("plus"), "Bund-Art")));
@@ -313,11 +317,10 @@ function importerCard(imp, reload) {
     if (!(await save(true))) return;
     let fd;
     if (files?.files.length) { fd = new FormData(); for (const f of files.files) fd.append("files", f); }
-    const st = importStarted(imp);
     btn.disabled = true;
-    api("POST", `/importers/${imp.id}/run`, fd, { quiet: true })
-      .then((r) => { st.done(r.status, r.log); logBox.textContent = r.log; })
-      .catch((e) => st.fail(e.message))
+    runImport(imp, fd)
+      .then((r) => { logBox.textContent = r.log || ""; })
+      .catch(() => {})
       .finally(() => { btn.disabled = false; });
   };
 
@@ -328,7 +331,7 @@ function importerCard(imp, reload) {
       imp.unofficial ? h("div.hint", icon("question"), h("div.grow.small", imp.risk)) : null,
       imp.missing_packages.length ? h("div.hint", h("div.grow.small", "Fehlende Pakete auf dem Server: ", h("span.mono", "pip install " + imp.missing_packages.join(" ")))) : null,
       imp.needs === "google" ? h("div.small.t2", "Nutzt die Google-Verbindung aus ", h("a", { href: "#/settings/sync" }, "Sync"), ".") : null,
-      form, files ? h("label.f", imp.file_hint, files) : null,
+      stepsEl(imp), form, files ? h("label.f", imp.file_hint, files) : null,
       h("div.row.wrap", imp.accepts_files && !imp.config.some((c) => c.required) ? null : h("label.row.small", "Zeitplan", sched),
         h("button.btn.sm", { on: { click: async () => { if (await save()) toast("Gespeichert"); } } }, "Speichern"),
         h("button.btn.sm.primary", { on: { click: (e) => run(e.currentTarget) } }, "Jetzt importieren"),

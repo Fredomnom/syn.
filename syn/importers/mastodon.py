@@ -3,6 +3,12 @@ from ..importe import Contact, Importer
 
 class Mastodon(Importer):
     id = "mastodon"
+    steps = [
+        'Mastodon → Einstellungen → Entwicklung → „Neue Anwendung“.',
+        'Name „syn“, Berechtigungen nur read:accounts und read:follows.',
+        'Speichern und den „Zugangs-Token“ kopieren.',
+        'Trag Instanz (z.B. https://mastodon.social) und Token hier ein.',
+    ]
     name = "Mastodon"
     way = "Mastodon API"
     official = "ja"
@@ -38,7 +44,7 @@ class Mastodon(Importer):
             a = following.get(i) or followers[i]
             acct = a["acct"] if "@" in a["acct"] else f"{a['acct']}@{host}"
             out.append(Contact(service_id=acct, handle="@" + acct, name=a.get("display_name") or a["username"],
-                               url=a.get("url"), avatar_url=a.get("avatar")))
+                               url=a.get("url"), avatar_url=a.get("avatar"), bot=bool(a.get("bot"))))
         return out
 
 

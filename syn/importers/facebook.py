@@ -4,6 +4,12 @@ from ._common import fix_mojibake, iter_files, load_json
 
 class Facebook(Importer):
     id = "facebook"
+    steps = [
+        'Facebook → Einstellungen → „Deine Informationen herunterladen“.',
+        'Wähl nur „Freunde und Follower“, Format JSON.',
+        'Lade die ZIP herunter, sobald sie fertig ist.',
+        'Wähl sie hier aus und klick auf „Importieren“.',
+    ]
     name = "Facebook"
     way = "Datenexport (JSON)"
     official = "Export ja"

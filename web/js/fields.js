@@ -2,7 +2,7 @@
 // Telefon, E-Mail, Adresse, Profil, Bild). Jeder Wert: Label, Hauptwert ★, veraltet, unsicher, Quelle, gültig von/bis.
 import { dateInput } from "./date.js";
 import { pickAndCrop } from "./crop.js";
-import { S, h, icon, api, PUT, POST, clear, modal, rows, invalidate, avatar, circleChip, pickPerson, pickCircle, toast, menu } from "./core.js";
+import { S, h, icon, api, PUT, POST, clear, modal, rows, invalidate, avatar, circleChip, pickPerson, pickCircle, toast, menu, popover, closePop } from "./core.js";
 
 export const TYPE_NAMES = { text: "Text", note: "Notiz", number: "Zahl", date: "Datum", choice: "Auswahl", checkbox: "Checkbox",
   person: "Person", ref: "Verweis", phone: "Telefon", email: "E-Mail", address: "Adresse", profile: "Profil", image: "Bild" };
@@ -25,7 +25,7 @@ export const sourceName = (id) => sources()[id] || id;
 
 // Logos der Dienste (Simple Icons, CC0) – einfarbig in der Textfarbe; Import-Quellen mit eigenen Symbolen
 const LOGOS = new Set(["instagram", "discord", "steam", "telegram", "whatsapp", "signal", "matrix", "github", "mastodon", "bluesky", "twitch",
-  "psn", "linkedin", "facebook", "snapchat", "anilist", "lastfm", "google", "prate"]);
+  "psn", "linkedin", "facebook", "snapchat", "anilist", "lastfm", "google", "prate", "xbox"]);
 const SOURCE_ICONS = { imap: "mail", kalender: "calendar", vcard: "smartphone", android: "phone", carddav: "users" };
 export function serviceIcon(id, size = 16) {
   if (LOGOS.has(id)) return h("span.svc-ic", { style: { "--src": `url(/static/icons/services/${id}.svg)`, width: size + "px", height: size + "px" } });
@@ -59,7 +59,7 @@ export function plain(def, v, names) {
     case "checkbox": return v ? "Ja" : "Nein";
     case "profile": return typeof v === "object" ? (v.handle || v.id || v.url || "") : String(v);
     case "person": return nameOf(v, names);
-    case "ref": return typeof v === "object" ? (v.type === "service" ? sourceName(v.id) : nameOf(v.id, names)) : String(v);
+    case "ref": return typeof v === "object" ? (v.type === "service" ? sourceName(v.id) : v.type === "place" ? v.id : nameOf(v.id, names)) : String(v);
     case "number": return def.options?.ring ? `${v} · ${(S.settings.ring_names || {})[v] || ""}` : String(v);
     default: return String(v);
   }
@@ -73,6 +73,7 @@ export function valueEl(def, val, names) {
   else if (def.type === "phone") el = h("span.mono", v);
   else if (def.type === "choice") el = h("span.row.wrap", { style: { gap: "4px" } }, (Array.isArray(v) ? v : [v]).map((x) => h("span.chip.plain", x)));
   else if (def.type === "ref" && v?.type === "circle") el = circleChip(v.id);
+  else if (def.type === "ref" && v?.type === "place") el = placeChip(v.id);
   else if (def.type === "ref" && v?.type === "service") el = h("span.chip.plain.src-chip", serviceIcon(v.id, 14), sourceName(v.id));
   else if (def.type === "ref" || def.type === "person") { const id = def.type === "person" ? v : v.id; el = h("a", { href: "#/p/" + id }, nameOf(id, names)); }
   else if (def.type === "profile") { const s = service(v.service); el = h("span", s ? h("span.t3", s.name + " ") : null, v.handle || v.id || v.url); }
@@ -122,13 +123,14 @@ export function inputFor(def, value, { onEnter } = {}) {
     render(); el = box; get = () => { const a = [...sel]; if (extra.value.trim()) a.push(extra.value.trim()); return multi ? a : a[0] ?? null; };
   } else if (t === "person" || t === "ref") {
     let cur = value; const lab = h("span");
-    const show = () => clear(lab, cur ? (t === "ref" && cur.type === "circle" ? circleChip(cur.id) : t === "ref" && cur.type === "service" ? h("span.chip.plain.src-chip", serviceIcon(cur.id, 14), sourceName(cur.id)) : h("span.chip.plain", nameOf(t === "person" ? cur : cur.id))) : h("span.t3", "nichts gewählt"));
+    const show = () => clear(lab, cur ? (t === "ref" && cur.type === "circle" ? circleChip(cur.id) : t === "ref" && cur.type === "service" ? h("span.chip.plain.src-chip", serviceIcon(cur.id, 14), sourceName(cur.id)) : t === "ref" && cur.type === "place" ? placeChip(cur.id) : h("span.chip.plain", nameOf(t === "person" ? cur : cur.id))) : h("span.t3", "nichts gewählt"));
     const bP = h("button.btn.sm", { type: "button", on: { click: (e) => pickPerson(e.currentTarget, { onPick: (r) => { cur = t === "person" ? r.id : { type: "entity", id: r.id }; show(); } }) } }, icon("user"), "Person");
     const bC = t === "ref" ? h("button.btn.sm", { type: "button", on: { click: (e) => pickCircle(e.currentTarget, { onPick: (c) => { cur = { type: "circle", id: c.id }; show(); } }) } }, icon("circles"), "Kreis") : null;
     const bS = t === "ref" ? h("button.btn.sm", { type: "button", on: { click: (e) => menu(e.currentTarget, [{ label: "Quelle – Plattform oder Import" },
       ...Object.entries(sources()).sort((a, b) => a[1].localeCompare(b[1])).map(([id, name]) => ({ label: name, on: cur?.type === "service" && cur.id === id, action: () => { cur = { type: "service", id }; show(); } }))]) } }, icon("link"), "Quelle") : null;
     const bX = h("button.btn.sm.ghost", { type: "button", on: { click: () => { cur = null; show(); } } }, icon("x"));
-    show(); el = h("div.row.wrap", lab, bP, bC, bS, bX); get = () => cur;
+    const bO = t === "ref" ? h("button.btn.sm", { type: "button", on: { click: (e) => pickPlace(e.currentTarget, (name) => { cur = { type: "place", id: name }; show(); }) } }, icon("pin"), "Ort") : null;
+    show(); el = h("div.row.wrap", lab, bP, bC, bO, bS, bX); get = () => cur;
   } else if (t === "profile") {
     const v = value || {};
     const sel = h("select.input", (S.settings.services || []).map((x) => h("option", { value: x.id, selected: x.id === v.service }, x.name)), h("option", { value: "", selected: !v.service }, "anderer Dienst"));
@@ -335,4 +337,33 @@ export function fieldSections(e, reload, { mobile = false } = {}) {
     if (rows.length) out.push(h("section.fs", h("h4.fs-title", title), h("div.fs-rows", rows)));
   }
   return out;
+}
+
+// Kennlernort: ein Ort als Verweis, z.B. „Uni Leipzig“ oder „Sommercamp 2019“
+export const placeChip = (name) => h("span.chip.plain", icon("pin", "xs"), name);
+function knownPlaces() {
+  const n = new Map();
+  for (const r of S.rows || []) for (const x of Object.values(r.v || {})) {
+    const raw = x?.raw;
+    if (raw && typeof raw === "object" && raw.type === "place" && raw.id) n.set(raw.id, (n.get(raw.id) || 0) + 1);
+  }
+  for (const r of S.rows || []) { const c = r.v?.f_city?.d; if (c && !n.has(c)) n.set(c, 0); }
+  return [...n].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "de")).map(([k]) => k);
+}
+export function pickPlace(anchor, onPick) {
+  const inp = h("input.input", { placeholder: "Ort, z.B. Uni Leipzig …", style: { width: "100%" } });
+  const list = h("div.menu", { style: { marginTop: "6px", maxHeight: "260px", overflow: "auto" } });
+  const places = knownPlaces();
+  const done = (n) => { if (!n) return; closePop(); onPick(n); };
+  const render = () => {
+    const q = inp.value.trim(), ql = q.toLowerCase();
+    const hits = places.filter((p) => !ql || p.toLowerCase().includes(ql)).slice(0, 30);
+    clear(list, hits.map((p) => h("button", { type: "button", on: { click: () => done(p) } }, icon("pin"), h("span.grow", p))),
+      q && !places.some((p) => p.toLowerCase() === ql) ? h("button", { type: "button", on: { click: () => done(q) } }, icon("plus"), h("span.grow", "Neuer Ort: ", h("b", `„${q}“`))) : null,
+      !hits.length && !q ? h("div.lbl", "Noch keine Orte – tippe einen ein") : null);
+  };
+  inp.addEventListener("input", render);
+  inp.addEventListener("keydown", (e) => { if (e.key === "Enter" && !list.querySelector(".kfocus") && inp.value.trim()) { e.preventDefault(); done(inp.value.trim()); } });
+  popover(anchor, h("div", { style: { width: "280px" } }, inp, list));
+  render(); inp.focus();
 }

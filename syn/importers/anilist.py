@@ -6,6 +6,10 @@ following(userId:$id){id name siteUrl avatar{large}}}}"""
 
 class AniList(Importer):
     id = "anilist"
+    steps = [
+        'Trag deinen AniList-Benutzernamen ein.',
+        'Klick auf „Importieren“ – mehr braucht es nicht.',
+    ]
     name = "AniList"
     way = "GraphQL"
     official = "ja"

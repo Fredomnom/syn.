@@ -3,6 +3,12 @@ from ..importe import Contact, Importer
 
 class Telegram(Importer):
     id = "telegram"
+    steps = [
+        'Erstelle auf my.telegram.org unter „API development tools“ eine App und notiere api_id und api_hash.',
+        'Führ auf dem Server einmal „python main.py telegram-login“ aus und folge den Fragen.',
+        'Kopiere den ausgegebenen Session-String.',
+        'Trag api_id, api_hash und Session-String hier ein.',
+    ]
     name = "Telegram"
     way = "MTProto-Nutzer-API mit Telethon"
     official = "ja"
@@ -44,7 +50,7 @@ class Telegram(Importer):
             name = " ".join(x for x in (u.first_name, u.last_name) if x) or u.username
             out.append(Contact(service_id=str(uid), handle=u.username, name=name,
                                phones=[("+" + u.phone, "mobil")] if getattr(u, "phone", None) else [],
-                               last_contact=p["last"]))
+                               last_contact=p["last"], bot=bool(getattr(u, "bot", False))))
         return out
 
 

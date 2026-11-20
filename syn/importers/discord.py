@@ -3,6 +3,13 @@ from ..importe import Contact, Importer, snowflake_date
 
 class Discord(Importer):
     id = "discord"
+    steps = [
+        'Öffne Discord im Browser (discord.com/app) und melde dich an.',
+        'Öffne die Entwicklertools (F12 bzw. ⌥⌘I) und dort den Reiter „Netzwerk“.',
+        'Klick in Discord irgendwo hin, damit Anfragen erscheinen; wähl eine Anfrage an „/api/“.',
+        'Kopiere unter „Anfrage-Header“ den Wert von „Authorization“.',
+        'Füge ihn hier ein und bestätige den Hinweis – teile diesen Token mit niemandem.',
+    ]
     name = "Discord"
     way = "Nutzer-Token aus der Browser-Konsole"
     official = "nein"
@@ -36,13 +43,21 @@ class Discord(Importer):
                 p = people.setdefault(u["id"], {"u": u, "since": None, "last": None, "nick": None})
                 if ch.get("last_message_id"):
                     p["last"] = snowflake_date(ch["last_message_id"])
+        notes = {}
+        try:  # deine privaten Notizen zu Leuten
+            r = run.http.get(f"{api}/users/@me/notes", headers=h)
+            if r.status_code == 200 and isinstance(r.json(), dict):
+                notes = r.json()
+        except Exception:
+            pass
         out = []
         for uid, p in people.items():
             u = p["u"]
             av = f"https://cdn.discordapp.com/avatars/{uid}/{u['avatar']}.png?size=256" if u.get("avatar") else None
             out.append(Contact(service_id=uid, handle=u.get("username"),
                                name=p["nick"] or u.get("global_name") or u.get("username"), avatar_url=av,
-                               friend_since=p["since"], last_contact=p["last"]))
+                               friend_since=p["since"], last_contact=p["last"], note=notes.get(uid),
+                               bot=bool(u.get("bot") or u.get("system"))))
         return out
 
 

@@ -3,6 +3,12 @@ from ..importe import Contact, Importer
 
 class InstagramApi(Importer):
     id = "instagram_api"
+    steps = [
+        'Öffne instagram.com im Browser und melde dich an.',
+        'Entwicklertools (F12) → Anwendung/Speicher → Cookies → instagram.com.',
+        'Kopiere den Wert von „sessionid“ und füge ihn hier ein.',
+        'Bestätige den Hinweis – Instagram kann inoffizielle Zugriffe einschränken.',
+    ]
     name = "Instagram (inoffiziell)"
     way = "inoffiziell mit instagrapi"
     official = "nein"

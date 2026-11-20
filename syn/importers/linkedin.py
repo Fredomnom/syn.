@@ -8,6 +8,12 @@ from ._common import iter_files
 
 class LinkedIn(Importer):
     id = "linkedin"
+    steps = [
+        'LinkedIn → Einstellungen → Datenschutz → „Kopie Ihrer Daten anfordern“.',
+        'Wähl „Kontakte“ (Connections) und fordere an.',
+        'Lade die Datei herunter (Connections.csv oder ZIP).',
+        'Wähl sie hier aus und klick auf „Importieren“.',
+    ]
     name = "LinkedIn"
     way = "Datenexport (Connections.csv)"
     official = "Export ja"

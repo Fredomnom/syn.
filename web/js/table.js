@@ -3,6 +3,7 @@
 import { S, h, icon, GET, POST, PATCH, clear, invalidate, avatar, circleChip, nameEl, rel, ringName, menu, pickCircle, toast, confirmDlg, modal, rows, MOD, popover, closePop } from "./core.js";
 import { editField, plain, TYPE_NAMES } from "./fields.js";
 import { ringPopup } from "./shared.js";
+import { groupOf } from "./groups.js";
 import { matches, keys, binding } from "./shortcuts.js";
 import { dateInput } from "./date.js";
 import { VS } from "./desktop.js";
@@ -32,7 +33,7 @@ function cellVal(f, r) {
 }
 const DEFAULT = ["kind", "main_circle_id", "f_level", "ist", "f_seen", "f_bday", "f_phone", "f_profile", "f_via"];
 
-export async function table(body, list, all) {
+export async function table(body, list, all, grouping = "") {
   const cols0 = allColumns();
   const chosen = VS.columns || DEFAULT;
   const cols = [{ key: "name", label: "Name", ty: "text", get: (r) => r.name || r.description, edit: "name" }, ...chosen.map((k) => cols0.find((c) => c.key === k)).filter(Boolean)];
@@ -51,7 +52,12 @@ export async function table(body, list, all) {
   const colgroup = h("colgroup", h("col", { style: { width: "40px" } }), cols.map((c, i) => h("col", { style: { width: (i === 0 ? 220 : c.key === "main_circle_id" ? 150 : 140) + "px" } })));
   const thead = h("tr", h("th.rn", h("span", "")), cols.map((c, i) => h("th" + (i === 0 ? ".name" : ""), { title: c.def ? c.def.id : c.key }, c.label, h("span.ty", c.def ? TYPE_NAMES[c.ty] : c.ty))));
   const tbody = h("tbody");
+  let lastGroup = null;
   list.forEach((r, ri) => {
+    if (grouping) {
+      const [gk, head] = groupOf(grouping, r);
+      if (gk !== lastGroup) { lastGroup = gk; tbody.append(h("tr.grp-row", h("td", { colSpan: cols.length + 1 }, h("div.grp-row-in", head, h("span.small.t3", list.filter((x) => groupOf(grouping, x)[0] === gk).length))))); }
+    }
     const tr = h("tr");
     tr.append(h("td.rn", { on: { mousedown: (e) => selectRow(ri, e) } }, ri + 1));
     tds[ri] = [];
@@ -114,7 +120,7 @@ export async function table(body, list, all) {
     if (!e.shiftKey) st.rowsSel.clear();
     paint();
     const c = cols[ci];
-    if (!e.shiftKey && c.edit === "ring" && e.target.closest("td")) setTimeout(() => cellAction(), 0);
+    if (!e.shiftKey && (c.edit === "ring" || c.edit === "circle") && e.target.closest("td")) setTimeout(() => cellAction(), 0);
   }
   function selectRow(ri, e) {
     sheet.focus();

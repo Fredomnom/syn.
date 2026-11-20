@@ -3,6 +3,11 @@ from ..importe import Contact, Importer
 
 class Twitch(Importer):
     id = "twitch"
+    steps = [
+        'Registriere eine Anwendung auf dev.twitch.tv/console und kopiere die Client-ID.',
+        'Erzeuge einen User-Access-Token mit der Berechtigung user:read:follows (z.B. mit twitchtokengenerator.com).',
+        'Trag Client-ID und Token hier ein.',
+    ]
     name = "Twitch"
     way = "Helix API"
     official = "ja"

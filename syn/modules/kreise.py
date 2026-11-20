@@ -189,6 +189,7 @@ def kinds(ctx: Ctx = Depends(current)):
 
 class Kind(BaseModel):
     name: str
+    icon: str | None = None
     abbr: str | None = None
     bg: str | None = None
     fg: str | None = None
@@ -202,14 +203,14 @@ def new_kind(body: Kind, ctx: Ctx = Depends(current)):
     kid = new_id("k", 6)
     db.insert("circle_kinds", {"user_id": ctx.uid, "id": kid, "name": body.name,
                                "abbr": (body.abbr or body.name[:2]).upper(), "bg": body.bg or pair[0],
-                               "fg": body.fg or pair[1], "position": len(existing)})
+                               "fg": body.fg or pair[1], "position": len(existing), "icon": body.icon})
     return db.q1("SELECT * FROM circle_kinds WHERE user_id=? AND id=?", ctx.uid, kid)
 
 
 @router.patch("/circle-kinds/{kid}")
 def patch_kind(kid: str, body: dict, ctx: Ctx = Depends(current)):
     db.update("circle_kinds", {"user_id": ctx.uid, "id": kid},
-              {k: body[k] for k in ("name", "abbr", "bg", "fg", "position") if k in body})
+              {k: body[k] for k in ("name", "abbr", "bg", "fg", "position", "icon") if k in body})
     return db.q1("SELECT * FROM circle_kinds WHERE user_id=? AND id=?", ctx.uid, kid)
 
 

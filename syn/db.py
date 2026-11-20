@@ -166,6 +166,9 @@ def migrate(c):
         if col not in cols:
             c.execute(f"ALTER TABLE entities ADD COLUMN {col} TEXT")
             added = True
+    for tbl in ("circle_kinds", "bund_kinds"):
+        if "icon" not in {r[1] for r in c.execute(f"PRAGMA table_info({tbl})")}:
+            c.execute(f"ALTER TABLE {tbl} ADD COLUMN icon TEXT")
     if added:
         # bestehende Namen einmalig aufteilen: erstes Wort Vorname, letztes Nachname, dazwischen weitere Vornamen
         for eid, name in c.execute("SELECT id, name FROM entities WHERE name IS NOT NULL").fetchall():

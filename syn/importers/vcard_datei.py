@@ -4,6 +4,13 @@ from ._common import iter_files, vcards_to_contacts
 
 class VCard(Importer):
     id = "vcard"
+    steps = [
+        'Öffne am Handy die Kontakte-App.',
+        'iPhone: Kontakte → Listen → „Alle Kontakte“ lange drücken → Exportieren. Android: Kontakte → Menü → Exportieren → .vcf-Datei.',
+        'Schick dir die .vcf-Datei (z.B. per AirDrop oder Mail) an den Rechner.',
+        'Wähl die Datei hier aus oder zieh sie in das Feld.',
+        'Klick auf „Importieren“.',
+    ]
     name = "Handy-Kontakte"
     way = "vCard-Datei"
     official = "Datei"

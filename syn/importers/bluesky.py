@@ -3,6 +3,11 @@ from ..importe import Contact, Importer
 
 class Bluesky(Importer):
     id = "bluesky"
+    steps = [
+        'Trag deinen Bluesky-Handle ein, z.B. name.bsky.social.',
+        'Wähl, ob nur gegenseitige Follows importiert werden.',
+        'Klick auf „Importieren“ – ein Passwort braucht syn nicht.',
+    ]
     name = "Bluesky"
     way = "AT Protocol (öffentliche AppView)"
     official = "ja"
@@ -34,7 +39,8 @@ class Bluesky(Importer):
         for did in ids:
             p = follows.get(did) or followers[did]
             out.append(Contact(service_id=did, handle=p["handle"], name=p.get("displayName") or p["handle"],
-                               avatar_url=p.get("avatar")))
+                               avatar_url=p.get("avatar"),
+                               bot=any((lb.get("val") or "") == "bot" for lb in p.get("labels") or [])))
         return out
 
 

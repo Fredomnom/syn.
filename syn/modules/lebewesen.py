@@ -52,6 +52,8 @@ def filter_rows(ctx, rows, kind=None, filt=None, q=None, circle=None, max_level=
             continue
         if filt == "long_unseen" and not r["long_unseen"]:
             continue
+        if filt == "new" and (r["edited"] or r["is_self"]):
+            continue
         if circle and circle not in r["circles_all"]:
             continue
         if max_level is not None and (r["level"] is None or r["level"] > max_level):
@@ -66,7 +68,8 @@ def filter_rows(ctx, rows, kind=None, filt=None, q=None, circle=None, max_level=
 def list_entities(kind: str = "all", filter: str | None = None, q: str | None = None, circle: str | None = None,
                   at: str | None = None, max_level: int | None = None, sort: str = "name",
                   ctx: Ctx = Depends(current)):
-    """Liste aller Lebewesen. filter: lose | no_ring | uncertain | long_unseen. at: Stichtag (Zeitregler)."""
+    """Liste aller Lebewesen. filter: lose | no_ring | uncertain | long_unseen | new (noch nichts selbst eingetragen).
+    at: Stichtag (Zeitregler)."""
     rows = load_rows(ctx, at=at)
     rows = filter_rows(ctx, rows, kind, filter, q, circle, max_level)
     return _sort(rows, sort)
@@ -317,6 +320,8 @@ def block_imports(uid, eid):
             for k in ("id", "handle"):
                 if val.get(k):
                     keys.add(("svc", f"{val['service']}:{str(val[k]).lower()}"))
+            if val.get("handle") and imported:
+                keys.add(("handle", str(val["handle"]).lower().lstrip("@")))
         elif t == "phone" and imported:
             n = normalize_phone(val, country)
             if n:
@@ -329,6 +334,8 @@ def block_imports(uid, eid):
             if target == eid:
                 keys.add(("srcid", f"{row['importer_id']}:{sid}"))
                 sources.add(row["importer_id"])
+    if e["name"] and len(e["name"].split()) > 1:
+        keys.add(("name", fold(e["name"])))
     if not sources or not keys:
         return 0
     grp = new_id("bl")

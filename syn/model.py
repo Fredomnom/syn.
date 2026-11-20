@@ -107,6 +107,11 @@ def normalize_value(uid: str, d: dict, v, country="49"):
                 if rid not in source_names(uid):
                     raise Bad(f"{d['name']}: Quelle {rid} unbekannt")
                 return {"type": "service", "id": rid}
+            if typ == "place":  # Kennlernort – ein Ort ist ein Wert, keine eigene Seite
+                name = str(rid or v.get("name") or "").strip()
+                if not name:
+                    raise Bad(f"{d['name']}: Ort fehlt")
+                return {"type": "place", "id": name[:120]}
             tbl = {"entity": "entities", "circle": "circles"}.get(typ)
             if not tbl or not db.val(f"SELECT 1 FROM {tbl} WHERE id=? AND user_id=?", rid, uid):
                 raise Bad(f"{d['name']}: Verweis ungültig")
@@ -574,6 +579,10 @@ def load_rows(ctx, at: str | None = None, ids=None) -> list[dict]:
     for m in db.q("SELECT * FROM memberships WHERE user_id=?", uid):
         if active(m, at):
             mems.setdefault(m["entity_id"], []).append(m)
+    # bearbeitet = mindestens eine eigene Eingabe (in syn, am Handy oder beim Zusammenführen)
+    hand = "(source='manual' OR source LIKE 'Handy%' OR source='Zusammenführen')"
+    edited = {r["owner_id"] for r in db.q(f"SELECT DISTINCT owner_id FROM history WHERE user_id=? AND owner_type='entity' AND {hand}", uid)}
+    bund_edited = {r["owner_id"] for r in db.q(f"SELECT DISTINCT owner_id FROM history WHERE user_id=? AND owner_type='bund' AND {hand}", uid)}
     signals = {}
     for s in db.q("SELECT entity_id, at FROM contact_signals WHERE user_id=?", uid):
         signals.setdefault(s["entity_id"], []).append(s["at"])
@@ -629,6 +638,7 @@ def load_rows(ctx, at: str | None = None, ids=None) -> list[dict]:
             "bund_kind": b["kind_id"] if b else None, "ist": ist,
             "long_unseen": long_unseen(ctx.settings, level, ist) if ist else False,
             "approx_created": not e["valid_from"], "v": v,
+            "edited": bool(e["is_self"] or e["id"] in edited or (b and b["id"] in bund_edited)),
         })
     return rows
 

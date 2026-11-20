@@ -92,8 +92,8 @@ def circle_suggestions(ctx):
             key = f"via:{rid}:" + hashlib.sha1(",".join(sorted(ids)).encode()).hexdigest()[:8]
             if key in dismissed:
                 continue
-            who = rows[rid]["display"] if rid in rows else ("dir" if rid == me else "?")
-            out.append({"key": key, "name": f"Über {who}", "kind_id": "freundschaft", "members": ids,
+            who = rid if typ == "place" else rows[rid]["display"] if rid in rows else ("dir" if rid == me else "?")
+            out.append({"key": key, "name": who if typ == "place" else f"Über {who}", "kind_id": "hobby" if typ == "place" else "freundschaft", "members": ids,
                         "member_names": [rows[i]["display"] for i in ids],
                         "reason": f"gleicher „Kennengelernt über“-Wert ({who})"})
     # Gruppen aus Importen (Signal-Gruppen, Matrix-Räume, WhatsApp-Gruppen)

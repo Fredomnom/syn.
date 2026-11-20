@@ -231,6 +231,15 @@ function enhance(root) {
   if (!(root instanceof Element || root instanceof DocumentFragment)) return;
   const all = (s) => (root.matches?.(s) ? [root] : []).concat([...root.querySelectorAll(s)]);
   all("select:not([data-ctl])").forEach(enhanceSelect);
+  // Passwortmanager sollen sich nur um Anmeldefelder kümmern, nicht um Namen, Telefonnummern & Co.
+  all("input:not([data-pm]), textarea:not([data-pm])").forEach((i) => {
+    i.dataset.pm = "1";
+    const t = i.type, ac = i.getAttribute("autocomplete") || "";
+    if (t === "password" || /username|password/.test(ac)) return;
+    i.setAttribute("data-1p-ignore", ""); i.setAttribute("data-lpignore", "true"); i.setAttribute("data-bwignore", "");
+    i.setAttribute("data-form-type", "other");
+    if (!ac && !["checkbox", "radio", "range", "file", "hidden"].includes(t)) i.setAttribute("autocomplete", "off");
+  });
   all('input[type="file"]:not([data-ctl])').forEach(enhanceFile);
   all('input[type="time"]:not([data-ctl])').forEach(enhanceTime);
   all("input[list]").forEach(enhanceList);

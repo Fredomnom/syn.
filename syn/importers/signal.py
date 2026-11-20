@@ -6,6 +6,12 @@ from ..importe import Contact, Importer
 
 class Signal(Importer):
     id = "signal"
+    steps = [
+        'Installiere signal-cli auf dem Server (github.com/AsamK/signal-cli).',
+        'Verknüpfe es als Gerät: „signal-cli link -n syn“ und scanne den QR-Code in Signal → Einstellungen → Verknüpfte Geräte.',
+        'Trag hier deine Nummer ein (und den Pfad, falls signal-cli nicht im Suchpfad liegt).',
+        'Bestätige den Hinweis und klick auf „Importieren“.',
+    ]
     name = "Signal"
     way = "signal-cli"
     official = "nein"

@@ -3,6 +3,13 @@ from ..importe import Contact, Importer, to_date
 
 class Steam(Importer):
     id = "steam"
+    steps = [
+        'Melde dich im Browser bei Steam an.',
+        'Öffne https://store.steampowered.com/pointssummary/ajaxgetasyncconfig.',
+        'Kopiere den Wert hinter „webapi_token“ (ohne Anführungszeichen).',
+        'Deine SteamID64 findest du auf steamid.io, wenn du dort deinen Profil-Link eingibst.',
+        'Füge beides hier ein und bestätige den Hinweis.',
+    ]
     name = "Steam"
     way = "eigenes Web-API-Token einfügen, liest wie das eingeloggte Konto"
     official = "Endpunkte ja, Token nein"

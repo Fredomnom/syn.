@@ -49,6 +49,11 @@ def _split(ln):
 
 class Kalender(Importer):
     id = "kalender"
+    steps = [
+        'Kopiere den privaten ICS-Link deines Kalenders (Google: Kalendereinstellungen → „Privatadresse im iCal-Format“) – oder nimm CalDAV.',
+        'Trag deine eigenen E-Mail-Adressen ein, damit du nicht als Teilnehmer zählst.',
+        'Klick auf „Importieren“ – Teilnehmer gemeinsamer Termine bekommen „zuletzt gesehen“.',
+    ]
     name = "Kalender"
     way = "CalDAV, ICS-Link oder Google Calendar API"
     official = "ja"

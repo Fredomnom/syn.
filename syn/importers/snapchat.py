@@ -4,6 +4,12 @@ from ._common import iter_files, load_json
 
 class Snapchat(Importer):
     id = "snapchat"
+    steps = [
+        'Öffne accounts.snapchat.com → „Meine Daten“.',
+        'Wähl „Freunde“ und „JSON-Dateien exportieren“ und sende die Anfrage.',
+        'Lade die ZIP aus der Mail herunter.',
+        'Wähl sie hier aus und klick auf „Importieren“.',
+    ]
     name = "Snapchat"
     way = "Datenexport (JSON)"
     official = "Export ja"

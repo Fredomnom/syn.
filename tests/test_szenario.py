@@ -322,3 +322,21 @@ def test_loeschen_sperrt_import(client):
     c.post("/api/v1/undo")
     assert not c.get("/api/v1/import-blocks").json()
     assert c.get(f"/api/v1/entities/{gerd['id']}").status_code == 200
+
+
+def test_neue_personen_und_kennlernort(client):
+    c = client
+    c.put("/api/v1/importers/vcard", json={"enabled": True})
+    vc = "BEGIN:VCARD\nVERSION:3.0\nFN:Ina Import\nNOTE:mag Katzen\nEND:VCARD\n"
+    c.post("/api/v1/importers/vcard/run", files={"files": ("k.vcf", vc.encode(), "text/vcard")})
+    hand = c.post("/api/v1/entities", json={"name": "Hanna Hand"}).json()
+    new = [r["display"] for r in c.get("/api/v1/entities", params={"filter": "new"}).json()]
+    assert "Ina Import" in new and "Hanna Hand" not in new
+    ina = c.get("/api/v1/entities", params={"q": "Ina"}).json()[0]
+    assert ina["v"]["f_note"]["raw"] == "mag Katzen"
+    c.patch(f"/api/v1/entities/{ina['id']}/fields/f_via", json={"value": {"type": "place", "id": "Kletterhalle Nord"}})
+    new = [r["display"] for r in c.get("/api/v1/entities", params={"filter": "new"}).json()]
+    assert "Ina Import" not in new
+    row = c.get("/api/v1/entities", params={"q": "Ina"}).json()[0]
+    assert row["v"]["f_via"]["d"] == "Kletterhalle Nord"
+    assert any(v["name"] == "Neue Personen" for v in c.get("/api/v1/views").json())
