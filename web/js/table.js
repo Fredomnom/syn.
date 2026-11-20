@@ -73,7 +73,7 @@ export async function table(body, list, all) {
   function fillCell(td, r, c) {
     clear(td);
     if (c.key === "name") {
-      td.append(h("span.row", { style: { gap: "6px" } }, avatar(r, 20), h("span.ellipsis", nameEl(r)), dups.has(r.id) ? h("span", { title: "Mögliche Doppelte" }, icon("merge")) : null));
+      td.append(h("span.row", { style: { gap: "6px" } }, h("a.tbl-av", { href: "#/p/" + r.id, on: { mousedown: (e) => e.stopPropagation() } }, avatar(r, 20)), h("span.ellipsis", nameEl(r)), dups.has(r.id) ? h("span", { title: "Mögliche Doppelte" }, icon("merge")) : null));
     } else td.append(c.render ? c.render(r) : String(c.get(r) ?? ""));
   }
   const range = () => ({ r1: Math.min(st.act.r, st.anc.r), r2: Math.max(st.act.r, st.anc.r), c1: Math.min(st.act.c, st.anc.c), c2: Math.max(st.act.c, st.anc.c) });

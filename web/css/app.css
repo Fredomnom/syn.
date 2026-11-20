@@ -707,3 +707,4 @@ textarea.input { resize: none; }
 .mtable td.row[style*="flex-end"] { text-align: right; }
 .card:has(> .mtable), .card-b:has(> .mtable) { overflow-x: auto; }
 .mtable td .input, .mtable td .ctl-select { max-width: 100%; }
+.tbl-av { display: inline-flex; border-radius: 50%; transition: transform .12s; } .tbl-av:hover { transform: scale(1.12); }
