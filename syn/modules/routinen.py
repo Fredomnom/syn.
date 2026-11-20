@@ -305,7 +305,9 @@ def run_actions(ctx, routine, rows, on: date, source=None) -> list[str]:
             res.append(f"Karten: {len(rows)}")
         elif t == "list":
             if rows:
-                items = [{"id": r["id"], "name": r["display"], "text": render(a.get("item") or "{tage}", r, ctx, on)}
+                items = [{"id": r["id"], "name": r["display"], "text": render(a.get("item") or "{tage}", r, ctx, on),
+                          "row": {"name": r["name"], "description": r["description"], "name_uncertain": r["name_uncertain"],
+                                  "main_circle_id": r["main_circle_id"], "avatar": r["avatar"], "kind": r["kind"]}}
                          for r in rows]
                 db.ex("UPDATE today_items SET dismissed=1 WHERE user_id=? AND routine_id=? AND kind='list'",
                       ctx.uid, routine.get("id"))
@@ -609,6 +611,8 @@ def today_page(ctx: Ctx = Depends(current)):
         r = rows.get(i["entity_id"])
         if r:
             i["entity"] = {"id": r["id"], "display": r["display"], "avatar": r["avatar"], "kind": r["kind"],
+                           "name": r["name"], "description": r["description"], "level": r["level"],
+                           "bund_kind": r["bund_kind"], "bday": r["v"].get("f_bday", {}).get("raw"),
                            "main_circle_id": r["main_circle_id"], "name_uncertain": r["name_uncertain"],
                            "phone": r["v"].get("f_phone", {}).get("raw"),
                            "email": r["v"].get("f_email", {}).get("raw")}

@@ -58,6 +58,14 @@ export const queued = () => readQ().length;
 addEventListener("online", flushQueue);
 
 // ---------------------------------------------------------------- DOM
+// append/prepend überspringen null/undefined/false – so dürfen Bausteine „nichts“ zurückgeben
+for (const proto of [Element.prototype, DocumentFragment.prototype]) {
+  for (const m of ["append", "prepend"]) {
+    const orig = proto[m];
+    proto[m] = function (...kids) { return orig.apply(this, kids.filter((k) => k !== null && k !== undefined && k !== false)); };
+  }
+}
+export const MOD = /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Strg+";
 export function h(tag, attrs, ...kids) {
   const m = tag.match(/^([a-z0-9-]+)?((?:[.#][\w-]+)*)$/i);
   const isSvg = ["svg", "g", "circle", "line", "path", "text", "rect", "polygon", "polyline", "defs", "clipPath", "ellipse", "title", "tspan"].includes(m[1]);
@@ -216,7 +224,7 @@ export function avatar(row, size = 28, { sel = false, self = false } = {}) {
 }
 export function circleChip(cid, { star = false, onRemove = null, role = null } = {}) {
   const c = S.circles[cid]; const cc = circleColors(cid);
-  return h("span.chip", { style: { background: cc.bg, color: cc.fg } }, star ? "★ " : "", c ? c.name : "?", role ? h("span.t3", ` · ${role}`) : null,
+  return h("span.chip", { style: { background: cc.bg, color: cc.fg } }, star ? icon("star", "xs") : null, c ? c.name : "?", role ? h("span.t3", ` · ${role}`) : null,
     onRemove ? h("button", { title: "Entfernen", on: { click: (e) => { e.preventDefault(); e.stopPropagation(); onRemove(); } } }, icon("x")) : null);
 }
 export function nameEl(row) {

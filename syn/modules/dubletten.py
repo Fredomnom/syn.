@@ -255,7 +255,7 @@ def mark_later(body: Pair, ctx: Ctx = Depends(current)):
 
 # ---------------------------------------------------------------- Zusammenführen
 
-ENTITY_ATTRS = ("name", "description", "kind", "avatar", "main_circle_id", "name_uncertain")
+ENTITY_ATTRS = ("name", "kind", "avatar", "main_circle_id")  # Beschreibung wird Alias, „unsicher“ folgt dem Namen
 
 
 def plan_merge(ctx, a_id, b_id):
@@ -336,10 +336,18 @@ def merge(body: MergeIn, ctx: Ctx = Depends(current)):
     with db.tx():
         # 1. Eigenschaften
         upd = {}
+        name_from = "a"
         for a in plan["attrs"]:
             ch = body.choices.get(a["attr"], a["auto"] or "a")
+            if a["attr"] == "name":
+                name_from = ch
             if ch == "b":
                 upd[a["attr"]] = a["b"]
+        src = eo if name_from == "b" else ek
+        if not (upd.get("name", ek["name"])):
+            upd["name_uncertain"] = 1
+        else:
+            upd["name_uncertain"] = src["name_uncertain"] if src["name"] else ek["name_uncertain"]
         al = list(dict.fromkeys(ek["aliases"] + eo["aliases"] +
                                 [x for x in (eo["name"], eo["description"], ek["description"]) if x]))
         new_name = upd.get("name", ek["name"])

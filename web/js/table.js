@@ -1,0 +1,279 @@
+// Tabelle: Spreadsheet mit Formelleiste, Tastatur, Bereichsauswahl, Füllen per ⌘D, Kopieren/Einfügen,
+// Ring-Popup in der Zelle und Bulk-Aktionen für markierte Zeilen.
+import { S, h, icon, GET, POST, PATCH, clear, invalidate, avatar, circleChip, nameEl, rel, ringName, menu, pickCircle, toast, confirmDlg, modal, rows, MOD } from "./core.js";
+import { editField, plain, TYPE_NAMES } from "./fields.js";
+import { ringPopup } from "./shared.js";
+import { VS } from "./desktop.js";
+
+const INLINE = new Set(["text", "number", "date", "phone", "email", "address", "choice"]);
+const letter = (i) => { let s = ""; i++; while (i) { const m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = Math.floor((i - 1) / 26); } return s; };
+
+function allColumns() {
+  const cols = [
+    { key: "kind", label: "Art", ty: "auswahl", get: (r) => (r.kind === "pet" ? "Haustier" : "Mensch"), edit: "kind" },
+    { key: "main_circle_id", label: "Hauptkreis", ty: "kreis", get: (r) => r.main_circle_id, render: (r) => (r.main_circle_id ? circleChip(r.main_circle_id) : h("span.chip", "Lose")), edit: "circle" },
+  ];
+  if (S.settings.use_levels) cols.push({ key: "f_level", label: "Ring", ty: "ring", get: (r) => r.level, render: (r) => (r.level ? ringName(r.level) : h("span.t3", "–")), edit: "ring" });
+  if (S.settings.use_ist) cols.push({ key: "ist", label: "Ist", ty: "berechnet", get: (r) => r.ist?.ring, render: (r) => (r.ist ? `${r.ist.ring} · ${rel(r.ist.last)}` : "–"), locked: true });
+  for (const f of S.fieldList) {
+    if (f.scope === "kreis" || f.id === "f_level") continue;
+    cols.push({ key: f.id, label: f.name, ty: f.type, def: f, get: (r) => r.v[f.id]?.raw, render: (r) => cellVal(f, r), edit: INLINE.has(f.type) ? "inline" : "dialog" });
+  }
+  cols.push({ key: "created", label: "Erfasst", ty: "datum", get: (r) => (r.created_at || "").slice(0, 10), render: (r) => h("span.mono", (r.created_at || "").slice(0, 10)), locked: true });
+  return cols;
+}
+function cellVal(f, r) {
+  const x = r.v[f.id]; if (!x) return "";
+  const txt = ["date", "phone"].includes(f.type) ? h("span.mono", x.d) : f.type === "choice" ? x.d : x.d;
+  const el = x.u ? h("span.unsure-val", txt) : h("span", txt);
+  return x.n > 1 ? h("span", el, h("span.t3", ` +${x.n - 1}`)) : el;
+}
+const DEFAULT = ["kind", "main_circle_id", "f_level", "ist", "f_seen", "f_bday", "f_phone", "f_profile", "f_via"];
+
+export async function table(body, list, all) {
+  const cols0 = allColumns();
+  const chosen = VS.columns || DEFAULT;
+  const cols = [{ key: "name", label: "Name", ty: "text", get: (r) => r.name || r.description, edit: "name" }, ...chosen.map((k) => cols0.find((c) => c.key === k)).filter(Boolean)];
+  let dups = new Set();
+  try { (await GET("/duplicates")).forEach((p) => { dups.add(p.a); dups.add(p.b); }); } catch (_) {}
+  const st = { act: { r: 0, c: 0 }, anc: { r: 0, c: 0 }, rowsSel: new Set(), lastRow: null, editing: null };
+  const tds = [];
+  const addr = h("input.input.mono.addr", { readOnly: true });
+  const fx = h("input.input.mono.grow", { placeholder: "Wert" });
+  const fxTag = h("span.tag");
+  const sheet = h("div.sheet", { tabIndex: 0 });
+  const foot = h("div.sheet-foot");
+  const bulk = h("div.row");
+
+  const tbl = h("table");
+  const colgroup = h("colgroup", h("col", { style: { width: "40px" } }), cols.map((c, i) => h("col", { style: { width: (i === 0 ? 220 : c.key === "main_circle_id" ? 150 : 140) + "px" } })));
+  const thead = h("tr", h("th.rn", h("span", "")), cols.map((c, i) => h("th" + (i === 0 ? ".name" : ""), { title: c.def ? c.def.id : c.key }, c.label, h("span.ty", c.def ? TYPE_NAMES[c.ty] : c.ty))));
+  const tbody = h("tbody");
+  list.forEach((r, ri) => {
+    const tr = h("tr");
+    tr.append(h("td.rn", { on: { mousedown: (e) => selectRow(ri, e) } }, ri + 1));
+    tds[ri] = [];
+    cols.forEach((c, ci) => {
+      const td = h("td" + (ci === 0 ? ".name" : "") + (c.locked ? ".locked" : ""));
+      fillCell(td, r, c);
+      td.addEventListener("mousedown", (e) => { if (e.detail === 2) return; mouseDown(ri, ci, e); });
+      td.addEventListener("mouseenter", (e) => { if (e.buttons === 1 && st.dragging) { st.act = { r: ri, c: ci }; paint(); } });
+      td.addEventListener("dblclick", () => startEdit());
+      tds[ri][ci] = td; tr.append(td);
+    });
+    tbody.append(tr);
+  });
+  tbl.append(colgroup, h("thead", thead), tbody);
+  tbl.style.width = [...colgroup.children].reduce((a, c) => a + parseInt(c.style.width), 0) + "px";
+  sheet.append(tbl);
+  addEventListener("mouseup", () => (st.dragging = false));
+
+  function fillCell(td, r, c) {
+    clear(td);
+    if (c.key === "name") {
+      td.append(h("span.row", { style: { gap: "6px" } }, avatar(r, 20), h("span.ellipsis", nameEl(r)), dups.has(r.id) ? h("span", { title: "Mögliche Doppelte" }, icon("merge")) : null));
+    } else td.append(c.render ? c.render(r) : String(c.get(r) ?? ""));
+  }
+  const range = () => ({ r1: Math.min(st.act.r, st.anc.r), r2: Math.max(st.act.r, st.anc.r), c1: Math.min(st.act.c, st.anc.c), c2: Math.max(st.act.c, st.anc.c) });
+  function paint() {
+    const g = range();
+    tds.forEach((row, ri) => row.forEach((td, ci) => {
+      td.classList.toggle("inr", ri >= g.r1 && ri <= g.r2 && ci >= g.c1 && ci <= g.c2 && (g.r1 !== g.r2 || g.c1 !== g.c2));
+      td.classList.toggle("act", ri === st.act.r && ci === st.act.c);
+    }));
+    [...tbody.children].forEach((tr, ri) => tr.classList.toggle("rsel", st.rowsSel.has(ri)));
+    const r = list[st.act.r], c = cols[st.act.c];
+    addr.value = r ? letter(st.act.c) + (st.act.r + 1) : "";
+    fx.value = r ? rawText(r, c) : "";
+    fx.disabled = !r || c.locked || (c.edit !== "inline" && c.edit !== "name");
+    fxTag.textContent = c ? (c.def ? c.def.id : c.key) : "";
+    const n = (g.r2 - g.r1 + 1) * (g.c2 - g.c1 + 1);
+    clear(foot, h("span", `${list.length} Zeilen`), h("span", `${all.filter((x) => !x.is_self).length} gesamt`), n > 1 ? h("span", `Auswahl ${g.r2 - g.r1 + 1} × ${g.c2 - g.c1 + 1}`) : null,
+      st.rowsSel.size ? h("span", `${st.rowsSel.size} Zeilen markiert`) : null, h("span.grow"),
+      h("span", h("span.kbd", "↑↓←→"), " bewegen"), h("span", h("span.kbd", "Enter"), " bearbeiten"), h("span", h("span.kbd", "Shift+Klick"), " Bereich"), h("span", h("span.kbd", MOD + "D"), " füllen"), h("span", h("span.kbd", MOD + "C / " + MOD + "V"), " kopieren"));
+    drawBulk();
+    const td = tds[st.act.r]?.[st.act.c];
+    if (td) { const sr = sheet.getBoundingClientRect(), tr = td.getBoundingClientRect();
+      if (tr.bottom > sr.bottom) sheet.scrollTop += tr.bottom - sr.bottom + 4; if (tr.top < sr.top + 28) sheet.scrollTop -= sr.top + 28 - tr.top;
+      if (tr.right > sr.right) sheet.scrollLeft += tr.right - sr.right + 4; if (tr.left < sr.left + 260 && st.act.c > 0) sheet.scrollLeft -= sr.left + 260 - tr.left; }
+  }
+  function rawText(r, c) {
+    if (c.key === "name") return r.name || r.description || "";
+    const v = c.get(r);
+    if (c.key === "main_circle_id") return v ? S.circles[v]?.name || "" : "";
+    if (c.def) return v == null ? "" : plain(c.def, v);
+    return v == null ? "" : String(v);
+  }
+  function mouseDown(ri, ci, e) {
+    if (st.editing) commitEdit();
+    sheet.focus();
+    if (e.shiftKey) st.act = { r: ri, c: ci };
+    else { st.act = st.anc = { r: ri, c: ci }; st.dragging = true; }
+    if (!e.shiftKey) st.rowsSel.clear();
+    paint();
+    const c = cols[ci];
+    if (!e.shiftKey && c.edit === "ring" && e.target.closest("td")) setTimeout(() => cellAction(), 0);
+  }
+  function selectRow(ri, e) {
+    sheet.focus();
+    if (e.shiftKey && st.lastRow !== null) { const [a, b] = [Math.min(st.lastRow, ri), Math.max(st.lastRow, ri)]; for (let i = a; i <= b; i++) st.rowsSel.add(i); }
+    else if (e.metaKey || e.ctrlKey) { st.rowsSel.has(ri) ? st.rowsSel.delete(ri) : st.rowsSel.add(ri); }
+    else { st.rowsSel.clear(); st.rowsSel.add(ri); }
+    st.lastRow = ri; st.act = { r: ri, c: 0 }; st.anc = { r: ri, c: cols.length - 1 }; paint();
+  }
+  function selectedIds() {
+    if (st.rowsSel.size) return [...st.rowsSel].map((i) => list[i].id);
+    const g = range(); return list.slice(g.r1, g.r2 + 1).map((r) => r.id);
+  }
+
+  // ------------------------------------------------ Bearbeiten
+  async function save(r, c, value) {
+    try {
+      if (c.key === "name") {
+        const body = r.name || !r.description ? { name: value } : { description: value };
+        await PATCH("/entities/" + r.id, body); if (body.name !== undefined) r.name = value || null; else r.description = value;
+        r.display = r.name || r.description;
+      } else {
+        await POST("/bulk/cells", { cells: [{ id: r.id, field: c.key, value: value === "" ? null : c.def?.type === "choice" ? (c.def.options?.multiple ? value.split(",").map((s) => s.trim()).filter(Boolean) : value) : value }] });
+        const fresh = (await rows(true)).find((x) => x.id === r.id);
+        if (fresh) Object.assign(r, fresh);
+      }
+      invalidate();
+    } catch (_) {}
+    const ri = list.indexOf(r); cols.forEach((cc, ci) => fillCell(tds[ri][ci], r, cc)); paint();
+  }
+  function startEdit(initial) {
+    const r = list[st.act.r], c = cols[st.act.c];
+    if (!r || c.locked) return;
+    if (c.edit !== "inline" && c.edit !== "name") return cellAction();
+    const td = tds[st.act.r][st.act.c];
+    const inp = h("input.cell-edit", { value: initial !== undefined ? initial : rawText(r, c) });
+    const sr = sheet.getBoundingClientRect(), tr = td.getBoundingClientRect();
+    Object.assign(inp.style, { left: tr.left - sr.left + sheet.scrollLeft + "px", top: tr.top - sr.top + sheet.scrollTop + "px", width: Math.max(tr.width, 180) + "px", height: tr.height + "px" });
+    sheet.append(inp); inp.focus();
+    if (initial === undefined) inp.select();
+    st.editing = { inp, r, c };
+    inp.addEventListener("keydown", (e) => {
+      e.stopPropagation();
+      if (e.key === "Enter") { commitEdit(); move(1, 0); }
+      else if (e.key === "Tab") { e.preventDefault(); commitEdit(); move(0, e.shiftKey ? -1 : 1); }
+      else if (e.key === "Escape") { cancelEdit(); }
+    });
+    inp.addEventListener("blur", () => setTimeout(() => { if (st.editing?.inp === inp) commitEdit(); }, 50));
+  }
+  function commitEdit() {
+    const ed = st.editing; if (!ed) return; st.editing = null; ed.inp.remove();
+    if (ed.inp.value !== rawText(ed.r, ed.c)) save(ed.r, ed.c, ed.inp.value.trim());
+    sheet.focus();
+  }
+  function cancelEdit() { const ed = st.editing; if (!ed) return; st.editing = null; ed.inp.remove(); sheet.focus(); }
+  async function cellAction() {
+    const r = list[st.act.r], c = cols[st.act.c]; if (!r || c.locked) return;
+    const td = tds[st.act.r][st.act.c];
+    if (c.edit === "ring") return ringPopup(td, r.level, async (l) => { await POST("/bulk", { ids: selectedIds(), op: "ring", value: l }); for (const id of selectedIds()) { const x = list.find((y) => y.id === id); if (x) x.level = l; } invalidate(); refreshAll(); });
+    if (c.edit === "circle") return pickCircle(td, { onPick: async (ci) => { await POST("/bulk", { ids: selectedIds(), op: "main_circle", value: ci.id }); invalidate(); for (const id of selectedIds()) { const x = list.find((y) => y.id === id); if (x) { x.main_circle_id = ci.id; if (!x.circles.includes(ci.id)) x.circles.push(ci.id); } } refreshAll(); } });
+    if (c.edit === "kind") return menu(td, [["person", "Mensch"], ["pet", "Haustier"]].map(([k, l]) => ({ label: l, action: async () => { await POST("/bulk", { ids: selectedIds(), op: "kind", value: k }); selectedIds().forEach((id) => { const x = list.find((y) => y.id === id); if (x) x.kind = k; }); invalidate(); refreshAll(); } })));
+    if (c.edit === "dialog" || c.edit === "inline") {
+      const e = await GET("/entities/" + r.id);
+      const vals = c.def.scope === "bund" ? (e.ihr_zwei?.fields?.[c.key] || []) : (e.fields[c.key] || []);
+      if (await editField(c.def, vals, `/entities/${r.id}/fields/${c.key}`)) { const fresh = (await rows(true)).find((x) => x.id === r.id); if (fresh) Object.assign(r, fresh); refreshAll(); }
+    }
+    if (c.edit === "name") startEdit();
+  }
+  function refreshAll() { list.forEach((r, ri) => cols.forEach((c, ci) => fillCell(tds[ri][ci], r, c))); paint(); }
+  function move(dr, dc, extend = false) {
+    const r = Math.max(0, Math.min(list.length - 1, st.act.r + dr)), c = Math.max(0, Math.min(cols.length - 1, st.act.c + dc));
+    st.act = { r, c }; if (!extend) { st.anc = { r, c }; st.rowsSel.clear(); } paint();
+  }
+  async function fillDown() {
+    const g = range(); if (g.r1 === g.r2) return toast("Bereich mit mehreren Zeilen markieren, dann ⌘D");
+    const cells = [];
+    for (let ci = g.c1; ci <= g.c2; ci++) {
+      const c = cols[ci]; if (c.locked || c.key === "name") continue;
+      const src = list[g.r1];
+      for (let ri = g.r1 + 1; ri <= g.r2; ri++) {
+        if (c.edit === "ring") cells.push({ id: list[ri].id, field: "f_level", value: src.level });
+        else if (c.key === "main_circle_id") { if (src.main_circle_id) cells.push({ id: list[ri].id, field: "main_circle_id", value: src.main_circle_id }); }
+        else if (c.key === "kind") cells.push({ id: list[ri].id, field: "kind", value: src.kind });
+        else if (c.def) cells.push({ id: list[ri].id, field: c.key, value: src.v[c.key]?.raw ?? null });
+      }
+    }
+    if (!cells.length) return;
+    await POST("/bulk/cells", { cells });
+    const fresh = Object.fromEntries((await rows(true)).map((x) => [x.id, x]));
+    list.forEach((r) => fresh[r.id] && Object.assign(r, fresh[r.id])); refreshAll();
+    toast(`${cells.length} Zellen gefüllt`);
+  }
+  function copy(e) {
+    const g = range(); const lines = [];
+    for (let ri = g.r1; ri <= g.r2; ri++) { const row = []; for (let ci = g.c1; ci <= g.c2; ci++) row.push(rawText(list[ri], cols[ci])); lines.push(row.join("\t")); }
+    e.clipboardData.setData("text/plain", lines.join("\n")); e.preventDefault(); toast("Kopiert");
+  }
+  async function paste(e) {
+    if (st.editing) return;
+    const text = e.clipboardData.getData("text/plain"); if (!text) return; e.preventDefault();
+    const data = text.replace(/\r/g, "").split("\n").filter((l) => l !== "").map((l) => l.split("\t"));
+    const cells = [];
+    data.forEach((row, i) => row.forEach((v, j) => {
+      const r = list[st.act.r + i], c = cols[st.act.c + j]; if (!r || !c || c.locked) return;
+      if (c.key === "name") cells.push({ id: r.id, field: "name", value: v });
+      else if (c.def && INLINE.has(c.def.type)) cells.push({ id: r.id, field: c.key, value: v === "" ? null : c.def.type === "choice" && c.def.options?.multiple ? v.split(",").map((s) => s.trim()) : v });
+      else if (c.edit === "ring" && /^[1-4]?$/.test(v)) cells.push({ id: r.id, field: "f_level", value: v ? +v : null });
+    }));
+    if (!cells.length) return;
+    await POST("/bulk/cells", { cells });
+    const fresh = Object.fromEntries((await rows(true)).map((x) => [x.id, x]));
+    list.forEach((r) => fresh[r.id] && Object.assign(r, fresh[r.id])); refreshAll(); toast(`${cells.length} Zellen eingefügt`);
+  }
+  sheet.addEventListener("copy", copy);
+  sheet.addEventListener("paste", paste);
+  sheet.addEventListener("keydown", (e) => {
+    if (st.editing) return;
+    const mod = e.metaKey || e.ctrlKey;
+    const k = e.key;
+    if (k === "ArrowDown") { e.preventDefault(); move(mod ? list.length : 1, 0, e.shiftKey); }
+    else if (k === "ArrowUp") { e.preventDefault(); move(mod ? -list.length : -1, 0, e.shiftKey); }
+    else if (k === "ArrowRight" || (k === "Tab" && !e.shiftKey)) { e.preventDefault(); move(0, 1, e.shiftKey && k !== "Tab"); }
+    else if (k === "ArrowLeft" || (k === "Tab" && e.shiftKey)) { e.preventDefault(); move(0, -1, e.shiftKey && k !== "Tab"); }
+    else if (k === "Enter" || k === "F2") { e.preventDefault(); if (e.shiftKey) move(-1, 0); else startEdit(); }
+    else if (mod && k.toLowerCase() === "d") { e.preventDefault(); fillDown(); }
+    else if (mod && k.toLowerCase() === "a") { e.preventDefault(); st.anc = { r: 0, c: 0 }; st.act = { r: list.length - 1, c: cols.length - 1 }; paint(); }
+    else if (mod && k.toLowerCase() === "o") { e.preventDefault(); location.hash = "#/p/" + list[st.act.r].id; }
+    else if ((k === "Delete" || k === "Backspace") && !mod) {
+      e.preventDefault(); const g = range(); const cells = [];
+      for (let ri = g.r1; ri <= g.r2; ri++) for (let ci = g.c1; ci <= g.c2; ci++) { const c = cols[ci]; if (c.def && !c.locked) cells.push({ id: list[ri].id, field: c.key, value: null }); else if (c.edit === "ring") cells.push({ id: list[ri].id, field: "f_level", value: null }); }
+      if (cells.length) POST("/bulk/cells", { cells }).then(async () => { const fresh = Object.fromEntries((await rows(true)).map((x) => [x.id, x])); list.forEach((r) => fresh[r.id] && Object.assign(r, fresh[r.id])); refreshAll(); });
+    } else if (/^[1-4]$/.test(k) && cols[st.act.c].edit === "ring" && !mod) {
+      e.preventDefault(); POST("/bulk", { ids: selectedIds(), op: "ring", value: +k }).then(() => { selectedIds().forEach((id) => { const x = list.find((y) => y.id === id); if (x) x.level = +k; }); invalidate(); refreshAll(); });
+    } else if (k.length === 1 && !mod && !e.altKey) { startEdit(k); e.preventDefault(); }
+  });
+  fx.addEventListener("keydown", (e) => { if (e.key === "Enter") { const r = list[st.act.r], c = cols[st.act.c]; save(r, c, fx.value.trim()); sheet.focus(); } if (e.key === "Escape") { paint(); sheet.focus(); } });
+
+  // ------------------------------------------------ Bulk-Aktionen
+  function drawBulk() {
+    const ids = selectedIds(); const n = ids.length;
+    clear(bulk, n > 1 || st.rowsSel.size ? [
+      h("span.small.t2", `${n} markiert`),
+      h("button.btn.sm", { on: { click: (e) => pickCircle(e.currentTarget, { onPick: async (c) => { await POST("/bulk", { ids, op: "add_circle", value: c.id }); invalidate(); toast(`${n} zu ${c.name} hinzugefügt`); location.reload(); } }) } }, icon("circles"), "Kreis zuordnen"),
+      S.settings.use_levels ? h("button.btn.sm", { on: { click: (e) => ringPopup(e.currentTarget, null, async (l) => { await POST("/bulk", { ids, op: "ring", value: l }); ids.forEach((id) => { const x = list.find((y) => y.id === id); if (x) x.level = l; }); invalidate(); refreshAll(); }) } }, icon("rings"), "Ring") : null,
+      n === 2 ? h("button.btn.sm.dark", { on: { click: () => (location.hash = `#/merge/${ids[0]}/${ids[1]}`) } }, icon("merge"), "Zusammenführen") : null,
+      h("button.btn.sm", { on: { click: (e) => menu(e.currentTarget, [
+        { label: "Aufs Handy", icon: "smartphone", action: async () => { await POST("/bulk", { ids, op: "on_phone", value: true }); toast("Aufs Handy gesetzt"); } },
+        { label: "Nicht aufs Handy", action: async () => { await POST("/bulk", { ids, op: "on_phone", value: false }); } },
+        { label: "Heute gesehen", icon: "eye", action: async () => { for (const id of ids) await POST(`/seen-today/${id}`); invalidate(); toast(`${n} × heute gesehen`); } },
+        { label: "Löschen", icon: "trash", action: async () => { if (await confirmDlg(`${n} Einträge löschen?`, "Das lässt sich nicht rückgängig machen.", "Löschen", true)) { await POST("/bulk", { ids, op: "delete" }); invalidate(); location.reload(); } } }]) } }, icon("more"))] : null);
+  }
+
+  const colBtn = h("button.btn.sm", { on: { click: () => chooseColumns(cols0, chosen) } }, icon("table"), "Spalten");
+  body.append(h("div.sheet-wrap", { style: { height: "calc(100vh - 170px)" } },
+    h("div.fbar", addr, h("span.t3.mono", "ƒ"), fx, fxTag, bulk, colBtn), sheet, foot));
+  paint();
+  sheet.focus();
+}
+
+async function chooseColumns(cols0, chosen) {
+  const sel = new Set(chosen);
+  const list = h("div.col", cols0.map((c) => h("label.check", h("input", { type: "checkbox", checked: sel.has(c.key), on: { change: (e) => e.target.checked ? sel.add(c.key) : sel.delete(c.key) } }), c.label, h("span.tag", c.def ? c.def.id : c.ty))));
+  const ok = await modal("Spalten", list, [{ label: "Abbrechen" }, { label: "Übernehmen", primary: true, value: true }]);
+  if (ok) { VS.columns = cols0.map((c) => c.key).filter((k) => sel.has(k)); location.hash = location.hash; dispatchEvent(new HashChangeEvent("hashchange")); toast("Spalten geändert – mit „Ansicht speichern“ merken"); }
+}
