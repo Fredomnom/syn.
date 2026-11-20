@@ -12,6 +12,7 @@ router = APIRouter(prefix="/api/v1", tags=["Konten"])
 class Login(BaseModel):
     username: str
     password: str
+    code: str | None = None  # Einmalcode oder Wiederherstellungscode, wenn 2FA an ist
 
 
 class NewUser(BaseModel):
@@ -37,7 +38,7 @@ def create_user(username, password, display_name=None, is_admin=False) -> str:
 
 
 def public_user(u, settings=None):
-    return {"id": u["id"], "username": u["username"], "display_name": u["display_name"],
+    return {"id": u["id"], "username": u["username"], "display_name": u["display_name"], "two_factor": bool(u.get("totp_secret")),
             "is_admin": bool(u["is_admin"]), "created_at": u["created_at"],
             **({"settings": settings} if settings is not None else {})}
 
@@ -70,6 +71,11 @@ def login(body: Login, response: Response, request: Request):
     u = db.q1("SELECT * FROM users WHERE username=?", body.username.strip().lower())
     if not u or not auth.check_pw(body.password, u["pw_hash"]):
         raise HTTPException(401, "Benutzername oder Passwort falsch")
+    if u.get("totp_secret"):
+        if not body.code:
+            return {"need_code": True}
+        if not _check_second(u, body.code):
+            raise HTTPException(401, "Code stimmt nicht")
     tok = auth.create_session(u["id"], request.headers.get("user-agent", ""))
     _cookie(response, tok, request)
     return {"token": tok, "user": public_user(u)}
@@ -252,3 +258,78 @@ def admin_toggle_importer(iid: str, body: dict, ctx: Ctx = Depends(admin)):
         off.add(iid)
     db.ex("INSERT OR REPLACE INTO instance(key,value) VALUES('disabled_importers',?)", db.jd(sorted(off)))
     return {"ok": True}
+
+
+# ---------------------------------------------------------------- Zwei-Faktor (TOTP)
+from .. import crypto, totp  # noqa: E402
+
+_FAILS: dict = {}
+
+
+def _check_second(u, code) -> bool:
+    """Einmalcode aus der App oder einer der Wiederherstellungscodes (die gelten nur einmal)."""
+    import time as _t
+    fails = [x for x in _FAILS.get(u["id"], []) if _t.time() - x < 300]
+    if len(fails) >= 8:
+        raise HTTPException(429, "Zu viele Versuche – warte ein paar Minuten")
+    secret = crypto.unseal(u["id"], u["totp_secret"])
+    step = totp.verify(secret, code)
+    if step is not None and step != u.get("totp_last"):
+        db.ex("UPDATE users SET totp_last=? WHERE id=?", step, u["id"])
+        return True
+    codes = db.jl(u.get("totp_recovery"), []) or []
+    hc = totp.hash_code(code)
+    if hc in codes:
+        codes.remove(hc)
+        db.ex("UPDATE users SET totp_recovery=? WHERE id=?", db.jd(codes), u["id"])
+        return True
+    _FAILS[u["id"]] = fails + [_t.time()]
+    return False
+
+
+@router.get("/me/2fa")
+def twofa_state(ctx: Ctx = Depends(current)):
+    u = db.q1("SELECT totp_secret, totp_recovery FROM users WHERE id=?", ctx.uid)
+    return {"enabled": bool(u["totp_secret"]), "recovery_left": len(db.jl(u["totp_recovery"], []) or [])}
+
+
+@router.post("/me/2fa/setup")
+def twofa_setup(ctx: Ctx = Depends(current)):
+    """Neues Geheimnis erzeugen. Erst nach /enable mit einem gültigen Code ist 2FA an."""
+    s = totp.new_secret()
+    db.ex("UPDATE users SET totp_pending=? WHERE id=?", crypto.seal(ctx.uid, s), ctx.uid)
+    return {"secret": s, "uri": totp.uri(s, ctx.user["username"])}
+
+
+@router.post("/me/2fa/enable")
+def twofa_enable(body: dict, ctx: Ctx = Depends(current)):
+    u = db.q1("SELECT totp_pending FROM users WHERE id=?", ctx.uid)
+    s = crypto.unseal(ctx.uid, u["totp_pending"]) if u["totp_pending"] else None
+    if not s or totp.verify(s, body.get("code")) is None:
+        raise HTTPException(400, "Code stimmt nicht – prüfe die Uhrzeit am Handy")
+    codes = totp.recovery_codes()
+    db.ex("UPDATE users SET totp_secret=?, totp_pending=NULL, totp_recovery=?, totp_last=NULL WHERE id=?",
+          crypto.seal(ctx.uid, s), db.jd([totp.hash_code(c) for c in codes]), ctx.uid)
+    return {"enabled": True, "recovery_codes": codes}
+
+
+@router.post("/me/2fa/recovery")
+def twofa_new_recovery(body: dict, ctx: Ctx = Depends(current)):
+    """Neue Wiederherstellungscodes (die alten verfallen). Braucht einen aktuellen Code."""
+    u = db.q1("SELECT * FROM users WHERE id=?", ctx.uid)
+    if not u["totp_secret"] or not _check_second(u, body.get("code")):
+        raise HTTPException(400, "Code stimmt nicht")
+    codes = totp.recovery_codes()
+    db.ex("UPDATE users SET totp_recovery=? WHERE id=?", db.jd([totp.hash_code(c) for c in codes]), ctx.uid)
+    return {"recovery_codes": codes}
+
+
+@router.post("/me/2fa/disable")
+def twofa_disable(body: dict, ctx: Ctx = Depends(current)):
+    u = db.q1("SELECT * FROM users WHERE id=?", ctx.uid)
+    if not auth.check_pw(body.get("password") or "", u["pw_hash"]):
+        raise HTTPException(400, "Passwort falsch")
+    if u["totp_secret"] and not _check_second(u, body.get("code")):
+        raise HTTPException(400, "Code stimmt nicht")
+    db.ex("UPDATE users SET totp_secret=NULL, totp_pending=NULL, totp_recovery=NULL, totp_last=NULL WHERE id=?", ctx.uid)
+    return {"enabled": False}

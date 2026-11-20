@@ -438,6 +438,7 @@ async function account(body) {
       srow("Benutzername", "Für die Anmeldung und CardDAV.", h("span.mono", S.me.username))),
     panel("Passwort",
       srow("Passwort ändern", "Mindestens 8 Zeichen.", h("div.row", o, n, h("button.btn", { on: { click: async () => { await POST("/me/password", { old: o.value, new: n.value }); o.value = n.value = ""; toast("Passwort geändert"); } } }, "Ändern")))),
+    await twoFactorPanel(),
     panel("Angemeldete Geräte",
       ...ses.map((x) => srow(x.agent?.replace(/\(.*?\)/g, "").slice(0, 60) || "Unbekanntes Gerät", `Seit ${(x.created_at || "").slice(0, 10)} · läuft ab ${(x.expires_at || "").slice(0, 10)}`, null)),
       srow("Abmelden", "Auf diesem Gerät.", h("button.btn", { on: { click: async () => { await POST("/auth/logout"); location.hash = "#/login"; } } }, icon("logout"), "Abmelden"))));
@@ -551,4 +552,62 @@ async function deleteKind(k, kinds) {
     } }]);
   if (ok) { await reloadCircles(); toast(`„${k.name}“ gelöscht`); }
   return !!ok;
+}
+
+// ---------------------------------------------------------------- Zwei-Faktor
+async function loadQr() {
+  if (window.qrcode) return window.qrcode;
+  await new Promise((ok, bad) => document.head.append(h("script", { src: "/static/vendor/qrcode.js", on: { load: ok, error: bad } })));
+  return window.qrcode;
+}
+function codesBox(codes) {
+  const txt = codes.join("\n");
+  return h("div.tf-codes", h("p.small.t2", "Wiederherstellungscodes – jeder gilt einmal, falls du dein Handy nicht hast. Bewahre sie sicher auf, syn zeigt sie nur jetzt."),
+    h("pre.code.tf-list", txt),
+    h("div.row", h("button.btn.sm", { on: { click: async () => { try { await navigator.clipboard.writeText(txt); toast("Kopiert"); } catch (_) {} } } }, icon("copy"), "Kopieren"),
+      h("button.btn.sm", { on: { click: () => download("syn-wiederherstellungscodes.txt", txt, "text/plain") } }, icon("download"), "Als Datei")));
+}
+async function twoFactorPanel() {
+  const st = await GET("/me/2fa");
+  const box = h("div.srow-full");
+  const p = panel("Zwei-Faktor-Anmeldung",
+    srow(st.enabled ? "Ist an" : "Ist aus", st.enabled ? `Beim Anmelden fragt syn zusätzlich nach einem Code aus deiner Authenticator-App. Noch ${st.recovery_left} Wiederherstellungscodes übrig.`
+      : "Schützt dein Konto zusätzlich mit einem Code aus einer Authenticator-App (z.B. 2FAS, Aegis, Google Authenticator, 1Password).",
+      st.enabled ? h("div.row", h("button.btn", { on: { click: () => renew() } }, "Neue Codes"), h("button.btn.danger", { on: { click: () => off() } }, "Ausschalten"))
+        : h("button.btn.primary", { on: { click: () => setup() } }, icon("shield"), "Einrichten")), box);
+  const again = async () => p.replaceWith(await twoFactorPanel());
+  async function setup() {
+    const s = await POST("/me/2fa/setup");
+    const qr = await loadQr().catch(() => null);
+    let img = null;
+    if (qr) { const q = qr(0, "M"); q.addData(s.uri); q.make(); img = h("div.tf-qr"); img.innerHTML = q.createSvgTag({ cellSize: 4, margin: 2, scalable: true }); }
+    const code = h("input.input.mono.tf-code", { placeholder: "123456", inputMode: "numeric", autocomplete: "one-time-code", maxLength: 6 });
+    const err = h("p.small", { style: { color: "var(--danger)" } });
+    const confirm = async () => {
+      try { const r = await api("POST", "/me/2fa/enable", { code: code.value }, { quiet: true }); clear(box, h("div.hint", icon("check"), h("div.grow", h("b", "2FA ist an."))), codesBox(r.recovery_codes), h("button.btn.sm", { on: { click: again } }, "Fertig")); }
+      catch (e) { err.textContent = e.message; code.select(); }
+    };
+    code.addEventListener("keydown", (e) => { if (e.key === "Enter") confirm(); });
+    clear(box, h("div.tf-setup",
+      img, h("div.col", { style: { gap: "10px" } },
+        h("ol.imp-steps", h("li", h("span.imp-step-n", 1), h("span", "Öffne deine Authenticator-App und scanne den QR-Code.")),
+          h("li", h("span.imp-step-n", 2), h("span", "Kein Scannen möglich? Gib diesen Schlüssel von Hand ein: ", h("code.tf-secret", s.secret.match(/.{1,4}/g).join(" ")))),
+          h("li", h("span.imp-step-n", 3), h("span", "Tippe den 6-stelligen Code aus der App hier ein."))),
+        h("div.row", code, h("button.btn.primary", { on: { click: confirm } }, "Bestätigen"), h("button.btn.ghost", { on: { click: () => clear(box) } }, "Abbrechen")), err)));
+    code.focus();
+  }
+  async function off() {
+    const pw = h("input.input", { type: "password", placeholder: "Passwort", autocomplete: "current-password" });
+    const code = h("input.input.mono", { placeholder: "Code aus der App", inputMode: "numeric", autocomplete: "one-time-code" });
+    const ok = await modal("2FA ausschalten?", h("div.col", h("p.small.t2", "Dann reicht wieder das Passwort zum Anmelden."), pw, code),
+      [{ label: "Abbrechen" }, { label: "Ausschalten", danger: true, action: () => api("POST", "/me/2fa/disable", { password: pw.value, code: code.value }).catch(() => false) }]);
+    if (ok) { toast("2FA ist aus"); again(); }
+  }
+  async function renew() {
+    const code = h("input.input.mono", { placeholder: "Code aus der App", inputMode: "numeric", autocomplete: "one-time-code" });
+    const r = await modal("Neue Wiederherstellungscodes", h("div.col", h("p.small.t2", "Die alten Codes verfallen dann."), code),
+      [{ label: "Abbrechen" }, { label: "Neue Codes", primary: true, action: () => api("POST", "/me/2fa/recovery", { code: code.value }).catch(() => false) }]);
+    if (r) clear(box, codesBox(r.recovery_codes), h("button.btn.sm", { on: { click: again } }, "Fertig"));
+  }
+  return p;
 }

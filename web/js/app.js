@@ -53,12 +53,21 @@ async function renderLogin(app) {
   const pw = h("input.input.big", { type: "password", placeholder: "Passwort", autocomplete: inst.needs_setup ? "new-password" : "current-password" });
   const name = h("input.input.big", { placeholder: "Dein Name (z.B. Fred)" });
   const err = h("p.login-err");
+  const code = h("input.input.big.mono.login-code", { placeholder: "123 456", inputMode: "numeric", autocomplete: "one-time-code", maxLength: 14 });
+  const codeRow = h("div.login-2fa", { hidden: true }, h("div.small", h("b", "Zwei-Faktor-Anmeldung. "), "Gib den Code aus deiner Authenticator-App ein – oder einen Wiederherstellungscode."), code);
   const btn = h("button.btn.primary.big", { type: "submit" }, inst.needs_setup ? "Konto anlegen" : "Anmelden", icon("right"));
   const submit = async (e) => {
     e.preventDefault(); err.textContent = ""; btn.disabled = true;
     try {
       if (inst.needs_setup) await api("POST", "/instance/setup", { username: user.value, password: pw.value, display_name: name.value || user.value }, { quiet: true });
-      else await api("POST", "/auth/login", { username: user.value, password: pw.value }, { quiet: true });
+      else {
+        const r = await api("POST", "/auth/login", { username: user.value, password: pw.value, code: code.value.trim() || null }, { quiet: true });
+        if (r.need_code) {
+          // Zweiter Schritt: Code aus der Authenticator-App
+          codeRow.hidden = false; user.readOnly = pw.readOnly = true; btn.disabled = false;
+          btn.firstChild.textContent = "Bestätigen"; code.focus(); return;
+        }
+      }
       app.querySelector(".login")?.classList.add("leaving");
       setTimeout(() => { location.hash = "#/"; render(); }, 260);
     } catch (ex) { err.textContent = ex.message; btn.disabled = false; form.classList.remove("shake"); void form.offsetWidth; form.classList.add("shake"); }
@@ -68,7 +77,7 @@ async function renderLogin(app) {
   for (let i = 1; i <= 6; i++) rings.append(h("circle", { r: i * 80, style: { animationDelay: i * 0.35 + "s" } }));
   const form = h("form.login-form", { on: { submit } },
     inst.needs_setup ? h("div.login-first", h("b", "Willkommen! "), "Du legst jetzt das Admin-Konto an. Weitere Konten legst du später selbst an.") : null,
-    inst.needs_setup ? name : null, user, pw, err, btn);
+    inst.needs_setup ? name : null, user, pw, codeRow, err, btn);
   clear(app, h("div.login-bg", rings, h("div.login",
     h("div.login-logo", h("span", "s"), h("span", "y"), h("span", "n"), h("b", ".")),
     h("p.login-slogan", "Das Kontaktbuch für alle, die du kennst."),

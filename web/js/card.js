@@ -40,7 +40,9 @@ function show(f, v, services) {
   }
   if (f.type === "address") { const t = typeof x === "object" ? [x.street, [x.zip, x.city].filter(Boolean).join(" "), x.country].filter(Boolean).join(", ") : x; return { text: t, href: "https://www.openstreetmap.org/search?query=" + encodeURIComponent(t) }; }
   if (f.type === "date") { const m = /^(\d{4}|\?{4})-(\d\d)-(\d\d)$/.exec(x || ""); return { text: m ? new Date(2000, +m[2] - 1, +m[3]).toLocaleDateString("de-DE", { day: "numeric", month: "long" }) + (m[1].startsWith("?") ? "" : " " + m[1]) : x }; }
-  return { text: typeof x === "object" ? JSON.stringify(x) : String(x) };
+  if (Array.isArray(x)) return { text: x.join(", ") };
+  if (x && typeof x === "object") return { text: Object.values(x).filter((y) => y && typeof y !== "object").join(", ") };
+  return { text: String(x) };
 }
 function vcard(c) {
   const esc = (s) => String(s).replace(/([,;\\])/g, "\\$1").replace(/\n/g, "\\n");

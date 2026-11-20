@@ -170,6 +170,10 @@ def migrate(c):
         if col not in cols:
             c.execute(f"ALTER TABLE entities ADD COLUMN {col} TEXT")
             added = True
+    ucols = {r[1] for r in c.execute("PRAGMA table_info(users)")}
+    for col, typ in (("totp_secret", "TEXT"), ("totp_pending", "TEXT"), ("totp_recovery", "TEXT"), ("totp_last", "INTEGER")):
+        if col not in ucols:
+            c.execute(f"ALTER TABLE users ADD COLUMN {col} {typ}")
     for tbl in ("circle_kinds", "bund_kinds"):
         if "icon" not in {r[1] for r in c.execute(f"PRAGMA table_info({tbl})")}:
             c.execute(f"ALTER TABLE {tbl} ADD COLUMN icon TEXT")

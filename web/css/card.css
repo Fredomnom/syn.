@@ -11,7 +11,8 @@
 .vk-rows { display: flex; flex-direction: column; }
 .vk-row { display: flex; align-items: center; gap: 14px; padding: 12px 8px; border-radius: 14px; color: var(--ink); text-decoration: none; }
 a.vk-row:hover { background: var(--bg); }
-.vk-row + .vk-row { box-shadow: 0 -1px 0 var(--line); }
+.vk-row { position: relative; }
+.vk-row + .vk-row::before { content: ""; position: absolute; left: 60px; right: 8px; top: 0; height: 1px; background: var(--line); }
 .vk-ic { flex: none; width: 38px; height: 38px; border-radius: 12px; background: var(--bg2); display: grid; place-items: center; }
 .vk-ic svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .vk-txt { display: flex; flex-direction: column; min-width: 0; }
