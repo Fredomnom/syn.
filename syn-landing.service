@@ -1,0 +1,38 @@
+# syn Landing Page (syn.fredomnom.com) als Systemdienst.
+#   sudo cp syn-landing.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now syn-landing
+[Unit]
+Description=syn Landing Page (syn.fredomnom.com) - Port 8090
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=Fredomnom
+Group=Fredomnom
+WorkingDirectory=/home/Fredomnom/syn
+Environment=PYTHONUNBUFFERED=1
+Environment=LANDING_HOST=0.0.0.0
+Environment=LANDING_PORT=8090
+Environment=SYN_GITHUB_URL=https://github.com/Fredomnom/syn.
+# Environment=SYN_APP_URL=https://...   (öffentliche syn-Instanz für „Zur App“; leer = Knopf ausgeblendet)
+ExecStart=/usr/bin/python3 /home/Fredomnom/syn/landingpage.py
+Restart=on-failure
+RestartSec=5
+
+# --- Härtung: die Seite liest nur Dateien, schreibt nirgendwohin ---------
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectHome=read-only
+ProtectSystem=strict
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+CapabilityBoundingSet=
+MemoryMax=256M
+
+[Install]
+WantedBy=multi-user.target
