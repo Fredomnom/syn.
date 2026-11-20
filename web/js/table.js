@@ -33,10 +33,43 @@ function cellVal(f, r) {
 }
 const DEFAULT = ["kind", "main_circle_id", "f_level", "ist", "f_seen", "f_bday", "f_phone", "f_profile", "f_via"];
 
-export async function table(body, list, all, grouping = "") {
+export async function table(body, list, all, grouping = "", redraw = null) {
   const cols0 = allColumns();
   const chosen = VS.columns || DEFAULT;
   const cols = [{ key: "name", label: "Name", ty: "text", get: (r) => r.name || r.description, edit: "name" }, ...chosen.map((k) => cols0.find((c) => c.key === k)).filter(Boolean)];
+  // Spaltenfilter wie in Excel: je Spalte die erlaubten Werte
+  const CF = (VS.colFilters ||= {});
+  const base = list;
+  const EMPTY = "(leer)";
+  const cellKey = (r, c) => rawText(r, c).trim() || (c.key === "main_circle_id" ? "Lose" : EMPTY);
+  for (const k of Object.keys(CF)) if (!cols.some((c) => c.key === k)) delete CF[k];
+  list = list.filter((r) => cols.every((c) => !CF[c.key] || CF[c.key].includes(cellKey(r, c))));
+  function colFilter(anchor, c) {
+    const counts = new Map();
+    for (const r of base) { const k = cellKey(r, c); counts.set(k, (counts.get(k) || 0) + 1); }
+    const vals = [...counts.keys()].sort((a, b) => (a === EMPTY) - (b === EMPTY) || a.localeCompare(b, "de", { numeric: true }));
+    const sel = new Set(CF[c.key] || vals);
+    const q = h("input.input", { placeholder: "Werte suchen …", style: { width: "100%" } });
+    const boxes = vals.map((v) => {
+      const cb = h("input", { type: "checkbox", checked: sel.has(v), on: { change: () => { cb.checked ? sel.add(v) : sel.delete(v); syncAll(); } } });
+      return { v, el: h("label.check.cf-item", cb, h("span.grow.ellipsis", v), h("span.t3.small", counts.get(v))), cb };
+    });
+    const allCb = h("input", { type: "checkbox", on: { change: () => { const vis = boxes.filter((b) => b.el.style.display !== "none"); vis.forEach((b) => { b.cb.checked = allCb.checked; allCb.checked ? sel.add(b.v) : sel.delete(b.v); }); } } });
+    const syncAll = () => { allCb.checked = boxes.every((b) => b.cb.checked); allCb.indeterminate = !allCb.checked && boxes.some((b) => b.cb.checked); };
+    syncAll();
+    q.addEventListener("input", () => { const t = q.value.trim().toLowerCase(); boxes.forEach((b) => (b.el.style.display = !t || b.v.toLowerCase().includes(t) ? "" : "none")); });
+    const apply = () => {
+      closePop();
+      if (sel.size === vals.length) delete CF[c.key]; else CF[c.key] = [...sel];
+      redraw?.();
+    };
+    const sortBtn = (dir, label, ic) => h("button", { type: "button", on: { click: () => { closePop(); VS.sort = (dir < 0 ? "-" : "") + (c.key === "main_circle_id" ? "main_circle_id" : c.key); redraw?.(); } } }, icon(ic), h("span.grow", label));
+    popover(anchor, h("div.cf", h("div.menu", sortBtn(1, "Aufsteigend sortieren", "sort"), sortBtn(-1, "Absteigend sortieren", "sort"),
+      CF[c.key] ? h("button", { type: "button", on: { click: () => { closePop(); delete CF[c.key]; redraw?.(); } } }, icon("x"), h("span.grow", "Filter entfernen")) : null),
+      q, h("label.check.cf-item.cf-all", allCb, h("span.grow", "Alle auswählen")), h("div.cf-list", boxes.map((b) => b.el)),
+      h("div.row", { style: { justifyContent: "flex-end", gap: "6px" } }, h("button.btn.sm", { type: "button", on: { click: closePop } }, "Abbrechen"), h("button.btn.sm.primary", { type: "button", on: { click: apply } }, "OK"))));
+    setTimeout(() => q.focus(), 20);
+  }
   let dups = new Set();
   try { (await GET("/duplicates")).forEach((p) => { dups.add(p.a); dups.add(p.b); }); } catch (_) {}
   const st = { act: { r: 0, c: 0 }, anc: { r: 0, c: 0 }, rowsSel: new Set(), lastRow: null, editing: null };
@@ -50,7 +83,8 @@ export async function table(body, list, all, grouping = "") {
 
   const tbl = h("table");
   const colgroup = h("colgroup", h("col", { style: { width: "40px" } }), cols.map((c, i) => h("col", { style: { width: (i === 0 ? 220 : c.key === "main_circle_id" ? 150 : 140) + "px" } })));
-  const thead = h("tr", h("th.rn", h("span", "")), cols.map((c, i) => h("th" + (i === 0 ? ".name" : ""), { title: c.def ? c.def.id : c.key }, c.label, h("span.ty", c.def ? TYPE_NAMES[c.ty] : c.ty))));
+  const thead = h("tr", h("th.rn", h("span", "")), cols.map((c, i) => h("th" + (i === 0 ? ".name" : "") + (CF[c.key] ? ".cf-on" : ""), { title: c.def ? c.def.id : c.key }, h("span.th-in", h("span.th-l", c.label, h("span.ty", c.def ? TYPE_NAMES[c.ty] : c.ty)),
+    h("button.cf-btn", { type: "button", title: CF[c.key] ? "Gefiltert – ändern" : "Filtern & sortieren", on: { mousedown: (e) => e.stopPropagation(), click: (e) => { e.stopPropagation(); colFilter(e.currentTarget, c); } } }, icon(CF[c.key] ? "filter" : "down", "xs"))))));
   const tbody = h("tbody");
   let lastGroup = null;
   list.forEach((r, ri) => {

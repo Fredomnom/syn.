@@ -1168,3 +1168,16 @@ body.kbd-nav .pop { pointer-events: auto; }
 .pgroup-h { display: flex; align-items: center; gap: 8px; font-size: 14px; padding: 0 2px; }
 .sheet tr.grp-row td { background: var(--bg); border-color: var(--line); padding: 0; position: sticky; left: 0; }
 .grp-row-in { display: flex; align-items: center; gap: 8px; padding: 8px 10px; font-size: 13px; position: sticky; left: 0; width: max-content; }
+/* Spaltenfilter in der Tabelle */
+.sheet th .th-in { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.sheet th .th-l { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.cf-btn { flex: none; width: 20px; height: 20px; border: 0; border-radius: 6px; background: none; color: var(--text3); display: grid; place-items: center; cursor: pointer; opacity: 0; transition: opacity .1s; }
+.sheet th:hover .cf-btn, .cf-btn:focus-visible { opacity: 1; }
+.cf-btn:hover { background: var(--bg2); color: var(--ink); }
+.sheet th.cf-on .cf-btn { opacity: 1; background: var(--yellow); color: #111; }
+.cf { width: 260px; display: flex; flex-direction: column; gap: 8px; }
+.cf .menu { border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+.cf-list { max-height: 240px; overflow: auto; display: flex; flex-direction: column; }
+.cf-item { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 8px; font-size: 13px; min-width: 0; }
+.cf-item:hover { background: var(--bg); }
+.cf-all { border-bottom: 1px solid var(--line); border-radius: 0; padding-bottom: 6px; font-weight: 600; }

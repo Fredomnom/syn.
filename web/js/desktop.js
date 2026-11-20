@@ -99,7 +99,7 @@ async function sidebar(route) {
       a.addEventListener("click", (ev) => {
         if (!["people", "v"].includes(p0)) return;
         ev.preventDefault();
-        Object.assign(VS, { filter: "", kind: "all", q: "", circle: "", max_level: "", via: "", savedId: null });
+        Object.assign(VS, { filter: "", kind: "all", q: "", circle: "", max_level: "", via: "", colFilters: {}, savedId: null });
         if (location.hash.startsWith("#/people")) import("./app.js").then((m) => m.render()); else location.hash = "#/people";
       });
       return a; })(),
@@ -121,7 +121,7 @@ async function savedView(main, id, route) {
   const v = S.views.find((x) => x.id === id);
   if (!v) return people(main, null, route);
   if (v.view === "duplicates") return (await import("./merge.js")).duplicatesPage(main, v);
-  Object.assign(VS, { filter: "", kind: "all", q: "", sort: "name", circle: "", max_level: "", via: "", columns: null, cfg: {} }, v.config, { view: v.view, savedId: v.id });
+  Object.assign(VS, { filter: "", kind: "all", q: "", sort: "name", circle: "", max_level: "", via: "", columns: null, colFilters: {}, cfg: {} }, v.config, { view: v.view, savedId: v.id });
   return people(main, v.view, route, v);
 }
 
@@ -140,7 +140,7 @@ export function filterRows(all) {
   if (VS.max_level) list = list.filter((r) => r.level != null && r.level <= +VS.max_level);
   if (VS.q) { const q = VS.q.toLowerCase(); list = list.filter((r) => [r.display, r.description, ...(r.aliases || []), ...r.circles_all.map((c) => S.circles[c]?.name), ...Object.values(r.v).map((x) => x.d)].join(" ").toLowerCase().includes(q)); }
   const key = VS.sort.replace(/^-/, ""), desc = VS.sort.startsWith("-");
-  const val = (r) => key === "name" ? r.display.toLowerCase() : key === "created" ? r.created_at : key === "level" ? (r.level ?? 9) : key === "seen" ? (r.v.f_seen?.raw || "") : (r.v[key]?.raw ?? "");
+  const val = (r) => key === "name" ? r.display.toLowerCase() : key === "created" ? r.created_at : key === "level" ? (r.level ?? 9) : key === "seen" ? (r.v.f_seen?.raw || "") : key === "main_circle_id" ? (S.circles[r.main_circle_id]?.name || "~") : key === "kind" ? r.kind : (r.v[key]?.raw ?? "");
   list = [...self, ...list];
   list.sort((a, b) => { const x = val(a), y = val(b); const c = typeof x === "number" && typeof y === "number" ? x - y : String(x).localeCompare(String(y), "de"); return desc ? -c : c; });
   return list;
@@ -157,7 +157,7 @@ async function people(main, view, route, saved = null) {
   const body = h("div.col.slide-zone", { style: { flex: 1, minHeight: 0 } });
   const redraw = () => drawView(body, all);
   const views = VIEWS.filter(([id]) => S.settings.use_levels || id !== "rings");
-  const filterBtn = h("button.btn.sm", { on: { click: (e) => filterMenu(e.currentTarget, redraw) } }, icon("filter"), "Filter" + (activeFilters() ? " · " + activeFilters() : ""));
+  const filterBtn = h("button.btn.sm.filter-btn", { on: { click: (e) => filterMenu(e.currentTarget, redraw) } }, icon("filter"), h("span", "Filter" + (activeFilters() ? " · " + activeFilters() : "")));
   const sortBtn = h("button.btn.sm", { on: { click: (e) => sortMenu(e.currentTarget, redraw) } }, icon("sort"), "Sortiert: " + sortLabel());
   const groupBtn = ["grid", "list", "table"].includes(VS.view) ? h("button.btn.sm", { on: { click: (e) => menu(e.currentTarget, [{ label: "Gruppieren nach" },
     ...GROUPINGS.filter((g) => !g[2] || g[2]()).map(([k, l]) => ({ label: l, on: groupingOf(VS.view, VS.cfg) === k, action: () => { setGrouping(VS.view, VS.cfg, k, !!VS.savedId); groupBtn.lastChild.textContent = "Gruppiert: " + groupLabel(k); redraw(); } }))]) } },
@@ -177,12 +177,14 @@ async function people(main, view, route, saved = null) {
   await redraw(); // erst fertig zeichnen, dann einblenden
 }
 
-function activeFilters() { return [VS.filter, VS.circle, VS.max_level, VS.via].filter(Boolean).length || ""; }
-function sortLabel() { const k = VS.sort.replace("-", ""); return ({ name: "Name", created: "Erfasst", level: "Ring", seen: "Zuletzt gesehen" })[k] || S.fields[k]?.name || k; }
+function activeFilters() { return [VS.filter, VS.circle, VS.max_level, VS.via].filter(Boolean).length + Object.keys(VS.colFilters || {}).length || ""; }
+function refreshFilterBtn() { const b = document.querySelector(".filter-btn"); if (b) b.lastChild.textContent = "Filter" + (activeFilters() ? " · " + activeFilters() : ""); }
+function sortLabel() { const k = VS.sort.replace("-", ""); return ({ name: "Name", created: "Erfasst", level: "Ring", seen: "Zuletzt gesehen", main_circle_id: "Hauptkreis", kind: "Art" })[k] || S.fields[k]?.name || k; }
 
 function filterMenu(anchor, redraw) {
   const it = (label, key, val) => ({ label, on: VS[key] === val, action: () => { VS[key] = VS[key] === val ? "" : val; redraw(); refreshToolbar(); } });
-  menu(anchor, [{ label: "Zeigen" }, it("Neue Personen (noch unbearbeitet)", "filter", "new"), it("Lose (ohne Kreis)", "filter", "lose"), S.settings.use_levels ? it("Ohne Ring", "filter", "no_ring") : null, it("Mit unsicheren Angaben", "filter", "uncertain"),
+  const ncf = Object.keys(VS.colFilters || {}).length;
+  menu(anchor, [ncf ? { label: `Spaltenfilter entfernen (${ncf})`, icon: "x", action: () => { VS.colFilters = {}; redraw(); refreshFilterBtn(); } } : null, { label: "Zeigen" }, it("Neue Personen (noch unbearbeitet)", "filter", "new"), it("Lose (ohne Kreis)", "filter", "lose"), S.settings.use_levels ? it("Ohne Ring", "filter", "no_ring") : null, it("Mit unsicheren Angaben", "filter", "uncertain"),
     S.settings.use_ist ? it("Nah, aber lange nicht gesehen", "filter", "long_unseen") : null,
     S.settings.use_levels ? { label: "Ring höchstens" } : null, ...(S.settings.use_levels ? [1, 2, 3, 4].map((n) => it(ringName(n), "max_level", String(n))) : []),
     { label: "Kreis" }, ...Object.values(S.circles).sort((a, b) => a.name.localeCompare(b.name)).map((c) => it(c.name, "circle", c.id)),
@@ -200,7 +202,7 @@ function sortMenu(anchor, redraw) {
 }
 
 async function saveView(saved) {
-  const cfg = { filter: VS.filter, kind: VS.kind, q: VS.q, sort: VS.sort, circle: VS.circle, max_level: VS.max_level, via: VS.via, columns: VS.columns, ...VS.cfg };
+  const cfg = { filter: VS.filter, kind: VS.kind, q: VS.q, sort: VS.sort, circle: VS.circle, max_level: VS.max_level, via: VS.via, columns: VS.columns, colFilters: VS.colFilters || {}, ...VS.cfg };
   if (saved) { await PUT("/views/" + saved.id, { view: VS.view, config: cfg }); toast("Ansicht gespeichert"); }
   else {
     const name = await promptDlg("Ansicht speichern", "Name", "");
@@ -217,7 +219,7 @@ async function drawView(body, all) {
   else if (VS.view === "list") listView(box, list);
   else if (VS.view === "table") {
     const g = groupingOf("table", VS.cfg);
-    await (await import("./table.js")).table(box, g ? groupRows(g, list).flatMap((x) => x.rows) : list, all, g);
+    await (await import("./table.js")).table(box, g ? groupRows(g, list).flatMap((x) => x.rows) : list, all, g, () => drawView(body, all).then(refreshFilterBtn));
   }
   else {
     const viz = await import("./viz.js");
