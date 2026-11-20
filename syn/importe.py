@@ -217,10 +217,15 @@ def apply_contacts(ctx, imp: Importer, contacts, run: Run):
     stats = {"seen": 0, "new": 0, "matched": 0, "values": 0, "suggestions": 0, "signals": 0}
     svc_idx, ph_idx, em_idx = _index(uid, country)
     me = model.self_id(uid)
+    blocked = {(b["kind"], b["key"]) for b in db.q("SELECT kind, key FROM import_blocks WHERE user_id=?", uid)}
+    stats["blocked"] = 0
     group_members = {}
     for c in contacts:
         stats["seen"] += 1
         service = c.service or imp.service
+        if blocked and _is_blocked(c, service, imp, blocked, country):
+            stats["blocked"] += 1
+            continue
         eid = None
         if service and c.service_id:
             eid = svc_idx.get(f"{service}:{str(c.service_id).lower()}")
@@ -339,6 +344,25 @@ def apply_contacts(ctx, imp: Importer, contacts, run: Run):
     return stats
 
 
+def _is_blocked(c, service, imp, blocked, country) -> bool:
+    """Gelöschte Personen nicht wieder anlegen: Dienst-ID, Handle, Quell-ID, Nummer oder E-Mail gesperrt?"""
+    if service:
+        for k in (c.service_id, c.handle):
+            if k and ("svc", f"{service}:{str(k).lower()}") in blocked:
+                return True
+    if c.service_id and ("srcid", f"{imp.id}:{c.service_id}") in blocked:
+        return True
+    for p in c.phones or []:
+        num = p if isinstance(p, str) else p[0]
+        if ("phone", normalize_phone(num, country)) in blocked:
+            return True
+    for m in c.emails or []:
+        addr = m if isinstance(m, str) else m[0]
+        if ("email", normalize_email(addr)) in blocked:
+            return True
+    return False
+
+
 def suggest_groups(uid, service, src, group_members) -> int:
     """Gruppen mit mindestens zwei bekannten Leuten als Kreis vorschlagen – nie automatisch anlegen."""
     n = 0
@@ -405,7 +429,8 @@ def run_importer(ctx, iid, files=None) -> str:
         stats = apply_contacts(ctx, imp, contacts, run)
         status = (f"{stats['seen']} gelesen, {stats['new']} neu, {stats['matched']} erkannt, "
                   f"{stats['values']} Werte, {stats['suggestions']} Vorschläge"
-                  + (f", {stats['groups']} Gruppen-Vorschläge" if stats.get("groups") else ""))
+                  + (f", {stats['groups']} Gruppen-Vorschläge" if stats.get("groups") else "")
+                  + (f", {stats['blocked']} gesperrt übersprungen" if stats.get("blocked") else ""))
     except httpx.HTTPStatusError as e:
         status = f"Fehler: HTTP {e.response.status_code} von {e.request.url.host}"
         run.log(status + " " + e.response.text[:300])
@@ -419,6 +444,32 @@ def run_importer(ctx, iid, files=None) -> str:
     db.ex("UPDATE importer_configs SET last_run_at=?, last_status=?, last_log=?, state=? WHERE user_id=? AND "
           "importer_id=?", now(), status, "\n".join(run.lines[-200:]), db.jd(run.state), ctx.uid, iid)
     return f"{imp.name}: {status}"
+
+
+_resolve_cache = {}
+
+
+def resolve_profile_id(uid, value: dict) -> dict:
+    """Profil-Wert mit Handle, aber ohne ID: über einen eingerichteten Importer die ID nachschlagen."""
+    svc, handle = value.get("service"), value.get("handle")
+    if not svc or not handle or value.get("id"):
+        return value
+    imp = next((i for i in registry().values() if (i.service or i.id) == svc and hasattr(i, "resolve")), None)
+    if not imp:
+        return value
+    row = db.q1("SELECT * FROM importer_configs WHERE user_id=? AND importer_id=? AND enabled=1", uid, imp.id)
+    if not row:
+        return value
+    key = (uid, svc, handle.lower())
+    if key not in _resolve_cache:
+        try:
+            _resolve_cache[key] = imp.resolve(crypto.unseal(uid, row["config_enc"], {}), handle)
+        except Exception as e:
+            log.info("ID für %s/%s nicht gefunden: %s", svc, handle, e)
+            _resolve_cache[key] = None
+    if _resolve_cache[key]:
+        return {**value, "id": str(_resolve_cache[key])}
+    return value
 
 
 def to_date(ts) -> str | None:

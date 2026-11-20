@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from .. import db, model, sync_rules
 from ..auth import Ctx, current
 from ..model import Bad, display_name, fdef, get_entity, get_values, load_rows
-from ..util import fold, today
+from ..util import fold, today, new_id
 
 router = APIRouter(prefix="/api/v1", tags=["Lebewesen"])
 
@@ -257,16 +257,92 @@ def patch(eid: str, body: dict, ctx: Ctx = Depends(current)):
 
 
 @router.delete("/entities/{eid}")
-def delete(eid: str, ctx: Ctx = Depends(current)):
+def delete(eid: str, block: bool = True, ctx: Ctx = Depends(current)):
+    """Löscht die Person. Mit block=true (Standard) wird sie aus ihren Quellen nicht wieder importiert."""
     e = get_entity(ctx.uid, eid)
     if e["is_self"]:
         raise HTTPException(400, "Dein eigener Eintrag ist gesperrt und kann nicht gelöscht werden")
-    delete_entity(ctx.uid, eid)
+    delete_entity(ctx.uid, eid, block)
     return {"ok": True}
 
 
-def delete_entity(uid, eid):
+@router.get("/entities/{eid}/import-sources")
+def import_sources(eid: str, ctx: Ctx = Depends(current)):
+    """Aus welchen Importen eine Person stammt (für die Rückfrage beim Löschen)."""
+    from ..importe import all_importers
+    get_entity(ctx.uid, eid)
+    imps = all_importers()
+    srcs = {r["source"] for r in db.q("SELECT source FROM field_values WHERE owner_type='entity' AND owner_id=?", eid)}
+    srcs.add(db.val("SELECT source FROM history WHERE owner_type='entity' AND owner_id=? AND attr='created'", eid))
+    return [{"id": s, "name": imps[s].name} for s in sorted(x for x in srcs if x in imps)]
+
+
+@router.get("/import-blocks")
+def list_blocks(ctx: Ctx = Depends(current)):
+    """Gesperrte Personen – je Löschung eine Gruppe."""
+    from ..importe import all_importers
+    imps = all_importers()
+    groups = {}
+    for b in db.q("SELECT * FROM import_blocks WHERE user_id=? ORDER BY created_at DESC", ctx.uid):
+        g = groups.setdefault(b["grp"], {"id": b["grp"], "label": b["label"], "created_at": b["created_at"],
+                                         "sources": [imps[s].name if s in imps else s for s in db.jl(b["sources"], [])], "keys": 0})
+        g["keys"] += 1
+    return list(groups.values())
+
+
+@router.delete("/import-blocks/{grp}")
+def unblock(grp: str, ctx: Ctx = Depends(current)):
+    db.ex("DELETE FROM import_blocks WHERE user_id=? AND grp=?", ctx.uid, grp)
+    return {"ok": True}
+
+
+def block_imports(uid, eid):
+    """Merkt sich die Import-Merkmale einer gelöschten Person, damit Importer sie nicht wieder anlegen."""
+    from ..importe import all_importers
+    from ..util import normalize_email, normalize_phone
+    imps = all_importers()
+    e = db.q1("SELECT * FROM entities WHERE id=?", eid)
+    created_src = db.val("SELECT source FROM history WHERE owner_type='entity' AND owner_id=? AND attr='created'", eid)
+    types = {d["id"]: d["type"] for d in db.q("SELECT id, type FROM field_defs WHERE user_id=?", uid)}
+    country = (db.jl(db.val("SELECT settings FROM users WHERE id=?", uid), {}) or {}).get("country_code", "49")
+    keys, sources = set(), set()
+    if created_src in imps:
+        sources.add(created_src)
+    for v in db.q("SELECT field_id, value, source FROM field_values WHERE owner_type='entity' AND owner_id=?", eid):
+        t, val = types.get(v["field_id"]), db.jl(v["value"])
+        imported = v["source"] in imps
+        if imported:
+            sources.add(v["source"])
+        if t == "profile" and isinstance(val, dict) and val.get("service"):
+            for k in ("id", "handle"):
+                if val.get(k):
+                    keys.add(("svc", f"{val['service']}:{str(val[k]).lower()}"))
+        elif t == "phone" and imported:
+            n = normalize_phone(val, country)
+            if n:
+                keys.add(("phone", n))
+        elif t == "email" and imported:
+            keys.add(("email", normalize_email(val)))
+    # Quell-IDs von Importern ohne Profil-Dienst (vCard, CardDAV, Google …)
+    for row in db.q("SELECT importer_id, state FROM importer_configs WHERE user_id=?", uid):
+        for sid, target in ((db.jl(row["state"], {}) or {}).get("map") or {}).items():
+            if target == eid:
+                keys.add(("srcid", f"{row['importer_id']}:{sid}"))
+                sources.add(row["importer_id"])
+    if not sources or not keys:
+        return 0
+    grp = new_id("bl")
+    label = e["name"] or e["description"] or "Ohne Namen"
+    for kind, key in keys:
+        db.insert("import_blocks", {"id": new_id("ib", 10), "user_id": uid, "grp": grp, "kind": kind, "key": key,
+                                    "label": label, "sources": db.jd(sorted(sources)), "created_at": model.now()})
+    return len(keys)
+
+
+def delete_entity(uid, eid, block=True):
     with db.tx():
+        if block:
+            block_imports(uid, eid)
         bids = [b["id"] for b in db.q("SELECT id FROM bunds WHERE a_id=? OR b_id=?", eid, eid)]
         for bid in bids:
             db.ex("DELETE FROM field_values WHERE owner_type='bund' AND owner_id=?", bid)

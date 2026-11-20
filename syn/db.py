@@ -16,7 +16,7 @@ UNDO_TABLES = {
     "entities": "user_id", "field_values": "user_id", "history": "user_id", "memberships": "user_id", "bunds": "user_id",
     "circles": "user_id", "field_defs": "user_id", "circle_kinds": "user_id", "bund_kinds": "user_id",
     "routines": "user_id", "notes": "user_id", "saved_views": "user_id", "suggestions": "user_id", "dup_marks": "user_id",
-    "today_items": "user_id", "contact_signals": "user_id", "users": "id",
+    "today_items": "user_id", "contact_signals": "user_id", "users": "id", "import_blocks": "user_id",
     "note_links": "(SELECT user_id FROM notes WHERE id={R}.note_id)",
 }
 
@@ -129,6 +129,11 @@ CREATE TABLE IF NOT EXISTS google_map(
   pushed TEXT, PRIMARY KEY(user_id, entity_id)
 );
 CREATE TABLE IF NOT EXISTS instance(key TEXT PRIMARY KEY, value TEXT);
+CREATE TABLE IF NOT EXISTS import_blocks(
+  id TEXT PRIMARY KEY, user_id TEXT NOT NULL, grp TEXT NOT NULL, kind TEXT NOT NULL, key TEXT NOT NULL,
+  label TEXT, sources TEXT, created_at TEXT
+);
+CREATE INDEX IF NOT EXISTS ib_user ON import_blocks(user_id, kind, key);
 CREATE TABLE IF NOT EXISTS undo_log(
   id INTEGER PRIMARY KEY AUTOINCREMENT, batch TEXT NOT NULL, user_id TEXT, tbl TEXT, op TEXT, pk INTEGER,
   old TEXT, new TEXT

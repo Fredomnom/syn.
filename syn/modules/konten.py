@@ -228,7 +228,7 @@ def admin_delete(uid: str, ctx: Ctx = Depends(admin)):
     with db.tx():
         for t in ("entities", "field_defs", "field_values", "history", "circle_kinds", "bund_kinds", "circles",
                   "memberships", "bunds", "routines", "today_items", "contact_signals", "importer_configs",
-                  "suggestions", "dup_marks", "notes", "saved_views", "files", "google_map", "api_tokens",
+                  "suggestions", "dup_marks", "notes", "saved_views", "files", "google_map", "api_tokens", "import_blocks",
                   "sessions"):
             db.ex(f"DELETE FROM {t} WHERE user_id=?", uid)
         db.ex("DELETE FROM users WHERE id=?", uid)

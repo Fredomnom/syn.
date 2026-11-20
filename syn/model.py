@@ -127,7 +127,8 @@ def normalize_value(uid: str, d: dict, v, country="49"):
             out = {k: str(v[k]).strip() for k in ("service", "handle", "id", "url") if v.get(k)}
             if not out.get("handle") and not out.get("id") and not out.get("url"):
                 return None
-            return out
+            from .importe import resolve_profile_id
+            return resolve_profile_id(uid, out)
         if t == "image":
             return str(v)
     except Bad:

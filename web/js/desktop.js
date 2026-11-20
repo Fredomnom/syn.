@@ -6,7 +6,7 @@ import { onPage, onGlobal, resetPage, binding, pretty, helpOverlay, keys } from 
 import { dateInput } from "./date.js";
 import { openSpotlight, rememberPerson } from "./spotlight.js";
 import { guideAttach } from "./guide.js";
-import { editPerson, addField, dupHint, ringPopup, setRing, editIhrZwei, editBund, bundKindName, addBund, addToCircle, historyText } from "./shared.js";
+import { deletePerson, editPerson, addField, dupHint, ringPopup, setRing, editIhrZwei, editBund, bundKindName, addBund, addToCircle, historyText } from "./shared.js";
 
 const LS = (k, d) => { try { return JSON.parse(localStorage.getItem("syn." + k)) ?? d; } catch (_) { return d; } };
 const SAVE = (k, v) => { try { localStorage.setItem("syn." + k, JSON.stringify(v)); } catch (_) {} };
@@ -273,6 +273,7 @@ async function personPage(main, id) {
       { label: "Feld hinzufügen", icon: "plus", action: () => addField(e, { onDone: reload }) },
       e.is_self ? null : { label: "Zusammenführen mit …", icon: "merge", action: () => pickPerson(ev.target, { exclude: [id], allowNew: false, onPick: (r) => (location.hash = `#/merge/${id}/${r.id}`) }) },
       e.is_self ? null : { label: e.on_phone ? "Nicht mehr mit Handy synchronisieren" : "Mit Handy synchronisieren", icon: "smartphone", action: async () => { await PATCH("/entities/" + id, { on_phone: !e.on_phone }); reload(); } },
+      e.is_self ? null : { label: "Person löschen", icon: "trash", action: () => deletePerson(e) },
       { label: "Verlauf als JSON", icon: "history", action: async () => modal("Verlauf", h("div.code", JSON.stringify(await GET(`/entities/${id}/history`), null, 2)), [], { wide: true }) },
     ], { align: "right" }) } }, icon("more")));
 

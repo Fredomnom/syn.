@@ -1051,3 +1051,5 @@ code { font: 400 12.5px var(--f-mono); }
 .imp-actions:empty { display: none; }
 .imp-log { max-height: 160px; margin: 0; font-size: 11px; }
 @media (max-width: 760px) { .imp-dock { right: 12px; bottom: 90px; } }
+.bd-swap svg { transition: transform .3s cubic-bezier(.2,.8,.2,1); }
+.bd-swap.flip svg { transform: scaleX(-1); }

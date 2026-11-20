@@ -277,9 +277,12 @@ async function importers(body) {
       det);
     return item;
   };
+  const blocks = await GET("/import-blocks");
   body.append(h("p.small.t2", "Neue Leute landen unter „Lose“. Ein Importer schreibt nur Werte aus seiner eigenen Quelle und überschreibt nie, was du von Hand gesetzt hast."),
     on.length ? panel("Eingerichtet", ...on.map(row)) : null,
-    panel(on.length ? "Weitere Dienste" : "Dienste", ...off.map(row)));
+    panel(on.length ? "Weitere Dienste" : "Dienste", ...off.map(row)),
+    blocks.length ? panel("Blockiert", ...blocks.map((b) => srow(b.label, `Gelöscht ${rel((b.created_at || "").slice(0, 10))} · wird aus ${b.sources.join(", ")} nicht wieder importiert`,
+      h("button.btn.sm", { on: { click: async () => { await DEL("/import-blocks/" + b.id); toast(`${b.label} wird wieder importiert`); reload(); } } }, "Freigeben")))) : null);
 }
 
 function importerCard(imp, reload) {

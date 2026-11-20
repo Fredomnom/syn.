@@ -46,4 +46,21 @@ class Discord(Importer):
         return out
 
 
+    def resolve(self, cfg, handle):
+        """Sucht einen Nutzernamen unter Freunden und DMs und gibt die Nutzer-ID zurück."""
+        import httpx
+        h = {"Authorization": cfg["token"].strip()}
+        want = handle.strip().lstrip("@").lower()
+        with httpx.Client(timeout=8, headers=h) as c:
+            users = [r.get("user", {}) for r in c.get("https://discord.com/api/v9/users/@me/relationships").json()]
+            for u in users:
+                if want in ((u.get("username") or "").lower(), (u.get("global_name") or "").lower()):
+                    return u.get("id")
+            for ch in c.get("https://discord.com/api/v9/users/@me/channels").json():
+                for u in ch.get("recipients", []):
+                    if want in ((u.get("username") or "").lower(), (u.get("global_name") or "").lower()):
+                        return u.get("id")
+        return None
+
+
 IMPORTER = Discord()

@@ -6,7 +6,7 @@ RING_NAMES = {"1": "Engste", "2": "Nah", "3": "Mittel", "4": "Weit"}
 
 SERVICES = [
     {"id": "instagram", "name": "Instagram", "link": "https://instagram.com/{handle}"},
-    {"id": "discord", "name": "Discord", "link": ""},
+    {"id": "discord", "name": "Discord", "link": "https://discord.com/users/{id}"},
     {"id": "steam", "name": "Steam", "link": "https://steamcommunity.com/profiles/{id}"},
     {"id": "telegram", "name": "Telegram", "link": "https://t.me/{handle}"},
     {"id": "whatsapp", "name": "WhatsApp", "link": ""},
@@ -67,6 +67,22 @@ def seed_circles(uid):
     for name, kind in DEFAULT_CIRCLES:
         db.insert("circles", {"id": new_id("c"), "user_id": uid, "name": name, "kind_id": kind, "parent_id": None,
                               "description": None, "created_at": t, "updated_at": t})
+
+
+def backfill_services():
+    """Einmalig: gespeicherte Dienstlisten bekommen neue Link-Vorlagen (z.B. Discord), wenn dort noch keine steht."""
+    if db.val("SELECT value FROM instance WHERE key='services_links_v1'"):
+        return
+    defaults = {s["id"]: s for s in SERVICES}
+    for u in db.q("SELECT id, settings FROM users"):
+        st = db.jl(u["settings"], {}) or {}
+        if "services" not in st:
+            continue
+        for s in st["services"]:
+            if not s.get("link") and defaults.get(s.get("id"), {}).get("link"):
+                s["link"] = defaults[s["id"]]["link"]
+        db.ex("UPDATE users SET settings=? WHERE id=?", db.jd(st), u["id"])
+    db.ex("INSERT OR REPLACE INTO instance(key,value) VALUES('services_links_v1', ?)", now())
 
 
 def backfill_circles():

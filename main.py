@@ -82,9 +82,10 @@ def create_app() -> FastAPI:
 
     bootstrap_admin()
     from syn.importe import backfill_via
-    from syn.seed import backfill_circles
+    from syn.seed import backfill_circles, backfill_services
     backfill_via()
     backfill_circles()
+    backfill_services()
     return app
 
 

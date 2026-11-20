@@ -269,7 +269,7 @@ export async function table(body, list, all) {
         { label: "Mit Handy synchronisieren", icon: "smartphone", action: async () => { await POST("/bulk", { ids, op: "on_phone", value: true }); toast("Wird mit dem Handy synchronisiert"); } },
         { label: "Nicht mit Handy synchronisieren", action: async () => { await POST("/bulk", { ids, op: "on_phone", value: false }); } },
         { label: "Heute gesehen", icon: "eye", action: async () => { for (const id of ids) await POST(`/seen-today/${id}`); invalidate(); toast(`${n} × heute gesehen`); } },
-        { label: "Löschen", icon: "trash", action: async () => { if (await confirmDlg(`${n} Einträge löschen?`, "Das lässt sich nicht rückgängig machen.", "Löschen", true)) { await POST("/bulk", { ids, op: "delete" }); invalidate(); location.reload(); } } }]) } }, icon("more"))] : null);
+        { label: "Löschen", icon: "trash", action: async () => { if (await confirmDlg(`${n} Einträge löschen?`, "Personen aus Importen werden danach nicht wieder importiert (freigeben unter Einstellungen → Importe). Mit Rückgängig holst du alle zurück.", "Löschen", true)) { await POST("/bulk", { ids, op: "delete" }); invalidate(); location.reload(); } } }]) } }, icon("more"))] : null);
   }
 
   const colBtn = h("button.btn.sm", { on: { click: () => chooseColumns(cols0, chosen) } }, icon("table"), "Spalten");

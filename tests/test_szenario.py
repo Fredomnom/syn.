@@ -296,3 +296,29 @@ def test_namensteile_und_reihenfolge(client):
     row = next(r for r in c.get("/api/v1/entities").json() if r["id"] == e["id"])
     assert row["display"] == "Schmidt-Berg, Annika"
     assert c.get(f"/api/v1/entities/{e['id']}").json()["display"] == "Schmidt-Berg, Annika"
+
+
+def test_loeschen_sperrt_import(client):
+    c = client
+    c.put("/api/v1/importers/vcard", json={"enabled": True})
+    vc = ("BEGIN:VCARD\nVERSION:3.0\nUID:u-1\nFN:Gerd Gesperrt\nTEL:+49 170 4440001\nEND:VCARD\n"
+          "BEGIN:VCARD\nVERSION:3.0\nUID:u-2\nFN:Bleibt Da\nTEL:+49 170 4440002\nEND:VCARD\n")
+    run = lambda: c.post("/api/v1/importers/vcard/run", files={"files": ("k.vcf", vc.encode(), "text/vcard")}).json()["status"]
+    assert "2 neu" in run()
+    gerd = c.get("/api/v1/entities", params={"q": "Gerd"}).json()[0]
+    assert c.get(f"/api/v1/entities/{gerd['id']}/import-sources").json()[0]["id"] == "vcard"
+    c.delete(f"/api/v1/entities/{gerd['id']}")
+    st = run()
+    assert "0 neu" in st and "1 gesperrt" in st, st
+    assert not c.get("/api/v1/entities", params={"q": "Gerd"}).json()
+    blocks = c.get("/api/v1/import-blocks").json()
+    assert blocks[0]["label"] == "Gerd Gesperrt"
+    c.delete(f"/api/v1/import-blocks/{blocks[0]['id']}")
+    assert "1 neu" in run()
+    # Rückgängig nach dem Löschen hebt die Sperre mit auf
+    gerd = c.get("/api/v1/entities", params={"q": "Gerd"}).json()[0]
+    c.delete(f"/api/v1/entities/{gerd['id']}")
+    assert c.get("/api/v1/import-blocks").json()
+    c.post("/api/v1/undo")
+    assert not c.get("/api/v1/import-blocks").json()
+    assert c.get(f"/api/v1/entities/{gerd['id']}").status_code == 200

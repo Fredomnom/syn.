@@ -50,9 +50,7 @@ export async function editPerson(e) {
       e.is_self ? null : h("label.f", "Kennst du seit (gültig von)", vf),
       e.is_self ? null : h("div.full", phone.el)));
   const r = await modal(e.is_self ? "Mein Profil" : "Person bearbeiten", body, [
-    e.is_self ? null : { label: "Löschen", danger: true, action: async () => {
-      if (!(await confirmDlg("Wirklich löschen?", `„${e.display}“ und alle Werte werden gelöscht. Mit Rückgängig lässt sich das zurückholen.`, "Löschen", true))) return false;
-      await DEL("/entities/" + e.id); invalidate(); location.hash = "#/"; return "deleted"; } },
+    e.is_self ? null : { label: "Löschen", danger: true, action: async () => { document.querySelector(".backdrop:not(.leaving)")?._close?.(null); await deletePerson(e); return false; } },
     { label: "Abbrechen", value: null },
     { label: "Speichern", primary: true, action: async () => {
       const body = { first_name: first.value, middle_names: middle.value, last_name: last.value, aliases: aliases.get(), avatar: avatarUrl };
@@ -61,6 +59,25 @@ export async function editPerson(e) {
     } }].filter(Boolean));
   if (r) invalidate();
   return r;
+}
+
+// Person löschen – mit Import-Sperre, wenn sie aus einer Quelle stammt
+export async function deletePerson(e) {
+  const srcs = await GET(`/entities/${e.id}/import-sources`).catch(() => []);
+  const block = h("input.switch", { type: "checkbox", role: "switch", checked: true });
+  const names = srcs.map((s) => s.name);
+  const body = h("div.col",
+    h("p", { style: { margin: 0 } }, `„${e.display || e.name || e.description}“ wird mit allen Werten, Bünden und Mitgliedschaften gelöscht.`),
+    srcs.length ? h("label.switch-row", h("span.switch-text", h("span.switch-label", "Nicht wieder importieren"),
+      h("span.switch-hint", `Stammt aus ${names.join(", ")}. Freigeben kannst du das unter Einstellungen → Importe.`)), block) : null,
+    h("p.small.t3", { style: { margin: 0 } }, "Mit Rückgängig holst du die Person sofort zurück."));
+  const ok = await modal("Person löschen?", body, [{ label: "Abbrechen", value: false }, { label: "Löschen", danger: true, value: true }]);
+  if (!ok) return false;
+  await api("DELETE", `/entities/${e.id}?block=${srcs.length ? block.checked : false}`);
+  invalidate();
+  toast(`${e.display || e.name || "Person"} gelöscht`, { action: { label: "Rückgängig", run: () => dispatchEvent(new CustomEvent("syn-undo", { detail: "undo" })) } });
+  location.hash = "#/people";
+  return true;
 }
 
 // Feld hinzufügen: vorhandenes Feld wählen oder neues Feld anlegen
@@ -140,13 +157,39 @@ function bundEditor(left, right, { kind_id = "", roleLeft = "", roleRight = "" }
   const kindOf = () => S.bundKinds.find((k) => k.id === kind);
   const rl = h("input.bd-role", { value: roleLeft || kindOf()?.role_a || "", placeholder: "Rolle" });
   const rr = h("input.bd-role", { value: roleRight || kindOf()?.role_b || "", placeholder: "Rolle" });
-  const sel = h("select.input.bd-kind", h("option", { value: "" }, "Ohne Art"), S.bundKinds.map((k) => h("option", { value: k.id, selected: k.id === kind }, k.name)));
-  sel.addEventListener("change", () => { kind = sel.value; const k = kindOf(); rl.value = k?.role_a || ""; rr.value = k?.role_b || ""; });
-  const swap = h("button.btn.sm.icon.bd-swap", { type: "button", title: "Rollen tauschen", on: { click: () => { [rl.value, rr.value] = [rr.value, rl.value]; swap.classList.toggle("spin"); } } }, icon("refresh"));
+  const opts = () => [h("option", { value: "" }, "Ohne Art"), S.bundKinds.map((k) => h("option", { value: k.id, selected: k.id === kind }, k.name)), h("option", { value: "__new" }, "+ Neue Art anlegen …")];
+  const sel = h("select.input.bd-kind", opts());
+  sel.addEventListener("change", async () => {
+    if (sel.value === "__new") {
+      const k = await newBundKind();
+      if (k) { kind = k.id; clear(sel, opts()); rl.value = k.role_a || ""; rr.value = k.role_b || ""; }
+      sel.value = kind; sel.dispatchEvent(new Event("change"));
+      return;
+    }
+    kind = sel.value; const k = kindOf(); rl.value = k?.role_a || ""; rr.value = k?.role_b || "";
+  });
+  const swap = h("button.btn.sm.icon.bd-swap", { type: "button", title: "Rollen tauschen", on: { click: () => { [rl.value, rr.value] = [rr.value, rl.value]; swap.classList.toggle("flip"); } } }, icon("swap"));
   const side = (row, role) => h("div.bd-side", avatar(row, 76, { exact: true, self: row.is_self }), h("div.bd-name", row.is_self ? "Du" : row.display || row.name), role);
   const el = h("div.bd", side(left, rl), h("div.bd-mid", h("div.bd-line"), sel, h("div.bd-line"), swap), side(right, rr));
   return { el, get: () => ({ kind_id: kind || null, roleLeft: rl.value.trim() || null, roleRight: rr.value.trim() || null }) };
 }
+// Neue Bund-Art direkt aus dem Bund-Dialog anlegen
+async function newBundKind() {
+  const n = h("input.input", { placeholder: "z.B. Patenschaft" });
+  const a = h("input.input", { placeholder: "z.B. Pate" });
+  const b = h("input.input", { placeholder: "z.B. Patenkind" });
+  n.addEventListener("input", () => { if (!a.dataset.touched) a.placeholder = n.value || "Rolle"; if (!b.dataset.touched) b.placeholder = n.value || "Rolle"; });
+  [a, b].forEach((x) => x.addEventListener("input", () => (x.dataset.touched = "1")));
+  const k = await modal("Neue Bund-Art", h("div.col", h("label.f", "Name", n), h("div.pd-names", h("label.f", "Rolle der einen Seite", a), h("label.f", "Rolle der anderen Seite", b)),
+    h("p.small.t3", "Leer gelassene Rollen heißen wie die Bund-Art – passend für gleichrangige Beziehungen wie Freundschaft.")),
+    [{ label: "Abbrechen" }, { label: "Anlegen", primary: true, action: async () => {
+      if (!n.value.trim()) { n.focus(); return false; }
+      return POST("/bund-kinds", { name: n.value.trim(), role_a: a.value.trim() || null, role_b: b.value.trim() || null });
+    } }]);
+  if (k) S.bundKinds = await GET("/bund-kinds");
+  return k || null;
+}
+
 async function selfRow() {
   const all = await rows();
   return all.find((r) => r.is_self) || { is_self: true, display: "Du" };
