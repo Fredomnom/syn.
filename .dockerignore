@@ -1,5 +1,16 @@
 .venv
-data
 .git
+.gitignore
+data
 __pycache__
+**/__pycache__
+*.pyc
 .pytest_cache
+tests
+scripts
+node_modules
+*.db
+*.db-*
+.env
+docker-compose.yml
+Dockerfile

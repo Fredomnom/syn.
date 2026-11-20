@@ -1,0 +1,19 @@
+# docker compose up -d   →   http://localhost:8080
+services:
+  syn:
+    build: .
+    # image: ghcr.io/OWNER/syn:latest
+    container_name: syn
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      SYN_ADMIN_USER: ${SYN_ADMIN_USER:-admin}
+      SYN_ADMIN_PASSWORD: ${SYN_ADMIN_PASSWORD:?Bitte SYN_ADMIN_PASSWORD setzen (mind. 8 Zeichen)}
+      # SYN_DISABLE_IMPORTERS: "instagram,discord"
+      # SYN_SESSION_HOURS: "24"
+    volumes:
+      - syn-data:/data
+
+volumes:
+  syn-data:

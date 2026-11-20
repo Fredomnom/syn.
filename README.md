@@ -10,7 +10,18 @@ Das Kontaktbuch für alle, die du kennst. Selbst gehostet, Open Source, mehrere 
 Beim ersten Aufruf legst du im Browser das Admin-Konto an (oder vorab per `SYN_ADMIN_USER` / `SYN_ADMIN_PASSWORD`,
 oder `python main.py create-user NAME --admin`). Weitere Konten legt der Admin unter Einstellungen → Konten an.
 
-**Docker:** `docker build -t syn . && docker run -p 8080:8080 -v syn-data:/data syn`
+**Docker:**
+
+```sh
+SYN_ADMIN_PASSWORD=geheim123 docker compose up -d      # http://localhost:8080
+# oder von Hand:
+docker build -t syn .
+docker run -d -p 8080:8080 -v syn-data:/data -e SYN_ADMIN_USER=du -e SYN_ADMIN_PASSWORD=geheim123 syn
+```
+
+Das Image läuft als eigener Nutzer (nicht root), hat einen Healthcheck auf `/api/v1/health` und speichert alles unter `/data`.
+Optionale Importer (Telegram, Instagram, PlayStation) baust du mit `--build-arg EXTRAS="telethon instagrapi psnawp"` mit.
+Die Landing Page liegt unter `/about`, Visitenkarten unter `/@name`.
 **systemd:** `syn.service` anpassen (Pfade) und nach `/etc/systemd/system/` kopieren.
 
 | Variable | Bedeutung |
