@@ -316,14 +316,25 @@ export function modal(title, body, buttons = [], { wide = false, onClose } = {})
       document.removeEventListener("keydown", key); bd.classList.add("leaving");
       setTimeout(() => bd.remove(), 140); onClose?.(); resolve(v);
     };
-    const key = (e) => { if (e.key === "Escape") close(null); };
-    const foot = buttons.length ? h("div.dialog-f", buttons.map((b) => h("button.btn" + (b.primary ? ".primary" : "") + (b.danger ? ".danger" : ""), {
+    let primaryBtn = null;
+    const key = (e) => {
+      // nur der oberste Dialog reagiert
+      if (bd !== [...document.querySelectorAll(".backdrop:not(.leaving)")].pop()) return;
+      if (e.key === "Escape") { close(null); return; }
+      if (e.key !== "Enter" || e.shiftKey || e.isComposing || e.defaultPrevented || !primaryBtn || primaryBtn.disabled) return;
+      const t = e.target;
+      if (t.closest?.("textarea, button, a, [contenteditable]")) return; // dort hat Enter eine eigene Bedeutung
+      if (document.querySelector(".ctl-pop, .date-pop, .hue-pop, .pop")) return; // offenes Menü/Kalender
+      e.preventDefault(); primaryBtn.click();
+    };
+    const foot = buttons.length ? h("div.dialog-f", buttons.map((b) => h("button.btn" + (b.primary ? ".primary" : "") + (b.danger ? ".danger" : "") + (b.primary ? ".dlg-primary" : ""), {
       on: { click: async () => { if (b.action) { const r = await b.action(); if (r === false) return; close(r ?? b.value ?? true); } else close(b.value ?? null); } } }, b.label))) : null;
     const dlg = h("div.dialog" + (wide ? ".wide" : ""), { role: "dialog" },
       h("div.dialog-h", h("h2", title), h("button.btn.ghost.icon", { on: { click: () => close(null) }, title: "Schließen" }, icon("x"))),
       h("div.dialog-b", body), foot);
     const bd = h("div.backdrop", { on: { mousedown: (e) => { if (e.target === bd) close(null); } } }, dlg);
     bd._close = close;
+    primaryBtn = bd.querySelector(".dlg-primary") || bd.querySelector(".dialog-f .btn.danger:last-child");
     document.body.append(bd); document.addEventListener("keydown", key);
     setTimeout(() => dlg.querySelector("input,select,textarea")?.focus(), 30);
   });
