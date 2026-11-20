@@ -1,0 +1,12 @@
+[Unit]
+Description=syn Kontaktbuch
+After=network.target
+
+[Service]
+WorkingDirectory=/opt/syn
+Environment=SYN_DATA=/var/lib/syn
+ExecStart=/opt/syn/.venv/bin/python main.py
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
