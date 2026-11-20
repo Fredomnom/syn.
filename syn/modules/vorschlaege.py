@@ -73,6 +73,8 @@ def circle_suggestions(ctx):
         if x and isinstance(x["raw"], dict):
             via.setdefault((x["raw"]["type"], x["raw"]["id"]), []).append(r["id"])
     for (typ, rid), ids in via.items():
+        if typ == "service":
+            continue  # eine Plattform ist kein Kreis
         if typ == "circle":
             missing = [i for i in ids if rid not in rows[i]["circles_all"]]
             if len(missing) < 2 or rid not in cs:
@@ -94,6 +96,18 @@ def circle_suggestions(ctx):
             out.append({"key": key, "name": f"Über {who}", "kind_id": "freundschaft", "members": ids,
                         "member_names": [rows[i]["display"] for i in ids],
                         "reason": f"gleicher „Kennengelernt über“-Wert ({who})"})
+    # Gruppen aus Importen (Signal-Gruppen, Matrix-Räume, WhatsApp-Gruppen)
+    names = model.source_names(uid)
+    for sg in db.q("SELECT * FROM suggestions WHERE user_id=? AND kind='group_circle' AND status='open'", uid):
+        p = db.jl(sg["payload"], {})
+        ids = [i for i in p.get("members", []) if i in rows]
+        if len(ids) < 2:
+            continue
+        if set.intersection(*(set(rows[i]["circles_all"]) for i in ids)):
+            continue
+        out.append({"key": "group:" + sg["id"], "name": p.get("name"), "kind_id": "hobby", "members": ids,
+                    "member_names": [rows[i]["display"] for i in ids],
+                    "reason": f"Gruppe auf {names.get(p.get('service'), p.get('service'))}"})
     return out
 
 
@@ -111,14 +125,21 @@ def accept_circle(body: dict, ctx: Ctx = Depends(current)):
             cid = create_circle(ctx.uid, body.get("name") or "Neuer Kreis", body.get("kind_id"))
         for eid in body.get("members", []):
             model.add_member(ctx.uid, cid, eid)
-        add_suggestion(ctx.uid, "circle", None, {"key": body.get("key")}, "Vorschlag")
-        db.ex("UPDATE suggestions SET status='accepted' WHERE user_id=? AND kind='circle' AND payload=?", ctx.uid,
-              db.jd({"key": body.get("key")}))
+        key = body.get("key") or ""
+        if key.startswith("group:"):
+            db.ex("UPDATE suggestions SET status='accepted' WHERE id=? AND user_id=?", key[6:], ctx.uid)
+        else:
+            add_suggestion(ctx.uid, "circle", None, {"key": key}, "Vorschlag")
+            db.ex("UPDATE suggestions SET status='accepted' WHERE user_id=? AND kind='circle' AND payload=?", ctx.uid,
+                  db.jd({"key": key}))
     return {"id": cid}
 
 
 @router.post("/suggestions/circles/dismiss")
 def dismiss_circle(body: dict, ctx: Ctx = Depends(current)):
+    if (body.get("key") or "").startswith("group:"):
+        db.ex("UPDATE suggestions SET status='rejected' WHERE id=? AND user_id=?", body["key"][6:], ctx.uid)
+        return {"ok": True}
     add_suggestion(ctx.uid, "circle", None, {"key": body.get("key")}, "Vorschlag")
     db.ex("UPDATE suggestions SET status='rejected' WHERE user_id=? AND kind='circle' AND payload=?", ctx.uid,
           db.jd({"key": body.get("key")}))

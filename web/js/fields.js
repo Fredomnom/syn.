@@ -2,7 +2,7 @@
 // Telefon, E-Mail, Adresse, Profil, Bild). Jeder Wert: Label, Hauptwert ★, veraltet, unsicher, Quelle, gültig von/bis.
 import { dateInput } from "./date.js";
 import { pickAndCrop } from "./crop.js";
-import { S, h, icon, api, PUT, POST, clear, modal, rows, invalidate, avatar, circleChip, pickPerson, pickCircle, toast } from "./core.js";
+import { S, h, icon, api, PUT, POST, clear, modal, rows, invalidate, avatar, circleChip, pickPerson, pickCircle, toast, menu } from "./core.js";
 
 export const TYPE_NAMES = { text: "Text", note: "Notiz", number: "Zahl", date: "Datum", choice: "Auswahl", checkbox: "Checkbox",
   person: "Person", ref: "Verweis", phone: "Telefon", email: "E-Mail", address: "Adresse", profile: "Profil", image: "Bild" };
@@ -13,6 +13,26 @@ export function fieldsFor(kind) {
   return S.fieldList.filter((f) => f.scope === "both" || f.scope === kind);
 }
 export const bundFields = () => S.fieldList.filter((f) => f.scope === "bund");
+
+// Quellen für „Kennengelernt über“: Profil-Dienste und Import-Quellen
+const EXTRA_SOURCES = { imap: "E-Mail", kalender: "Kalender", vcard: "Handy-Kontakte", android: "Anrufe & SMS", carddav: "Adressbuch (CardDAV)", google: "Google Kontakte" };
+export function sources() {
+  const out = { ...EXTRA_SOURCES };
+  for (const s of S.settings.services || []) out[s.id] = s.name;
+  return out;
+}
+export const sourceName = (id) => sources()[id] || id;
+
+// Logos der Dienste (Simple Icons, CC0) – einfarbig in der Textfarbe; Import-Quellen mit eigenen Symbolen
+const LOGOS = new Set(["instagram", "discord", "steam", "telegram", "whatsapp", "signal", "matrix", "github", "mastodon", "bluesky", "twitch",
+  "psn", "linkedin", "facebook", "snapchat", "anilist", "lastfm", "google"]);
+const SOURCE_ICONS = { imap: "mail", kalender: "calendar", vcard: "smartphone", android: "phone", carddav: "users" };
+export function serviceIcon(id, size = 16) {
+  if (LOGOS.has(id)) return h("span.svc-ic", { style: { "--src": `url(/static/icons/services/${id}.svg)`, width: size + "px", height: size + "px" } });
+  if (SOURCE_ICONS[id]) return icon(SOURCE_ICONS[id], "svc-sym");
+  const n = sourceName(id) || id || "?";
+  return h("span.svc-letter", { style: { width: size + "px", height: size + "px", fontSize: Math.round(size * 0.62) + "px" } }, n[0].toUpperCase());
+}
 
 export function service(id) { return (S.settings.services || []).find((s) => s.id === id); }
 export function profileLink(v) {
@@ -39,7 +59,7 @@ export function plain(def, v, names) {
     case "checkbox": return v ? "Ja" : "Nein";
     case "profile": return typeof v === "object" ? (v.handle || v.id || v.url || "") : String(v);
     case "person": return nameOf(v, names);
-    case "ref": return typeof v === "object" ? nameOf(v.id, names) : String(v);
+    case "ref": return typeof v === "object" ? (v.type === "service" ? sourceName(v.id) : nameOf(v.id, names)) : String(v);
     case "number": return def.options?.ring ? `${v} · ${(S.settings.ring_names || {})[v] || ""}` : String(v);
     default: return String(v);
   }
@@ -53,6 +73,7 @@ export function valueEl(def, val, names) {
   else if (def.type === "phone") el = h("span.mono", v);
   else if (def.type === "choice") el = h("span.row.wrap", { style: { gap: "4px" } }, (Array.isArray(v) ? v : [v]).map((x) => h("span.chip.plain", x)));
   else if (def.type === "ref" && v?.type === "circle") el = circleChip(v.id);
+  else if (def.type === "ref" && v?.type === "service") el = h("span.chip.plain.src-chip", serviceIcon(v.id, 14), sourceName(v.id));
   else if (def.type === "ref" || def.type === "person") { const id = def.type === "person" ? v : v.id; el = h("a", { href: "#/p/" + id }, nameOf(id, names)); }
   else if (def.type === "profile") { const s = service(v.service); el = h("span", s ? h("span.t3", s.name + " ") : null, v.handle || v.id || v.url); }
   else if (def.type === "image") el = h("img", { src: v, style: { maxWidth: "120px", borderRadius: "8px" } });
@@ -93,11 +114,13 @@ export function inputFor(def, value, { onEnter } = {}) {
     render(); el = box; get = () => { const a = [...sel]; if (extra.value.trim()) a.push(extra.value.trim()); return multi ? a : a[0] ?? null; };
   } else if (t === "person" || t === "ref") {
     let cur = value; const lab = h("span");
-    const show = () => clear(lab, cur ? (t === "ref" && cur.type === "circle" ? circleChip(cur.id) : h("span.chip.plain", nameOf(t === "person" ? cur : cur.id))) : h("span.t3", "nichts gewählt"));
+    const show = () => clear(lab, cur ? (t === "ref" && cur.type === "circle" ? circleChip(cur.id) : t === "ref" && cur.type === "service" ? h("span.chip.plain.src-chip", serviceIcon(cur.id, 14), sourceName(cur.id)) : h("span.chip.plain", nameOf(t === "person" ? cur : cur.id))) : h("span.t3", "nichts gewählt"));
     const bP = h("button.btn.sm", { type: "button", on: { click: (e) => pickPerson(e.currentTarget, { onPick: (r) => { cur = t === "person" ? r.id : { type: "entity", id: r.id }; show(); } }) } }, icon("user"), "Person");
     const bC = t === "ref" ? h("button.btn.sm", { type: "button", on: { click: (e) => pickCircle(e.currentTarget, { onPick: (c) => { cur = { type: "circle", id: c.id }; show(); } }) } }, icon("circles"), "Kreis") : null;
+    const bS = t === "ref" ? h("button.btn.sm", { type: "button", on: { click: (e) => menu(e.currentTarget, [{ label: "Quelle – Plattform oder Import" },
+      ...Object.entries(sources()).sort((a, b) => a[1].localeCompare(b[1])).map(([id, name]) => ({ label: name, on: cur?.type === "service" && cur.id === id, action: () => { cur = { type: "service", id }; show(); } }))]) } }, icon("link"), "Quelle") : null;
     const bX = h("button.btn.sm.ghost", { type: "button", on: { click: () => { cur = null; show(); } } }, icon("x"));
-    show(); el = h("div.row.wrap", lab, bP, bC, bX); get = () => cur;
+    show(); el = h("div.row.wrap", lab, bP, bC, bS, bX); get = () => cur;
   } else if (t === "profile") {
     const v = value || {};
     const sel = h("select.input", (S.settings.services || []).map((x) => h("option", { value: x.id, selected: x.id === v.service }, x.name)), h("option", { value: "", selected: !v.service }, "anderer Dienst"));

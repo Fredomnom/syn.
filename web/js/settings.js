@@ -1,7 +1,7 @@
 // Einstellungen: Felder, Kreis-Arten, Bund-Arten, Ringe, Routinen, Importe, Sync, Vorschläge, Module, Konto, Admin.
 import { S, h, icon, api, GET, POST, PUT, PATCH, DEL, clear, invalidate, toast, modal, confirmDlg, promptDlg, rows, reloadFields, reloadCircles,
   loadBase, circleChip, avatar, fmtTs, rel, RING, download, rebuild, isMobile, themePref, setTheme } from "./core.js";
-import { TYPE_NAMES } from "./fields.js";
+import { TYPE_NAMES, serviceIcon } from "./fields.js";
 import { hueInput, hueOf } from "./color.js";
 import { ACTIONS, binding, pretty, saveBinding, recordCombo } from "./shortcuts.js";
 
@@ -65,7 +65,7 @@ async function editOptions(f, body) {
 async function servicesCard() {
   const list = (await GET("/services")).map((s) => ({ ...s }));
   const box = h("div.col");
-  const draw = () => clear(box, list.map((s, i) => h("div.row", h("input.input.mono", { value: s.id, style: { width: "110px" }, on: { input: (e) => (s.id = e.target.value) } }),
+  const draw = () => clear(box, list.map((s, i) => h("div.row", h("span.svc-tile", serviceIcon(s.id, 18)), h("input.input.mono", { value: s.id, style: { width: "110px" }, on: { input: (e) => (s.id = e.target.value) } }),
     h("input.input", { value: s.name, style: { width: "150px" }, on: { input: (e) => (s.name = e.target.value) } }),
     h("input.input.mono.grow", { value: s.link || "", placeholder: "https://…/{handle}", on: { input: (e) => (s.link = e.target.value) } }),
     h("button.btn.sm.ghost.icon", { on: { click: () => { list.splice(i, 1); draw(); } } }, icon("trash")))),
@@ -79,7 +79,7 @@ async function servicesCard() {
 async function circleKinds(body) {
   const { kinds, lose } = await GET("/circle-kinds");
   body.append(card("Kreis-Arten", h("p.small.t3", "Jede Kreis-Art hat ein Paar aus heller Fläche und dunkler Schrift aus derselben Farbfamilie. Wählbar ist nur der Farbton, damit alles zur Marke passt. Die Paare färben Profilbilder, Chips und Sektoren."),
-    h("table.mtable", kinds.map((k) => {
+    h("table.mtable", h("tr", h("th", { colSpan: 2 }, "Vorschau"), h("th", "Name"), h("th", "Kürzel"), h("th", "Farbton"), h("th")), kinds.map((k) => {
       const prev = h("span.chip", { style: { background: k.bg, color: k.fg } }, k.name);
       const upd = async (patch) => { await PATCH("/circle-kinds/" + k.id, patch); Object.assign(k, patch); prev.style.background = k.bg; prev.style.color = k.fg; prev.textContent = k.name; await loadBase(); };
       return h("tr", h("td", h("span.av", { style: { background: k.bg, color: k.fg } }, k.abbr)), h("td", prev),
@@ -93,7 +93,7 @@ async function circleKinds(body) {
 async function bundKinds(body) {
   const ks = await GET("/bund-kinds");
   body.append(card("Bund-Arten", h("p.small.t3", "Ein Bund ist eine Beziehung zwischen genau zwei Lebewesen. Jede Seite hat eine Rolle."),
-    h("table.mtable", h("tr", h("th", "Name"), h("th", "Rolle A"), h("th", "Rolle B"), h("th")), ks.map((k) => h("tr",
+    h("table.mtable", h("tr", h("th", "Name"), h("th", "Rolle der einen Seite"), h("th", "Rolle der anderen Seite"), h("th")), ks.map((k) => h("tr",
       ...["name", "role_a", "role_b"].map((f) => h("td", h("input.input", { value: k[f] || "", on: { change: async (e) => { await PATCH("/bund-kinds/" + k.id, { [f]: e.target.value }); await loadBase(); } } }))),
       h("td", h("button.btn.sm.ghost.icon", { on: { click: async () => { await DEL("/bund-kinds/" + k.id); await loadBase(); reloadTab(body, bundKinds); } } }, icon("trash")))))),
     h("button.btn.sm", { style: { alignSelf: "flex-start" }, on: { click: async () => { const n = await promptDlg("Neue Bund-Art", "Name"); if (n) { await POST("/bund-kinds", { name: n }); await loadBase(); reloadTab(body, bundKinds); } } } }, icon("plus"), "Bund-Art")));
@@ -272,7 +272,7 @@ function importerCard(imp, reload) {
     try { const r = await api("POST", `/importers/${imp.id}/run`, fd); toast(r.status, { err: r.status.includes("Fehler") }); logBox.textContent = r.log; logBox.classList.remove("hidden"); invalidate(); }
     finally { btn.disabled = false; btn.textContent = "Jetzt importieren"; }
   };
-  return h("div.card", h("div.card-h", h("div", h("h3", imp.name), h("div.small.t2", imp.way)),
+  return h("div.card", h("div.card-h", h("div.row", h("span.svc-tile", serviceIcon(imp.service || imp.id, 20)), h("div", h("h3", imp.name), h("div.small.t2", imp.way))),
     h("div.row", h("span.tag" + (imp.unofficial ? "" : ".yellow"), "offiziell: " + imp.official), h("label.check", h("input", { type: "checkbox", checked: imp.enabled, on: { change: async (e) => { if (!(await save(e.target.checked))) e.target.checked = !e.target.checked; else reload(); } } }), "an"))),
     h("div.card-b.col",
       h("div.small", h("span.t2", "Was reinkommt: "), imp.brings),

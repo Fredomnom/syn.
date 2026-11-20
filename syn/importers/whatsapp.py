@@ -42,8 +42,10 @@ class WhatsApp(Importer):
                                    last_contact=to_date(last)))
             return out
         me = (cfg.get("me") or "").strip().lower()
-        senders = {}
+        senders, groups = {}, {}
         for name, data in iter_files(run.files, [".txt"]):
+            chat = re.sub(r"^(WhatsApp[- ]Chat (mit|with) )", "", name.rsplit("/", 1)[-1].removesuffix(".txt"), flags=re.I).strip()
+            in_file = set()
             for ln in data.decode("utf-8", "replace").splitlines():
                 m = LINE.match(ln.replace("‎", ""))
                 if not m:
@@ -56,13 +58,17 @@ class WhatsApp(Importer):
                     continue
                 if who not in senders or senders[who] < day:
                     senders[who] = day
+                in_file.add(who)
+            if len(in_file) > 1 and chat and chat.lower() not in ("_chat", "chat"):
+                for who in in_file:
+                    groups.setdefault(who, []).append(chat)
             run.log(f"{name}: {len(senders)} Absender bisher")
         for who, last in senders.items():
             num = re.sub(r"[^\d+]", "", who)
             if num.startswith("+") and len(num) > 8:
-                out.append(Contact(service_id=num, handle=num, phones=[(num, "mobil")], last_contact=last))
+                out.append(Contact(service_id=num, handle=num, phones=[(num, "mobil")], last_contact=last, groups=groups.get(who, [])))
             else:
-                out.append(Contact(name=who, last_contact=last))
+                out.append(Contact(name=who, last_contact=last, groups=groups.get(who, [])))
         return out
 
 

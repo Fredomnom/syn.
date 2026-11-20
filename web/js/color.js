@@ -47,7 +47,7 @@ class SynHue extends HTMLElement {
     const r = this.getBoundingClientRect(), P = this.panel;
     P.style.left = Math.max(8, Math.min(r.left, innerWidth - P.offsetWidth - 8)) + "px";
     P.style.top = (r.bottom + P.offsetHeight + 8 > innerHeight ? Math.max(8, r.top - P.offsetHeight - 6) : r.bottom + 6) + "px";
-    this._off = (e) => { if (!P.contains(e.target) && !this.contains(e.target)) this.close(); };
+    this._off = (e) => { if (!P.contains(e.target) && !this.contains(e.target) && !e.target.closest?.(".pop")) this.close(); };
     this._key = (e) => { if (e.key === "Escape") { e.stopPropagation(); this.close(); } };
     setTimeout(() => { document.addEventListener("mousedown", this._off, true); document.addEventListener("keydown", this._key, true); });
   }

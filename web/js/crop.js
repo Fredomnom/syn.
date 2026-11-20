@@ -12,6 +12,7 @@ export function cropDialog(file, { size = 512, round = true } = {}) {
       const ctx = cv.getContext("2d");
       const base = Math.max(V / img.width, V / img.height);
       const st = { z: 1, x: 0, y: 0 };
+      let active = false;
       const clamp = () => {
         const s = base * st.z, w = img.width * s, hh = img.height * s;
         st.x = Math.min(0, Math.max(V - w, st.x)); st.y = Math.min(0, Math.max(V - hh, st.y));
@@ -28,15 +29,24 @@ export function cropDialog(file, { size = 512, round = true } = {}) {
         ctx.beginPath(); ctx.rect(0, 0, V, V);
         if (round) ctx.arc(V / 2, V / 2, V / 2 - 2, 0, Math.PI * 2, true); else ctx.rect(4, 4, V - 8, V - 8);
         ctx.fill("evenodd");
+        // Drittelraster – beim Verschieben/Zoomen kräftiger
+        ctx.save();
+        if (round) { ctx.beginPath(); ctx.arc(V / 2, V / 2, V / 2 - 2, 0, Math.PI * 2); ctx.clip(); }
+        ctx.strokeStyle = `rgba(255,255,255,${active ? 0.75 : 0.4})`; ctx.lineWidth = 1;
+        ctx.beginPath();
+        for (const t of [V / 3, (2 * V) / 3]) { ctx.moveTo(t, 0); ctx.lineTo(t, V); ctx.moveTo(0, t); ctx.lineTo(V, t); }
+        ctx.stroke();
+        ctx.restore();
         ctx.strokeStyle = "#FFD60A"; ctx.lineWidth = 2;
         ctx.beginPath(); if (round) ctx.arc(V / 2, V / 2, V / 2 - 2, 0, Math.PI * 2); else ctx.rect(4, 4, V - 8, V - 8); ctx.stroke();
       };
-      let drag = null;
-      cv.addEventListener("pointerdown", (e) => { drag = { x: e.clientX - st.x, y: e.clientY - st.y }; cv.setPointerCapture(e.pointerId); });
+      let drag = null, activeT;
+      const pulse = () => { active = true; clearTimeout(activeT); activeT = setTimeout(() => { active = false; draw(); }, 700); };
+      cv.addEventListener("pointerdown", (e) => { drag = { x: e.clientX - st.x, y: e.clientY - st.y }; active = true; cv.setPointerCapture(e.pointerId); draw(); });
       cv.addEventListener("pointermove", (e) => { if (!drag) return; st.x = e.clientX - drag.x; st.y = e.clientY - drag.y; draw(); });
-      cv.addEventListener("pointerup", () => (drag = null));
+      cv.addEventListener("pointerup", () => { drag = null; pulse(); });
       const zoomTo = (z, cx = V / 2, cy = V / 2) => {
-        z = Math.min(6, Math.max(1, z));
+        z = Math.min(6, Math.max(1, z)); pulse();
         const k = z / st.z; st.x = cx - (cx - st.x) * k; st.y = cy - (cy - st.y) * k; st.z = z; slider.value = z; draw();
       };
       cv.addEventListener("wheel", (e) => { e.preventDefault(); const r = cv.getBoundingClientRect(); zoomTo(st.z * (e.deltaY < 0 ? 1.08 : 1 / 1.08), e.clientX - r.left, e.clientY - r.top); }, { passive: false });

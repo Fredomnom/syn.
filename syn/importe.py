@@ -40,6 +40,7 @@ class Contact:
     fields: dict = field(default_factory=dict)  # Feld-ID -> Wert (z.B. f_company, f_position, f_addr)
     service: str | None = None  # Dienst fürs Profil-Feld, falls abweichend vom Importer
     only_existing: bool = False  # nur bekannte Personen aktualisieren, keine neuen anlegen
+    groups: list = field(default_factory=list)  # Gruppen/Räume, in denen die Person mit dir ist (→ Kreis-Vorschläge)
 
 
 class Importer:
@@ -216,6 +217,7 @@ def apply_contacts(ctx, imp: Importer, contacts, run: Run):
     stats = {"seen": 0, "new": 0, "matched": 0, "values": 0, "suggestions": 0, "signals": 0}
     svc_idx, ph_idx, em_idx = _index(uid, country)
     me = model.self_id(uid)
+    group_members = {}
     for c in contacts:
         stats["seen"] += 1
         service = c.service or imp.service
@@ -256,6 +258,12 @@ def apply_contacts(ctx, imp: Importer, contacts, run: Run):
                     continue
                 eid = model.create_entity(uid, name=name, source=src)
                 stats["new"] += 1
+                # Neu über diesen Dienst: „Kennengelernt über“ zeigt auf die Quelle (Handeingaben gewinnen später)
+                if "f_via" in defs:
+                    try:
+                        model.set_entity_field(uid, eid, "f_via", {"type": "service", "id": service or imp.id}, src)
+                    except Exception as ex:
+                        run.log(f"Kennengelernt über: {ex}")
             if not service and c.service_id:
                 idmap[str(c.service_id)] = eid
             if service and (c.service_id or c.handle) and "f_profile" in defs:
@@ -316,6 +324,8 @@ def apply_contacts(ctx, imp: Importer, contacts, run: Run):
                     if not met and add_suggestion(uid, "field", eid, {"field": "f_met", "value": fs,
                                                                      "why": f"Freundschaft auf {imp.name} seit"}, src):
                         stats["suggestions"] += 1
+            for g in c.groups or []:
+                group_members.setdefault(g, set()).add(eid)
             for kind, val in (("message", c.last_contact), ("seen", c.seen)):
                 if val:
                     d = str(val)[:10]
@@ -325,7 +335,51 @@ def apply_contacts(ctx, imp: Importer, contacts, run: Run):
                         db.ex("INSERT OR REPLACE INTO contact_signals(user_id,entity_id,source,kind,at) "
                               "VALUES(?,?,?,?,?)", uid, eid, src, kind, d)
                         stats["signals"] += 1
+    stats["groups"] = suggest_groups(uid, imp.service or imp.id, src, group_members)
     return stats
+
+
+def suggest_groups(uid, service, src, group_members) -> int:
+    """Gruppen mit mindestens zwei bekannten Leuten als Kreis vorschlagen – nie automatisch anlegen."""
+    n = 0
+    for name, ids in group_members.items():
+        ids = sorted(ids)
+        if len(ids) < 2 or not name:
+            continue
+        cur = [s for s in db.q("SELECT * FROM suggestions WHERE user_id=? AND kind='group_circle'", uid)
+               if (db.jl(s["payload"], {}) or {}).get("name") == name and db.jl(s["payload"], {}).get("service") == service]
+        payload = {"name": name, "service": service, "members": ids}
+        if cur:
+            if cur[0]["status"] == "open":
+                db.ex("UPDATE suggestions SET payload=? WHERE id=?", db.jd(payload), cur[0]["id"])
+            continue
+        db.insert("suggestions", {"id": new_id("s"), "user_id": uid, "kind": "group_circle", "entity_id": None,
+                                  "payload": db.jd(payload), "source": src, "created_at": now(), "status": "open"})
+        n += 1
+    return n
+
+
+def backfill_via():
+    """Einmalig: Für früher importierte Leute „Kennengelernt über“ aus der Quelle des ersten Eintrags nachtragen."""
+    if db.val("SELECT value FROM instance WHERE key='backfill_via_v1'"):
+        return
+    imps = all_importers()
+    for u in db.q("SELECT id FROM users"):
+        uid = u["id"]
+        if not db.val("SELECT 1 FROM field_defs WHERE user_id=? AND id='f_via'", uid):
+            continue
+        for h in db.q("SELECT owner_id, source FROM history WHERE user_id=? AND owner_type='entity' AND attr='created'", uid):
+            imp = imps.get(h["source"])
+            if not imp or not db.val("SELECT 1 FROM entities WHERE id=?", h["owner_id"]):
+                continue
+            sb = model.self_bund(uid, h["owner_id"])
+            if sb and db.val("SELECT 1 FROM field_values WHERE owner_type='bund' AND owner_id=? AND field_id='f_via'", sb["id"]):
+                continue
+            try:
+                model.set_entity_field(uid, h["owner_id"], "f_via", {"type": "service", "id": imp.service or imp.id}, imp.id)
+            except Exception:
+                log.exception("Nachtragen für %s", h["owner_id"])
+    db.ex("INSERT OR REPLACE INTO instance(key,value) VALUES('backfill_via_v1', ?)", now())
 
 
 def run_importer(ctx, iid, files=None) -> str:
@@ -350,7 +404,8 @@ def run_importer(ctx, iid, files=None) -> str:
         run.log(f"{len(contacts)} Kontakte gelesen")
         stats = apply_contacts(ctx, imp, contacts, run)
         status = (f"{stats['seen']} gelesen, {stats['new']} neu, {stats['matched']} erkannt, "
-                  f"{stats['values']} Werte, {stats['suggestions']} Vorschläge")
+                  f"{stats['values']} Werte, {stats['suggestions']} Vorschläge"
+                  + (f", {stats['groups']} Gruppen-Vorschläge" if stats.get("groups") else ""))
     except httpx.HTTPStatusError as e:
         status = f"Fehler: HTTP {e.response.status_code} von {e.request.url.host}"
         run.log(status + " " + e.response.text[:300])

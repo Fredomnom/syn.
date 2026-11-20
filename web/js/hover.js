@@ -60,6 +60,7 @@ class SynPersonCard extends HTMLElement {
         fact("Zuletzt gesehen", seen ? rel(seen) : "noch nie"),
         bday ? fact("Geburtstag", prettyDate(bday)) : null,
         v.f_met ? fact("Kennengelernt", prettyDate(v.f_met.raw)) : null,
+        v.f_via ? fact("Kennengelernt über", v.f_via.d) : null,
         v.f_city ? fact("Wohnort", v.f_city.d) : null,
         v.f_phone ? fact("Telefon", v.f_phone.d, true) : null,
         v.f_email ? fact("E-Mail", v.f_email.d) : null,

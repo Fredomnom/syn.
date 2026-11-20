@@ -201,6 +201,7 @@ def entity_full(ctx, eid) -> dict:
     names = {x["id"]: display_name(x) for x in db.q("SELECT id,name,description FROM entities WHERE user_id=?", uid)}
     cs = model.circles(uid)
     names.update({c["id"]: c["name"] for c in cs.values()})
+    names.update({"svc:" + k: v for k, v in model.source_names(uid).items()})
     vals = get_values("entity", eid)
     sb = model.self_bund(uid, eid)
     bvals = get_values("bund", sb["id"]) if sb else {}
@@ -211,7 +212,7 @@ def entity_full(ctx, eid) -> dict:
         if other == me and not e["is_self"]:
             continue
         mine_a = b["a_id"] == eid
-        bunds.append({"id": b["id"], "other_id": other, "other_name": names.get(other), "kind_id": b["kind_id"],
+        bunds.append({"id": b["id"], "other_id": other, "self_is_a": mine_a, "other_name": names.get(other), "kind_id": b["kind_id"],
                       "role_self": b["role_a"] if mine_a else b["role_b"],
                       "role_other": b["role_b"] if mine_a else b["role_a"],
                       "valid_from": b["valid_from"], "valid_to": b["valid_to"],
@@ -235,7 +236,7 @@ def entity_full(ctx, eid) -> dict:
         "is_self": bool(e["is_self"]), "name_uncertain": bool(e["name_uncertain"]), "on_phone": bool(e["on_phone"]),
         "aliases": e["aliases"], "display": display_name(e),
         "fields": {k: v for k, v in vals.items() if k in defs},
-        "ihr_zwei": ({"id": sb["id"], "kind_id": sb["kind_id"], "role_a": sb["role_a"], "role_b": sb["role_b"],
+        "ihr_zwei": ({"id": sb["id"], "kind_id": sb["kind_id"], "role_a": sb["role_a"], "role_b": sb["role_b"], "a_id": sb["a_id"],
                       "fields": bvals} if sb else None),
         "bunds": bunds, "memberships": mems, "names": names,
         "level": row["level"], "ist": row["ist"], "long_unseen": row["long_unseen"],

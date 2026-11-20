@@ -2,6 +2,7 @@
 import "./date.js";
 import "./color.js";
 import "./hover.js";
+import "./controls.js";
 import { onGlobal } from "./shortcuts.js";
 import { S, h, api, GET, POST, clear, logo, loadBase, isMobile, flushQueue, toast, icon } from "./core.js";
 

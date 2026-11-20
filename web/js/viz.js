@@ -59,7 +59,12 @@ export async function rings(body, list0, all) {
     const rad = (i) => R0 + band * i;
     const svg = s("svg", { viewBox: `0 0 ${W} ${Hh}` });
     // Sektoren
-    const keyOf = (r) => (opt.sector === "kind" ? (S.circles[r.main_circle_id]?.kind_id || "_lose") : (r.main_circle_id || "_lose"));
+    const keyOf = (r) => {
+      if (opt.sector === "via") { const x = r.v.f_via?.raw; return x ? `${x.type}:${x.id}` : "_lose"; }
+      return opt.sector === "kind" ? (S.circles[r.main_circle_id]?.kind_id || "_lose") : (r.main_circle_id || "_lose");
+    };
+    const viaLabel = (k) => { const r = placed.find((x) => keyOf(x) === k); return r?.v.f_via?.d || k; };
+    const viaColors = (k) => (k.startsWith("circle:") ? circleColors(k.slice(7)) : k.startsWith("entity:") ? circleColors(placed.find((x) => x.id === k.slice(7))?.main_circle_id) : loseColors());
     const groups = {};
     for (const r of placed) (groups[keyOf(r)] ||= []).push(r);
     const keys = Object.keys(groups).sort((a, b) => (a === "_lose") - (b === "_lose") || a.localeCompare(b));
@@ -75,8 +80,8 @@ export async function rings(body, list0, all) {
       sectors.push({ k, a0, a1 });
       if (keys.length > 1) svg.append(s("line", { x1: cx, y1: cy, x2: cx + Math.cos(a0) * R, y2: cy + Math.sin(a0) * R, stroke: V("--line") }));
       const am = (a0 + a1) / 2;
-      const col = k === "_lose" ? loseColors() : opt.sector === "kind" ? kindColors(k) : circleColors(k);
-      const label = (k === "_lose" ? "Lose" : opt.sector === "kind" ? S.kinds[k]?.name : S.circles[k]?.name) + " · " + groups[k].length;
+      const col = k === "_lose" ? loseColors() : opt.sector === "via" ? viaColors(k) : opt.sector === "kind" ? kindColors(k) : circleColors(k);
+      const label = (k === "_lose" ? (opt.sector === "via" ? "unbekannt" : "Lose") : opt.sector === "via" ? viaLabel(k) : opt.sector === "kind" ? S.kinds[k]?.name : S.circles[k]?.name) + " · " + groups[k].length;
       const lx = cx + Math.cos(am) * (R + 22), ly = cy + Math.sin(am) * (R + 22);
       const tw = label.length * 6.4 + 16;
       svg.append(s("g", { transform: `translate(${lx - tw / 2},${ly - 10})` }, s("rect", { width: tw, height: 20, rx: 10, fill: col.bg }), s("text", { x: tw / 2, y: 14, "text-anchor": "middle", "font-size": 11, "font-weight": 500, fill: col.fg }, label)));
@@ -121,7 +126,7 @@ export async function rings(body, list0, all) {
       const sec = sectors.find((x) => ang >= x.a0 && ang < x.a1);
       if (opt.dist === "level" && level !== r.level) { await setRing(r.id, level); r.level = level; toast(`${r.display}: ${level ? ringName(level) : "ohne Ring"}`); }
       invalidate(); draw();
-      if (sec && dist <= R && sec.k !== keyOf(r) && sec.k !== "_lose") { await moveSector(r, sec.k); invalidate(); draw(); }
+      if (sec && dist <= R && sec.k !== keyOf(r) && sec.k !== "_lose" && opt.sector !== "via") { await moveSector(r, sec.k); invalidate(); draw(); }
     };
     svg.addEventListener("dragover", (e) => e.preventDefault());
     svg.addEventListener("drop", async (e) => { e.preventDefault(); const id = e.dataTransfer.getData("text/syn-id"); const r = list.find((x) => x.id === id); if (r) { r.level = null; await dropAt(r, svgPoint(svg, e)); } });
@@ -137,7 +142,8 @@ export async function rings(body, list0, all) {
         h("div.row.between", h("span", "Abstand"), h("select.input", { style: { height: "28px" }, on: { change: (e) => { opt.dist = e.target.value; SAVE("ringopt", opt); draw(); } } },
           h("option", { value: "level", selected: opt.dist === "level" }, "Ring"), S.settings.use_ist ? h("option", { value: "ist", selected: opt.dist === "ist" }, "Ist (berechnet)") : null)),
         h("div.row.between", h("span", "Sektoren"), h("select.input", { style: { height: "28px" }, on: { change: (e) => { opt.sector = e.target.value; SAVE("ringopt", opt); draw(); } } },
-          h("option", { value: "kind", selected: opt.sector === "kind" }, "Kreis-Art"), h("option", { value: "circle", selected: opt.sector === "circle" }, "Hauptkreis"))),
+          h("option", { value: "kind", selected: opt.sector === "kind" }, "Kreis-Art"), h("option", { value: "circle", selected: opt.sector === "circle" }, "Hauptkreis"),
+          h("option", { value: "via", selected: opt.sector === "via" }, "Kennengelernt über"))),
         h("label.check.between", h("span.grow", "Haustiere zeigen"), h("input", { type: "checkbox", checked: opt.pets, on: { change: (e) => { opt.pets = e.target.checked; SAVE("ringopt", opt); draw(); } } })),
         at ? h("div.hint", "Stand vom ", h("b.mono", at), " – Ziehen ist im Rückblick aus.") : null)));
   };
@@ -304,8 +310,25 @@ export async function net(body, list0) {
     return lo.slice(0, -1).concat(up.slice(0, -1));
   };
   let areas = [];
+  // Kamera: Verschieben und Zoomen (Trackpad: scrollen = verschieben, Pinch = zoomen; Mausrad = zoomen; Linksklick ziehen = verschieben)
+  const cam = Object.assign({ x: 0, y: 0, k: 1 }, LS("netcam", {}));
+  let camG = null, zoomLabel = null;
+  const applyCam = () => { camG?.setAttribute("transform", `translate(${cam.x},${cam.y}) scale(${cam.k})`); if (zoomLabel) zoomLabel.textContent = Math.round(cam.k * 100) + " %"; SAVE("netcam", cam); };
+  const zoomAt = (factor, px, py) => {
+    const k = Math.min(4, Math.max(0.3, cam.k * factor));
+    cam.x = px - (px - cam.x) * (k / cam.k); cam.y = py - (py - cam.y) * (k / cam.k); cam.k = k; applyCam();
+  };
+  const fit = () => {
+    const ps = nodes.map((n) => pos[n.id]).filter(Boolean);
+    if (!ps.length) { Object.assign(cam, { x: 0, y: 0, k: 1 }); return applyCam(); }
+    const x0 = Math.min(...ps.map((p) => p.x)) - 60, x1 = Math.max(...ps.map((p) => p.x)) + 60, y0 = Math.min(...ps.map((p) => p.y)) - 60, y1 = Math.max(...ps.map((p) => p.y)) + 60;
+    const k = Math.min(4, Math.max(0.3, Math.min(W / (x1 - x0), H / (y1 - y0))));
+    Object.assign(cam, { k, x: W / 2 - ((x0 + x1) / 2) * k, y: H / 2 - ((y0 + y1) / 2) * k }); applyCam();
+  };
+  const worldPoint = (svg, e) => { const p = svgPoint(svg, e); return { x: (p.x - cam.x) / cam.k, y: (p.y - cam.y) / cam.k }; };
+  const isMouseWheel = (e) => e.deltaMode !== 0 || (e.deltaX === 0 && Math.abs(e.deltaY) >= 40 && Number.isInteger(e.deltaY));
   const draw = () => {
-    const svg = s("svg", { viewBox: `0 0 ${W} ${H}` });
+    const svg = s("svg", { viewBox: `0 0 ${W} ${H}`, class: "net-svg" });
     const gA = s("g"), gL = s("g"), gN = s("g");
     // Kreise als Flächen
     areas = [];
@@ -331,13 +354,37 @@ export async function net(body, list0) {
     }
     for (const l of links) gL.append(s("line", { x1: pos[l.a].x, y1: pos[l.a].y, x2: pos[l.b].x, y2: pos[l.b].y, stroke: V("--text3"), "stroke-width": 1.2, "data-a": l.a, "data-b": l.b }));
     for (const n of nodes) gN.append(node(n, pos[n.id].x, pos[n.id].y, 20, { approx: at && n.approx_created }));
-    svg.append(gA, gL, gN);
-    clear(box, svg);
+    camG = s("g", {}, gA, gL, gN);
+    svg.append(camG);
+    applyCam();
+    zoomLabel = h("span.mono.small", Math.round(cam.k * 100) + " %");
+    const cc = (x, y) => [W / 2, H / 2];
+    const zoomUi = h("div.viz-zoom",
+      h("button.btn.sm.icon", { title: "Herauszoomen", on: { click: () => zoomAt(1 / 1.25, ...cc()) } }, icon("minus")), zoomLabel,
+      h("button.btn.sm.icon", { title: "Hineinzoomen", on: { click: () => zoomAt(1.25, ...cc()) } }, icon("plus")),
+      h("button.btn.sm", { title: "Alle Personen zeigen", on: { click: fit } }, "Alles zeigen"));
+    clear(box, svg, zoomUi);
+    svg.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      const p = svgPoint(svg, e);
+      if (e.ctrlKey) zoomAt(Math.exp(-e.deltaY * 0.012), p.x, p.y); // Pinch auf dem Trackpad (und Strg+Mausrad)
+      else if (isMouseWheel(e)) zoomAt(e.deltaY < 0 ? 1.15 : 1 / 1.15, p.x, p.y); // Mausrad
+      else { const sc = W / svg.getBoundingClientRect().width; cam.x -= e.deltaX * sc; cam.y -= e.deltaY * sc; applyCam(); } // Trackpad scrollen
+    }, { passive: false });
+    // Linksklick auf freier Fläche ziehen = verschieben
+    let pan = null;
+    svg.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0 || e.target.closest(".node")) return;
+      const p = svgPoint(svg, e); pan = { x: p.x - cam.x, y: p.y - cam.y }; svg.setPointerCapture(e.pointerId); svg.classList.add("panning");
+    });
+    svg.addEventListener("pointermove", (e) => { if (!pan) return; const p = svgPoint(svg, e); cam.x = p.x - pan.x; cam.y = p.y - pan.y; applyCam(); });
+    const endPan = () => { if (pan) { pan = null; svg.classList.remove("panning"); } };
+    svg.addEventListener("pointerup", endPan); svg.addEventListener("pointercancel", endPan);
     let drag = null;
     gN.addEventListener("pointerdown", (e) => { const g = e.target.closest(".node"); if (!g) return; drag = { g, id: g.dataset.id, moved: false }; g.setPointerCapture(e.pointerId); });
     gN.addEventListener("pointermove", (e) => {
       if (!drag) return;
-      const p = svgPoint(svg, e); drag.moved = true; pos[drag.id] = { x: p.x, y: p.y }; drag.g.setAttribute("transform", `translate(${p.x},${p.y})`);
+      const p = worldPoint(svg, e); drag.moved = true; pos[drag.id] = { x: p.x, y: p.y }; drag.g.setAttribute("transform", `translate(${p.x},${p.y})`);
       for (const ln of gL.children) { if (ln.dataset.a === drag.id) { ln.setAttribute("x1", p.x); ln.setAttribute("y1", p.y); } if (ln.dataset.b === drag.id) { ln.setAttribute("x2", p.x); ln.setAttribute("y2", p.y); } }
     });
     gN.addEventListener("pointerup", async (e) => {
@@ -365,7 +412,8 @@ export async function net(body, list0) {
     h("div.card", h("div.card-h", h("h3", "Ansicht")), h("div.card-b.col",
       h("p.small.t2", "Punkte = Personen, Linien = Bünde, Flächen = Kreise. Fallenlassen auf einem Kreis macht zum Mitglied."),
       h("label.check", h("input", { type: "checkbox", checked: opt.self, on: { change: (e) => { opt.self = e.target.checked; SAVE("netopt", opt); layout(); draw(); } } }), "Dich zeigen"),
-      h("button.btn.sm", { on: { click: () => { pos = {}; SAVE("netpos", {}); layout(); draw(); } } }, icon("refresh"), "Neu anordnen"))));
+      h("button.btn.sm", { on: { click: () => { pos = {}; SAVE("netpos", {}); layout(); draw(); fit(); } } }, icon("refresh"), "Neu anordnen"),
+      h("p.tiny.t3", "Trackpad: scrollen verschiebt, mit zwei Fingern auseinander/zusammen zoomt. Maus: Rad zoomt, mit gedrückter linker Taste ziehen verschiebt."))));
   layout(); draw();
 }
 

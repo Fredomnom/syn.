@@ -85,7 +85,10 @@ def actual(ctx, row, field):
     if field == "name_unknown":
         return not row["name"]
     x = row["v"].get(field)
-    return x["raw"] if x else None
+    if not x:
+        return None
+    raw = x["raw"]
+    return raw["id"] if isinstance(raw, dict) and "type" in raw and "id" in raw else raw
 
 
 def check(ctx, row, c) -> tuple[bool, object]:

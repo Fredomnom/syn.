@@ -41,7 +41,7 @@ class Signal(Importer):
             if not (num or c.get("uuid")):
                 continue
             out.append(Contact(service_id=c.get("uuid") or num, handle=c.get("username") or num, name=name,
-                               phones=[(num, "mobil")] if num else []))
+                               phones=[(num, "mobil")] if num else [], groups=groups.get(num, [])))
         run.log(f"{len(groups)} Nummern in Gruppen")
         return out
 

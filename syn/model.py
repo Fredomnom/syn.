@@ -10,6 +10,20 @@ from .util import (approx_date, date_parts, days_since, fold, new_id, normalize_
 
 FIELD_TYPES = ["text", "note", "number", "date", "choice", "checkbox", "person", "ref", "phone", "email",
                "address", "profile", "image"]
+# Quellen für „Kennengelernt über“, die keine Profil-Dienste sind
+EXTRA_SOURCES = {"imap": "E-Mail", "kalender": "Kalender", "vcard": "Handy-Kontakte", "android": "Anrufe & SMS",
+                 "carddav": "Adressbuch (CardDAV)", "google": "Google Kontakte"}
+
+
+def source_names(uid) -> dict:
+    """Alle Quellen (Dienste aus der Profil-Liste und Import-Quellen) mit Anzeigenamen."""
+    from .auth import user_settings
+    out = dict(EXTRA_SOURCES)
+    for s in user_settings(uid).get("services", []):
+        out[s["id"]] = s["name"]
+    return out
+
+
 # Werte, die ein Telefonbuch versteht
 PHONEBOOK_FIELDS = {"f_phone", "f_email", "f_bday"}
 
@@ -87,8 +101,12 @@ def normalize_value(uid: str, d: dict, v, country="49"):
             return pid
         if t == "ref":
             if isinstance(v, str):
-                v = {"type": "circle" if v.startswith("c_") else "entity", "id": v}
+                v = {"type": "circle" if v.startswith("c_") else "entity" if v.startswith("p_") else "service", "id": v}
             typ, rid = v.get("type"), v.get("id")
+            if typ == "service":
+                if rid not in source_names(uid):
+                    raise Bad(f"{d['name']}: Quelle {rid} unbekannt")
+                return {"type": "service", "id": rid}
             tbl = {"entity": "entities", "circle": "circles"}.get(typ)
             if not tbl or not db.val(f"SELECT 1 FROM {tbl} WHERE id=? AND user_id=?", rid, uid):
                 raise Bad(f"{d['name']}: Verweis ungültig")
@@ -132,6 +150,8 @@ def display(d: dict, v, names: dict | None = None) -> str:
     if t == "person":
         return (names or {}).get(v, v)
     if t == "ref" and isinstance(v, dict):
+        if v.get("type") == "service":
+            return (names or {}).get("svc:" + str(v.get("id")), v.get("id"))
         return (names or {}).get(v.get("id"), v.get("id"))
     return str(v)
 
@@ -510,6 +530,7 @@ def load_rows(ctx, at: str | None = None, ids=None) -> list[dict]:
                                                      uid)}
     cs = circles(uid)
     names.update({c["id"]: c["name"] for c in cs.values()})
+    names.update({"svc:" + k: v for k, v in source_names(uid).items()})
     vals = {}
     for r in db.q("SELECT * FROM field_values WHERE user_id=? AND deprecated=0 ORDER BY is_primary DESC, position",
                   uid):

@@ -65,6 +65,8 @@ def create_app() -> FastAPI:
         return FileResponse(web / "index.html", headers={"Cache-Control": "no-cache"})
 
     bootstrap_admin()
+    from syn.importe import backfill_via
+    backfill_via()
     return app
 
 

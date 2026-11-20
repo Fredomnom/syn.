@@ -1,10 +1,10 @@
 // Desktop: sortieren und bearbeiten in großen Mengen. Seitenleiste, sechs Ansichten, Personenseite, Kreise.
 import { S, h, icon, GET, POST, PUT, PATCH, DEL, clear, rebuild, rows, invalidate, avatar, circleChip, nameEl, rel, ringName, today, debounce,
   toast, modal, logo, qs, menu, pickPerson, pickCircle, reloadCircles, confirmDlg, ringMini, MOD, fmtTs, circleColors, kindColors, promptDlg, RING, cssVar as V } from "./core.js";
-import { primaryOf, valueEl, actionFor, editField, entityFieldList, runQuick, bundFields, TYPE_NAMES, SOURCE, plain, fieldsFor, service } from "./fields.js";
+import { primaryOf, valueEl, actionFor, editField, entityFieldList, runQuick, bundFields, TYPE_NAMES, SOURCE, plain, fieldsFor, service, serviceIcon } from "./fields.js";
 import { onPage, onGlobal, resetPage, binding, pretty, helpOverlay } from "./shortcuts.js";
 import { dateInput } from "./date.js";
-import { editPerson, addField, dupHint, ringPopup, setRing, editIhrZwei, bundKindName, addBund, addToCircle, historyText } from "./shared.js";
+import { editPerson, addField, dupHint, ringPopup, setRing, editIhrZwei, editBund, bundKindName, addBund, addToCircle, historyText } from "./shared.js";
 
 const LS = (k, d) => { try { return JSON.parse(localStorage.getItem("syn." + k)) ?? d; } catch (_) { return d; } };
 const SAVE = (k, v) => { try { localStorage.setItem("syn." + k, JSON.stringify(v)); } catch (_) {} };
@@ -82,8 +82,8 @@ async function sidebar(route) {
       h("div.row.undo-row", h("button.btn.ghost.sm", { title: `Rückgängig (${pretty(binding("undo"))})`, on: { click: () => dispatchEvent(new CustomEvent("syn-undo", { detail: "undo" })) } }, icon("undo"), h("span.lab", "Rückgängig")),
         h("button.btn.ghost.sm.icon", { title: `Wiederholen (${pretty(binding("redo"))})`, on: { click: () => dispatchEvent(new CustomEvent("syn-undo", { detail: "redo" })) } }, icon("redo"))),
       sugg ? nav("#/settings/suggestions", "zap", "Vorschläge", sugg, route.parts[1] === "suggestions") : null,
-      nav("#/settings", "settings", "Felder, Kreise, Routinen", undefined, p0 === "settings" && route.parts[1] !== "suggestions"),
-      h("a.nav", { href: "#/p/" + S.me.self_id }, avatar({ is_self: true, display: "Du" }, 22, { self: true }), h("span.lab", "Mein Profil"))));
+      nav("#/settings", "settings", "Einstellungen", undefined, p0 === "settings" && route.parts[1] !== "suggestions"),
+      h("a.nav", { href: "#/p/" + S.me.self_id }, avatar(all.find((r) => r.is_self) || { is_self: true, display: "Du" }, 22, { self: true }), h("span.lab", "Mein Profil"))));
 }
 
 // ---------------------------------------------------------------- Personen
@@ -91,7 +91,7 @@ async function savedView(main, id, route) {
   const v = S.views.find((x) => x.id === id);
   if (!v) return people(main, null, route);
   if (v.view === "duplicates") return (await import("./merge.js")).duplicatesPage(main, v);
-  Object.assign(VS, { filter: "", kind: "all", q: "", sort: "name", circle: "", max_level: "", columns: null, cfg: {} }, v.config, { view: v.view, savedId: v.id });
+  Object.assign(VS, { filter: "", kind: "all", q: "", sort: "name", circle: "", max_level: "", via: "", columns: null, cfg: {} }, v.config, { view: v.view, savedId: v.id });
   return people(main, v.view, route, v);
 }
 
@@ -103,6 +103,7 @@ export function filterRows(all) {
   if (VS.filter === "uncertain") list = list.filter((r) => !r.name || r.name_uncertain || Object.values(r.v).some((x) => x.u));
   if (VS.filter === "long_unseen") list = list.filter((r) => r.long_unseen);
   if (VS.circle) list = list.filter((r) => r.circles_all.includes(VS.circle));
+  if (VS.via) list = list.filter((r) => { const x = r.v.f_via?.raw; return x && `${x.type}:${x.id}` === VS.via; });
   if (VS.max_level) list = list.filter((r) => r.level != null && r.level <= +VS.max_level);
   if (VS.q) { const q = VS.q.toLowerCase(); list = list.filter((r) => [r.display, r.description, ...(r.aliases || []), ...r.circles_all.map((c) => S.circles[c]?.name), ...Object.values(r.v).map((x) => x.d)].join(" ").toLowerCase().includes(q)); }
   const key = VS.sort.replace(/^-/, ""), desc = VS.sort.startsWith("-");
@@ -141,7 +142,7 @@ async function people(main, view, route, saved = null) {
   redraw();
 }
 
-function activeFilters() { return [VS.filter, VS.circle, VS.max_level].filter(Boolean).length || ""; }
+function activeFilters() { return [VS.filter, VS.circle, VS.max_level, VS.via].filter(Boolean).length || ""; }
 function sortLabel() { const k = VS.sort.replace("-", ""); return ({ name: "Name", created: "Erfasst", level: "Ring", seen: "Zuletzt gesehen" })[k] || S.fields[k]?.name || k; }
 
 function filterMenu(anchor, redraw) {
@@ -149,7 +150,12 @@ function filterMenu(anchor, redraw) {
   menu(anchor, [{ label: "Zeigen" }, it("Lose (ohne Kreis)", "filter", "lose"), S.settings.use_levels ? it("Ohne Ring", "filter", "no_ring") : null, it("Mit unsicheren Angaben", "filter", "uncertain"),
     S.settings.use_ist ? it("Nah, aber lange nicht gesehen", "filter", "long_unseen") : null,
     S.settings.use_levels ? { label: "Ring höchstens" } : null, ...(S.settings.use_levels ? [1, 2, 3, 4].map((n) => it(ringName(n), "max_level", String(n))) : []),
-    { label: "Kreis" }, ...Object.values(S.circles).sort((a, b) => a.name.localeCompare(b.name)).map((c) => it(c.name, "circle", c.id))]);
+    { label: "Kreis" }, ...Object.values(S.circles).sort((a, b) => a.name.localeCompare(b.name)).map((c) => it(c.name, "circle", c.id)),
+    ...(() => {
+      const seen = new Map();
+      for (const r of S.rows || []) { const x = r.v.f_via; if (x?.raw?.type) seen.set(`${x.raw.type}:${x.raw.id}`, x.d); }
+      return seen.size ? [{ label: "Kennengelernt über" }, ...[...seen].sort((a, b) => a[1].localeCompare(b[1])).map(([k, d]) => it(d, "via", k))] : [];
+    })()]);
 }
 function refreshToolbar() { /* Toolbar wird beim nächsten Rendern aktualisiert */ }
 function sortMenu(anchor, redraw) {
@@ -159,7 +165,7 @@ function sortMenu(anchor, redraw) {
 }
 
 async function saveView(saved) {
-  const cfg = { filter: VS.filter, kind: VS.kind, q: VS.q, sort: VS.sort, circle: VS.circle, max_level: VS.max_level, columns: VS.columns, ...VS.cfg };
+  const cfg = { filter: VS.filter, kind: VS.kind, q: VS.q, sort: VS.sort, circle: VS.circle, max_level: VS.max_level, via: VS.via, columns: VS.columns, ...VS.cfg };
   if (saved) { await PUT("/views/" + saved.id, { view: VS.view, config: cfg }); toast("Ansicht gespeichert"); }
   else {
     const name = await promptDlg("Ansicht speichern", "Name", "");
@@ -272,7 +278,7 @@ async function personPage(main, id) {
     h("div.card-b.col", e.bunds.length ? e.bunds.map((b) => h("div.row", avatar({ display: b.other_name, name: b.other_name, main_circle_id: (S.rows || []).find((r) => r.id === b.other_id)?.main_circle_id }, 24),
       h("a.grow", { href: "#/p/" + b.other_id }, b.other_name), h("span.small.t2", b.role_other ? `${b.role_other}` : bundKindName(b.kind_id)),
       h("button.btn.sm.ghost.icon", { on: { click: (ev) => menu(ev.currentTarget, [
-        { label: "Art ändern", action: async () => { const k = h("select.input", S.bundKinds.map((x) => h("option", { value: x.id, selected: x.id === b.kind_id }, x.name))); if (await modal("Bund-Art", k, [{ label: "OK", primary: true, action: () => PATCH("/bunds/" + b.id, { kind_id: k.value }) }])) reload(); } },
+        { label: "Bund bearbeiten", icon: "edit", action: async () => { if (await editBund(e, b)) reload(); } },
         { label: "Bund-Felder (z.B. Jahrestag)", action: async () => { const d = S.fields.f_anniv; if (d && await editField(d, b.fields.f_anniv || [], `/bunds/${b.id}/fields/f_anniv`)) reload(); } },
         { label: "Bund löschen", icon: "trash", action: async () => { if (await confirmDlg("Bund löschen?", `Bund mit ${b.other_name} löschen.`, "Löschen", true)) { await DEL("/bunds/" + b.id); invalidate(); reload(); } } }], { align: "right" }) } }, icon("more"))))
       : h("div.t3.small", "Noch keine Bünde zu anderen.")));
@@ -336,7 +342,7 @@ function fieldCell(def, vals, path, e, reload, compact = false) {
     const label = v.label && (!svc || v.label.toLowerCase() !== svc.name.toLowerCase()) ? v.label : null;
     const shown = def.type === "profile" ? h("span.fl-val" + (v.uncertain ? ".unsure-val" : ""), v.value?.handle || v.value?.id || v.value?.url || "") : valueEl(def, v, e.names);
     return h("div.fl-line" + (isMain ? ".first" : ""),
-      svc ? h("span.fl-svc", svc.name) : null,
+      svc ? h("span.fl-svc", serviceIcon(svc.id, 14), svc.name) : null,
       h("span.fl-text", shown, def.id === "f_seen" ? h("span.t3.small", " · " + rel(v.value)) : null),
       label ? h("span.fl-lab", label) : null,
       act ? h("a.btn.sm.icon.fl-act", { href: act.href, title: act.label, target: act.href.startsWith("http") ? "_blank" : null, rel: "noopener", on: { click: (ev) => ev.stopPropagation() } }, icon(act.icon)) : null);

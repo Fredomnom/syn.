@@ -87,7 +87,7 @@ class SynDate extends HTMLElement {
     const ph = this.panel.offsetHeight, pw = this.panel.offsetWidth;
     this.panel.style.left = Math.max(8, Math.min(r.left, innerWidth - pw - 8)) + "px";
     this.panel.style.top = (r.bottom + ph + 8 > innerHeight ? Math.max(8, r.top - ph - 6) : r.bottom + 6) + "px";
-    this._off = (e) => { if (!this.panel?.contains(e.target) && !this.contains(e.target)) this.close(); };
+    this._off = (e) => { if (!this.panel?.contains(e.target) && !this.contains(e.target) && !e.target.closest?.(".pop")) this.close(); };
     this._key = (e) => { if (e.key === "Escape") { e.stopPropagation(); this.close(); } };
     setTimeout(() => { document.addEventListener("mousedown", this._off, true); document.addEventListener("keydown", this._key, true); });
   }

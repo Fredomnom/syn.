@@ -44,13 +44,23 @@ class Matrix(Importer):
                     pass
             people[uid] = last
         limit = int(cfg.get("rooms") or 0)
+        groups = {}
         if limit:
+            direct_rooms = {r for rs in direct.values() for r in rs}
             for rid in run.get(f"{hs}/_matrix/client/v3/joined_rooms", headers=h).json().get("joined_rooms", []):
+                if rid in direct_rooms:
+                    continue
                 mem = run.get(f"{hs}/_matrix/client/v3/rooms/{quote(rid)}/joined_members", headers=h).json()
                 users = mem.get("joined", {})
                 if len(users) <= limit:
+                    try:
+                        rname = run.get(f"{hs}/_matrix/client/v3/rooms/{quote(rid)}/state/m.room.name", headers=h).json().get("name")
+                    except Exception:
+                        rname = None
                     for uid in users:
                         people.setdefault(uid, None)
+                        if rname:
+                            groups.setdefault(uid, []).append(rname)
         out = []
         for uid, last in people.items():
             if uid == me:
@@ -62,7 +72,7 @@ class Matrix(Importer):
             except Exception:
                 pass
             out.append(Contact(service_id=uid, handle=uid, name=name or uid.split(":")[0].lstrip("@"),
-                               last_contact=last))
+                               last_contact=last, groups=groups.get(uid, [])))
         return out
 
 

@@ -261,3 +261,26 @@ def test_rueckgaengig_und_wiederholen(client):
     c.post("/api/v1/me/password", json={"old": "geheim123", "new": "geheim999"})
     c.post("/api/v1/undo")
     assert c.post("/api/v1/auth/login", json={"username": "fred", "password": "geheim999"}).status_code == 200
+
+
+def test_kennengelernt_ueber_quelle(client):
+    c = client
+    c.put("/api/v1/importers/whatsapp", json={"enabled": True, "risk_ack": True})
+    chat = ("12.03.25, 18:01 - Anna Alt: Hallo\n12.03.25, 18:02 - Bernd Bach: Hi\n13.03.25, 09:00 - Cora Cl: Moin\n")
+    r = c.post("/api/v1/importers/whatsapp/run", files={"files": ("WhatsApp Chat mit Kletterteam.txt", chat.encode(), "text/plain")})
+    assert "3 neu" in r.json()["status"], r.json()
+    anna = c.get("/api/v1/entities", params={"q": "Anna Alt"}).json()[0]
+    assert anna["v"]["f_via"]["raw"] == {"type": "service", "id": "whatsapp"}
+    assert anna["v"]["f_via"]["d"] == "WhatsApp"
+    sug = c.get("/api/v1/suggestions/circles").json()
+    g = next(s for s in sug if s["name"] == "Kletterteam")
+    assert len(g["members"]) == 3 and g["key"].startswith("group:")
+    # Quelle ist kein Kreis-Vorschlag „Über WhatsApp“
+    assert not any(s["name"].startswith("Über ") for s in sug)
+    c.post("/api/v1/suggestions/circles/accept", json=g)
+    assert not any(s["name"] == "Kletterteam" for s in c.get("/api/v1/suggestions/circles").json())
+    # Hand gewinnt über die Quelle
+    c.patch(f"/api/v1/entities/{anna['id']}/fields/f_via", json={"value": {"type": "service", "id": "instagram"}})
+    c.post("/api/v1/importers/whatsapp/run", files={"files": ("WhatsApp Chat mit Kletterteam.txt", chat.encode(), "text/plain")})
+    assert c.get(f"/api/v1/entities/{anna['id']}").json()["ihr_zwei"]["fields"]["f_via"][0]["value"]["id"] == "instagram"
+    assert c.post("/api/v1/entities", json={"name": "X", "fields": {"f_via": {"value": {"type": "service", "id": "gibtsnicht"}}}}).status_code == 400
