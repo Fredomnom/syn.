@@ -4,8 +4,8 @@
 #   docker build -t ghcr.io/fredomnom/syn:latest .                    schlank (Standard)
 #   docker build --target full -t ghcr.io/fredomnom/syn:full .        dazu Telegram, Instagram (API), PlayStation
 #
-#   docker run -d -p 8080:8080 -v syn-data:/data \
-#     -e SYN_ADMIN_USER=du -e SYN_ADMIN_PASSWORD=geheim123 ghcr.io/fredomnom/syn:latest
+#   docker run -d -p 8080:8080 -v syn-data:/data ghcr.io/fredomnom/syn:latest
+#   → http://localhost:8080 öffnen: syn legt die Datenbank selbst an, du erstellst dein Konto im Browser.
 #
 # Weitere Pakete in beide Varianten: --build-arg EXTRAS="paket1 paket2"
 # Signal braucht signal-cli (Java) auf dem Server und ist in keinem Image enthalten.

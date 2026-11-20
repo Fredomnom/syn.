@@ -18,13 +18,13 @@ or `python main.py create-user NAME --admin`). The admin creates further account
 ### Docker
 
 ```sh
-SYN_ADMIN_PASSWORD=change-me-123 docker compose up -d      # http://localhost:8080
+docker compose up -d                                   # then open http://localhost:8080 and create your account
 # or by hand:
-docker build -t syn .
-docker run -d -p 8080:8080 -v syn-data:/data -e SYN_ADMIN_USER=you -e SYN_ADMIN_PASSWORD=change-me-123 syn
+docker run -d -p 8080:8080 -v syn-data:/data ghcr.io/fredomnom/syn:latest
 ```
 
-The image runs as its own user (not root), has a health check on `/api/v1/health` and keeps everything under `/data`.
+On first start syn creates the database by itself and the browser asks you to create the admin account –
+don't expose the instance publicly before you've done that. The image runs as its own user (not root), has a health check on `/api/v1/health` and keeps everything under `/data`.
 
 There are two variants built from the same Dockerfile:
 

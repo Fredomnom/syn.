@@ -149,10 +149,10 @@ try { const t = localStorage.getItem("syn.theme"); const d = t ? t === "dark" : 
   <!-- Loslegen -->
   <section class="ld-section ld-start" id="start">
     <h2 class="ld-h2 reveal">In einer Minute startklar.</h2>
-    <pre class="ld-code reveal"><code><span class="c"># mit Docker</span>
+    <pre class="ld-code reveal"><code><span class="c"># Docker</span>
 docker run -d -p 8080:8080 -v syn-data:/data \
-  -e SYN_ADMIN_USER=du -e SYN_ADMIN_PASSWORD=geheim123 \
-  <span data-image>ghcr.io/fredomnom/syn:latest</span></code></pre>
+  <span data-image>ghcr.io/fredomnom/syn:latest</span>
+<span class="c"># → open http://localhost:8080 and create your account</span></code></pre>
     <div class="ld-cta reveal">
       <a class="ld-btn ld-btn-primary" href="#github" data-github>Repository öffnen <span aria-hidden="true">→</span></a>
       <a class="ld-btn ld-btn-ghost" href="/#/login" data-app>Zur App</a>

@@ -1,4 +1,4 @@
-# docker compose up -d   →   http://localhost:8080
+# docker compose up -d   →   http://localhost:8080 öffnen und dein Konto anlegen
 services:
   syn:
     build:
@@ -10,8 +10,9 @@ services:
     ports:
       - "8080:8080"
     environment:
-      SYN_ADMIN_USER: ${SYN_ADMIN_USER:-admin}
-      SYN_ADMIN_PASSWORD: ${SYN_ADMIN_PASSWORD:?Bitte SYN_ADMIN_PASSWORD setzen (mind. 8 Zeichen)}
+      # Ohne diese beiden legst du dein Konto beim ersten Aufruf im Browser an.
+      # SYN_ADMIN_USER: admin
+      # SYN_ADMIN_PASSWORD: mindestens-8-zeichen
       # SYN_DISABLE_IMPORTERS: "instagram,discord"
       # SYN_SESSION_HOURS: "24"
     volumes:
