@@ -78,7 +78,8 @@ def card_for(ctx, row) -> str:
         host = "https://" + host
     name = (row["name"] or row["description"] or "Ohne Namen") + (" ?" if row["name_uncertain"] and row["name"] else "")
     return vcard.build(row["id"], name, phones, emails, bday["value"] if bday else None, photo, mime,
-                       url=f"{host}/#/p/{row['id']}" if host else None, rev=row["updated_at"])
+                       url=f"{host}/#/p/{row['id']}" if host else None, rev=row["updated_at"],
+                       n=(row.get("last_name"), row.get("first_name"), row.get("middle_names")) if row.get("name") else None)
 
 
 def etag(card: str) -> str:

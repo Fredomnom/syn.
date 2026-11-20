@@ -13,11 +13,11 @@ const fieldCount = (e) => Object.values(e.fields || {}).reduce((n, vals) => n + 
 function steps(e, mobile) {
   const name = (e.name || e.description || "diese Person").split(" ")[0];
   return [
-    S.settings.use_levels ? { sel: ".guide-ring", title: `Wie nah ist dir ${name}?`, text: mobile ? "Tipp auf „Ring“ und wähl einen Ring von 1 (Engste) bis 4 (Weit)." : "Zieh den Punkt auf einen Ring – oder klick darunter und wähl einen Ring von 1 (Engste) bis 4 (Weit).", done: () => e.level != null } : null,
-    { sel: '[data-fid="f_via"]', title: "Wie habt ihr euch kennengelernt?", text: "Wähl eine Person, einen Kreis oder eine Quelle wie Instagram oder Discord.", done: () => (e.ihr_zwei?.fields?.f_via || []).length > 0 },
-    mobile ? null : { sel: ".guide-circle", title: `In welchen Kreis gehört ${name}?`, text: "Kreise sind Gruppen wie Familie, Klasse oder Verein. Sie färben das Profilbild und ordnen die Ringe.", done: () => (e.memberships || []).some((m) => m.active) },
-    { sel: ".guide-field", title: "Was weißt du noch?", text: "Trag eine Sache ein – Geburtstag, Wohnort, Telefon oder ein eigenes Feld.", done: (g) => fieldCount(e) > (g.baseline ?? 0) },
-    e.is_self ? null : { sel: ".guide-seen", title: "Habt ihr euch heute gesehen?", text: "Ein Tipp merkt sich das Datum und zählt das Treffen – auch direkt aus der Personenliste.", done: () => (e.fields?.f_seen || []).some((v) => v.value === today()) },
+    S.settings.use_levels ? { sel: ".guide-ring", title: `Wie nah ist dir ${name}?`, do: mobile ? "Tipp auf „Ring“ und wähl einen Ring" : "Zieh den Punkt auf einen Ring", doIcon: mobile ? "rings" : "drag", text: mobile ? "1 ist Engste, 4 ist Weit." : "Je näher an der Mitte, desto enger. Oder klick darunter und wähl 1 (Engste) bis 4 (Weit).", done: () => e.level != null } : null,
+    { sel: '[data-fid="f_via"]', title: "Wie habt ihr euch kennengelernt?", do: "Klick auf „Kennengelernt über“", doIcon: "link", text: "Wähl eine Person, einen Kreis oder eine Quelle wie Instagram oder Discord.", done: () => (e.ihr_zwei?.fields?.f_via || []).length > 0 },
+    mobile ? null : { sel: ".guide-circle", title: `In welchen Kreis gehört ${name}?`, do: "Klick auf „+ Kreis“", doIcon: "circles", text: "Kreise sind Gruppen wie Familie, Klasse oder Verein. Sie färben das Profilbild und ordnen die Ringe.", done: () => (e.memberships || []).some((m) => m.active) },
+    { sel: ".guide-field", title: "Was weißt du noch?", do: mobile ? "Tipp auf „Feld hinzufügen“" : "Klick auf „+ Feld“", doIcon: "plus", text: "Trag eine Sache ein – Geburtstag, Wohnort, Telefon oder ein eigenes Feld.", done: (g) => fieldCount(e) > (g.baseline ?? 0) },
+    e.is_self ? null : { sel: ".guide-seen", title: "Habt ihr euch heute gesehen?", do: "Tipp auf „Heute gesehen“", doIcon: "eye", text: "Ein Tipp merkt sich das Datum und zählt das Treffen – auch direkt aus der Personenliste.", done: () => (e.fields?.f_seen || []).some((v) => v.value === today()) },
   ].filter(Boolean);
 }
 
@@ -46,7 +46,7 @@ function show(g, list) {
   const spot = h("div.guide-spot");
   const card = h("div.guide-card",
     h("div.guide-step", `${g.step + 1} von ${list.length}`, h("span.guide-dots", list.map((_, i) => h("span" + (i === g.step ? ".on" : i < g.step ? ".done" : ""))))),
-    h("h3", st.title), h("p", st.text),
+    h("h3", st.title), st.do ? h("div.guide-do", icon(st.doIcon || "right"), st.do) : null, h("p", st.text),
     h("div.row", h("button.btn.sm.ghost", { on: { click: () => { save(null); clearOverlay(); } } }, "Guide beenden"), h("span.grow"),
       h("button.btn.sm", { on: { click: () => { g.step++; save(g); show(g, list); } } }, "Überspringen")));
   document.body.append(spot, card);

@@ -152,13 +152,16 @@ def fold_line(line: str) -> str:
 
 
 def build(uid: str, name: str, phones, emails, birthday=None, photo: bytes | None = None, photo_mime="image/jpeg",
-          url=None, rev=None, nickname=None, org=None, title=None) -> str:
-    """phones/emails: [(Wert, Label, Hauptwert?)]"""
+          url=None, rev=None, nickname=None, org=None, title=None, n=None) -> str:
+    """phones/emails: [(Wert, Label, Hauptwert?)]; n: (Nachname, Vorname, weitere Vornamen)"""
     lines = ["BEGIN:VCARD", "VERSION:3.0", f"UID:{uid}", f"FN:{escape(name)}"]
-    parts = name.split()
-    last = parts[-1] if len(parts) > 1 else ""
-    given = " ".join(parts[:-1]) if len(parts) > 1 else name
-    lines.append(f"N:{escape(last)};{escape(given)};;;")
+    if n and (n[0] or n[1]):
+        lines.append(f"N:{escape(n[0] or '')};{escape(n[1] or '')};{escape(n[2] or '')};;")
+    else:
+        parts = name.split()
+        last = parts[-1] if len(parts) > 1 else ""
+        given = " ".join(parts[:-1]) if len(parts) > 1 else name
+        lines.append(f"N:{escape(last)};{escape(given)};;;")
     if nickname:
         lines.append(f"NICKNAME:{escape(nickname)}")
     if org:

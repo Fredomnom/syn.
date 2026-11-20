@@ -3,6 +3,7 @@ import { S, h, icon, api, GET, POST, PUT, PATCH, DEL, clear, invalidate, toast, 
   loadBase, circleChip, avatar, fmtTs, rel, RING, download, rebuild, isMobile, themePref, setTheme } from "./core.js";
 import { TYPE_NAMES, serviceIcon, GROUPS, groupOf, MAPS } from "./fields.js";
 import { hueInput, hueOf } from "./color.js";
+import { importStarted } from "./importstatus.js";
 import { ACTIONS, binding, pretty, saveBinding, recordCombo, keys } from "./shortcuts.js";
 
 // Navigation: gruppiert, mit Symbol und kurzer Erklärung je Seite
@@ -307,12 +308,16 @@ function importerCard(imp, reload) {
   };
   const run = async (btn) => {
     if (!(await save(true))) return;
-    btn.disabled = true; btn.textContent = "Läuft …";
     let fd;
     if (files?.files.length) { fd = new FormData(); for (const f of files.files) fd.append("files", f); }
-    try { const r = await api("POST", `/importers/${imp.id}/run`, fd); toast(r.status, { err: r.status.includes("Fehler") }); logBox.textContent = r.log; logBox.classList.remove("hidden"); invalidate(); }
-    finally { btn.disabled = false; btn.textContent = "Jetzt importieren"; }
+    const st = importStarted(imp);
+    btn.disabled = true;
+    api("POST", `/importers/${imp.id}/run`, fd, { quiet: true })
+      .then((r) => { st.done(r.status, r.log); logBox.textContent = r.log; })
+      .catch((e) => st.fail(e.message))
+      .finally(() => { btn.disabled = false; });
   };
+
   return h("div.card", h("div.card-h", h("div.row", h("span.svc-tile", serviceIcon(imp.service || imp.id, 20)), h("div", h("h3", imp.name), h("div.small.t2", imp.way))),
     h("div.row", h("span.tag" + (imp.unofficial ? "" : ".yellow"), "offiziell: " + imp.official), h("label.check", h("input", { type: "checkbox", checked: imp.enabled, on: { change: async (e) => { if (!(await save(e.target.checked))) e.target.checked = !e.target.checked; else reload(); } } }), "an"))),
     h("div.card-b.col",
@@ -410,6 +415,8 @@ async function appearance(body) {
   body.append(
     panel("Darstellung",
       srow("Farbschema", "Gilt für dieses Gerät.", segc([["system", "Wie das System"], ["light", "Hell"], ["dark", "Dunkel"]], themePref(), (k) => setTheme(k)))),
+    panel("Namen",
+      srow("Reihenfolge", "Wie Namen in Listen, Tabelle und Suche erscheinen.", segc([["first", "Vorname Nachname"], ["last", "Nachname, Vorname"]], S.settings.name_order || "first", async (k) => { await saveSettings({ name_order: k }); S.rows = null; reloadTab(body, appearance); }))),
     panel("Karten",
       srow("Adressen öffnen mit", "Ein Klick auf eine Adresse öffnet die Karte.", segc(MAPS, S.settings.map_provider || "osm", async (k) => { await saveSettings({ map_provider: k }); reloadTab(body, appearance); }))));
 }

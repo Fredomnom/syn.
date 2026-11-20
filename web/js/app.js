@@ -7,6 +7,7 @@ import { onGlobal, keys } from "./shortcuts.js";
 import { S, h, api, GET, POST, clear, logo, loadBase, isMobile, flushQueue, toast, icon, rows } from "./core.js";
 import { serviceIcon } from "./fields.js";
 import { startGuide } from "./guide.js";
+import { importStarted } from "./importstatus.js";
 
 export const route = { parts: [], query: {} };
 let mode = null;
@@ -155,7 +156,9 @@ async function renderSetup(app) {
       try {
         await api("PUT", "/importers/" + imp.id, { enabled: true, config: cfg, risk_ack: !!ack, schedule: imp.accepts_files ? { every: "never" } : { every: "daily", time: "04:00" } });
         let fd; if (file?.files.length) { fd = new FormData(); for (const f of file.files) fd.append("files", f); }
-        const r = await api("POST", `/importers/${imp.id}/run`, fd);
+        const stw = importStarted(imp);
+        const r = await api("POST", `/importers/${imp.id}/run`, fd, { quiet: true }).catch((e) => { stw.fail(e.message); throw e; });
+        stw.done(r.status, r.log);
         const m = /(\d+) neu/.exec(r.status);
         if (r.status.startsWith("Fehler") || r.status.includes(": Fehler")) { clear(status, h("span", { style: { color: "var(--danger)" } }, r.status)); go.disabled = false; return; }
         imported[imp.id] = m ? +m[1] : 0; openImp = null; draw(true);

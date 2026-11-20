@@ -1017,3 +1017,37 @@ code { font: 400 12.5px var(--f-mono); }
 /* Guide liegt über der Seite, aber unter Menüs, Popovers und Dialogen */
 .guide-spot { z-index: 34; } .guide-card { z-index: 35; }
 .guide-spot.full { box-shadow: none; background: rgba(15,17,20,.55); }
+/* Trennlinien zwischen Feldzeilen: gerade, unabhängig von der Rundung der Zeile */
+.fr { position: relative; }
+.fr + .fr, .fr:hover + .fr { border-top: 0; }
+.fr + .fr::before { content: ""; position: absolute; left: 8px; right: 8px; top: 0; height: 1px; background: var(--line); }
+.fr:hover::before, .fr:hover + .fr::before { opacity: 0; }
+/* Ring-Menü breit genug für die großen Knöpfe */
+.ring-pop { width: 320px; padding: 6px; }
+.ring-pop .ring-opts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.ring-pop .ring-opts .btn { flex-direction: column; height: 58px; padding: 0; gap: 2px; }
+/* Guide: die Handlung steht hervorgehoben oben */
+.guide-do { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: var(--yellow-light); border: 1px solid var(--yellow-line); font-weight: 600; font-size: 14.5px; color: var(--ink); }
+.guide-do svg.i { flex: none; }
+.pd-names { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.pd-names > .f.hidden + .btn, .pd-names > .btn { grid-column: 1 / -1; }
+.pd-names > label.f:not(.hidden):nth-child(3) { grid-column: 1 / -1; }
+@media (max-width: 760px) { .pd-names { grid-template-columns: 1fr; } }
+/* Import-Statusfenster */
+.imp-dock { position: fixed; right: 18px; bottom: 18px; z-index: 70; display: flex; flex-direction: column; gap: 8px; width: min(320px, calc(100vw - 24px)); }
+.imp-toast { padding: 12px 12px 10px; border-radius: 16px; background: color-mix(in srgb, var(--white) 88%, transparent); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
+  border: 1px solid var(--line-strong); display: flex; flex-direction: column; gap: 8px; animation: syn-toast .25s cubic-bezier(.2,.8,.2,1) both; }
+.imp-toast.leaving { animation: syn-fade-out .2s ease both; }
+.imp-tl { display: flex; align-items: center; gap: 10px; }
+.imp-tl .grow { display: flex; flex-direction: column; min-width: 0; }
+.imp-text { font-size: 12.5px; color: var(--text2); }
+.imp-tlogo { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 10px; background: var(--bg); flex: none; }
+.imp-bar { height: 4px; border-radius: 4px; background: var(--line); overflow: hidden; }
+.imp-bar span { display: block; height: 100%; width: 35%; border-radius: 4px; background: var(--yellow); animation: syn-busy 1.1s cubic-bezier(.4,0,.2,1) infinite; }
+.imp-toast.ok .imp-bar span { width: 100%; animation: none; background: #22A55A; }
+.imp-toast.err .imp-bar span { width: 100%; animation: none; background: var(--danger); }
+.imp-toast.err .imp-text { color: var(--danger); }
+.imp-actions { display: flex; gap: 6px; }
+.imp-actions:empty { display: none; }
+.imp-log { max-height: 160px; margin: 0; font-size: 11px; }
+@media (max-width: 760px) { .imp-dock { right: 12px; bottom: 90px; } }

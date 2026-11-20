@@ -289,8 +289,9 @@ export function circleChip(cid, { star = false, onRemove = null, role = null } =
 export function nameEl(row) {
   const n = row.name || row.description || "Ohne Namen";
   if (!row.name) return h("span", n, " ", h("span.qmark", "ohne Namen"));
-  if (row.name_uncertain) return h("span.unsure-val", n);
-  return h("span", n);
+  const shown = row.display || n;
+  if (row.name_uncertain) return h("span.unsure-val", shown);
+  return h("span", shown);
 }
 export function ringMini(level, size = 22) {
   const svg = h("svg", { viewBox: "0 0 24 24", width: size, height: size, class: "ring-mini" });

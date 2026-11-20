@@ -232,9 +232,9 @@ def entity_full(ctx, eid) -> dict:
                      "WHERE l.entity_id=? ORDER BY n.day DESC LIMIT 50", eid)
     return {
         **{k: e[k] for k in ("id", "kind", "name", "description", "avatar", "main_circle_id", "created_at",
-                             "updated_at", "valid_from", "valid_to")},
+                             "updated_at", "valid_from", "valid_to", "first_name", "middle_names", "last_name")},
         "is_self": bool(e["is_self"]), "name_uncertain": bool(e["name_uncertain"]), "on_phone": bool(e["on_phone"]),
-        "aliases": e["aliases"], "display": display_name(e),
+        "aliases": e["aliases"], "display": model.ordered_name(e, ctx.settings.get("name_order", "first")),
         "fields": {k: v for k, v in vals.items() if k in defs},
         "ihr_zwei": ({"id": sb["id"], "kind_id": sb["kind_id"], "role_a": sb["role_a"], "role_b": sb["role_b"], "a_id": sb["a_id"],
                       "fields": bvals} if sb else None),

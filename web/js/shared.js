@@ -25,7 +25,15 @@ export async function editPerson(e) {
     h("div.row", h("button.btn.sm", { type: "button", on: { click: () => file.click() } }, icon("upload"), avatarUrl ? "Ändern" : "Bild wählen"),
       avatarUrl ? h("button.btn.sm.ghost", { type: "button", on: { click: () => { avatarUrl = null; drawPhoto(); drawHero(); } } }, "Entfernen") : null));
   drawHero();
-  const name = h("input.input.pd-name", { value: e.name || "", placeholder: e.is_self ? "Dein Name" : "Name" });
+  const first = h("input.input.pd-name", { value: e.first_name || (!e.last_name ? e.name || "" : ""), placeholder: "Vorname" });
+  const middle = h("input.input", { value: e.middle_names || "", placeholder: "Weitere Vornamen" });
+  const last = h("input.input.pd-name", { value: e.last_name || "", placeholder: "Nachname" });
+  const middleRow = h("label.f" + (e.middle_names ? "" : ".hidden"), "Weitere Vornamen", middle);
+  const showMiddle = h("button.btn.sm.ghost" + (e.middle_names ? ".hidden" : ""), { type: "button", style: { alignSelf: "flex-start" }, on: { click: () => { middleRow.classList.remove("hidden"); showMiddle.classList.add("hidden"); middle.focus(); } } }, icon("plus"), "Weitere Vornamen");
+  const lastFirst = S.settings.name_order === "last";
+  const nameBlock = h("div.pd-names.full",
+    lastFirst ? [h("label.f", "Nachname", last), h("label.f", "Vorname", first)] : [h("label.f", "Vorname", first), h("label.f", "Nachname", last)],
+    middleRow, showMiddle);
   const unsure = switchInput(e.name_uncertain, "Name unsicher", "Wird gestrichelt mit „?“ angezeigt");
   const desc = h("input.input", { value: e.description || "", placeholder: "z.B. Typ aus dem Fitnessstudio" });
   const aliases = tagInput(e.aliases || [], "Alias eingeben, Enter");
@@ -34,7 +42,7 @@ export async function editPerson(e) {
   const vf = dateInput(e.valid_from || "", { placeholder: "leer = Erfasst-Datum" });
   const body = h("div.pd", h("div.pd-hero", photo, heroText, file),
     h("div.pd-grid",
-      h("label.f.full", "Name", name),
+      nameBlock,
       e.is_self ? null : h("div.full", unsure.el),
       e.is_self ? null : h("label.f", "Beschreibung", desc),
       e.is_self ? null : h("div.f", "Art", kind.el),
@@ -47,7 +55,7 @@ export async function editPerson(e) {
       await DEL("/entities/" + e.id); invalidate(); location.hash = "#/"; return "deleted"; } },
     { label: "Abbrechen", value: null },
     { label: "Speichern", primary: true, action: async () => {
-      const body = { name: name.value, aliases: aliases.get(), avatar: avatarUrl };
+      const body = { first_name: first.value, middle_names: middle.value, last_name: last.value, aliases: aliases.get(), avatar: avatarUrl };
       if (!e.is_self) Object.assign(body, { name_uncertain: unsure.get(), description: desc.value, kind: kind.get(), on_phone: phone.get(), valid_from: vf.value || null });
       try { return await PATCH("/entities/" + e.id, body); } catch (_) { return false; }
     } }].filter(Boolean));
@@ -57,16 +65,31 @@ export async function editPerson(e) {
 
 // Feld hinzufügen: vorhandenes Feld wählen oder neues Feld anlegen
 export async function addField(e, { onDone } = {}) {
-  const used = new Set(Object.keys(e.fields || {}).filter((k) => (e.fields[k] || []).length));
-  const free = fieldsFor(e.kind).filter((f) => !used.has(f.id));
-  const list = h("div.menu", free.map((f) => h("button", { on: { click: async () => {
-    document.querySelector(".backdrop:not(.leaving)")?._close?.(null);
-    const r = await editField(f, [], `/entities/${e.id}/fields/${f.id}`); if (r) onDone?.(r);
-  } } }, h("span.grow", f.name), h("span.tag", TYPE_NAMES[f.type]))));
+  const has = (f) => (e.fields?.[f.id] || []).some((v) => !v.deprecated);
+  const all = fieldsFor(e.kind);
+  const close = () => document.querySelector(".backdrop:not(.leaving)")?._close?.(null);
+  const open = async (f, addNew) => { close(); const r = await editField(f, e.fields?.[f.id] || [], `/entities/${e.id}/fields/${f.id}`, { addNew }); if (r) onDone?.(r); };
+  const item = (f, hint) => h("button", { on: { click: () => open(f, has(f)) } }, h("span.grow", f.name), hint ? h("span.t3.small", hint) : null, h("span.tag", TYPE_NAMES[f.type]));
+  const fresh = all.filter((f) => !has(f));
+  const more = all.filter((f) => has(f) && f.multi);
+  const single = all.filter((f) => has(f) && !f.multi);
+  const q = h("input.input", { placeholder: "Feld suchen …" });
+  const list = h("div.menu", { style: { maxHeight: "46vh", overflow: "auto" } });
+  const draw = () => {
+    const t = q.value.trim().toLowerCase();
+    const m = (f) => !t || f.name.toLowerCase().includes(t);
+    clear(list,
+      fresh.filter(m).length ? [h("div.lbl", "Neu"), fresh.filter(m).map((f) => item(f))] : null,
+      more.filter(m).length ? [h("div.lbl", "Weiteren Wert ergänzen"), more.filter(m).map((f) => item(f, `${(e.fields[f.id] || []).filter((v) => !v.deprecated).length} vorhanden`))] : null,
+      single.filter(m).length ? [h("div.lbl", "Schon ausgefüllt – bearbeiten"), single.filter(m).map((f) => item(f, "bearbeiten"))] : null);
+  };
+  q.addEventListener("input", draw);
+  draw();
+  const list0 = h("div.col", { style: { gap: "8px" } }, q, list);
   const nn = h("input.input", { placeholder: "Neues Feld, z.B. Lieblingsband" });
   const nt = h("select.input", Object.entries(TYPE_NAMES).map(([k, v]) => h("option", { value: k }, v)));
   const multi = h("input", { type: "checkbox" });
-  await modal("Feld hinzufügen", h("div.col", list.children.length ? list : h("p.t3", "Alle Felder sind schon belegt."), h("div.sep"),
+  await modal("Feld hinzufügen", h("div.col", list0, h("div.sep"),
     h("h3", "Eigenes Feld anlegen"), h("div.row", nn, nt), h("label.check", multi, "mehrere Werte mit Label"),
     h("button.btn", { style: { alignSelf: "flex-start" }, on: { click: async () => {
       if (!nn.value.trim()) return;
@@ -80,9 +103,9 @@ export async function addField(e, { onDone } = {}) {
 
 export function ringPopup(anchor, current, onPick) {
   const names = RING();
-  const box = h("div", { style: { width: "250px", padding: "6px" } },
+  const box = h("div.ring-pop",
     h("div.small.t2", { style: { marginBottom: "8px" } }, "Ring"),
-    h("div.row", { style: { gap: "6px" } }, [1, 2, 3, 4].map((n) => h("button.btn" + (current === n ? ".primary" : ""), { style: { flexDirection: "column", height: "52px", flex: 1, gap: "2px" },
+    h("div.ring-opts", [1, 2, 3, 4].map((n) => h("button.btn" + (current === n ? ".primary" : ""), {
       on: { click: () => { closePop(); onPick(n); } } }, h("b", n), h("span.tiny", names[n])))),
     h("button.btn.sm.ghost", { style: { marginTop: "6px", width: "100%" }, on: { click: () => { closePop(); onPick(null); } } }, "Ohne Ring"),
     h("div.tiny.t3", { style: { marginTop: "6px" } }, "Tasten 1–4 im Diagramm, oder ziehen."));

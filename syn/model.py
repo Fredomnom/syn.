@@ -340,6 +340,24 @@ def level_of(uid, eid):
     return p["value"] if p else None
 
 
+def split_name(name):
+    parts = (name or "").split()
+    if not parts:
+        return None, None, None
+    return parts[0], (" ".join(parts[1:-1]) or None), (parts[-1] if len(parts) > 1 else None)
+
+
+def compose_name(first, middle, last):
+    return " ".join(x.strip() for x in (first, middle, last) if x and x.strip()) or None
+
+
+def ordered_name(e, order="first"):
+    """Anzeige je nach Einstellung: „Vorname Nachname“ oder „Nachname, Vorname“."""
+    if order == "last" and e.get("last_name") and e.get("first_name"):
+        return f"{e['last_name']}, {compose_name(e['first_name'], e.get('middle_names'), None)}"
+    return e.get("name") or e.get("description") or "Ohne Namen"
+
+
 def create_entity(uid, name=None, kind="person", description=None, name_uncertain=False, source="manual",
                   created_at=None) -> str:
     if kind not in ("person", "pet"):
@@ -348,7 +366,9 @@ def create_entity(uid, name=None, kind="person", description=None, name_uncertai
         raise Bad("Name oder Beschreibung fehlt")
     eid = new_id("p")
     t = created_at or now()
+    first, middle, last = split_name(name)
     db.insert("entities", {"id": eid, "user_id": uid, "kind": kind, "name": (name or "").strip() or None,
+                           "first_name": first, "middle_names": middle, "last_name": last,
                            "name_uncertain": int(bool(name_uncertain)),
                            "description": (description or "").strip() or None, "aliases": "[]", "created_at": t,
                            "updated_at": t})
@@ -357,11 +377,21 @@ def create_entity(uid, name=None, kind="person", description=None, name_uncertai
 
 
 ENTITY_PROPS = ("name", "name_uncertain", "description", "aliases", "avatar", "main_circle_id", "on_phone", "kind",
-                "valid_from", "valid_to")
+                "valid_from", "valid_to", "first_name", "middle_names", "last_name")
+NAME_PARTS = ("first_name", "middle_names", "last_name")
 
 
 def patch_entity(uid, eid, changes: dict, source="manual"):
     e = get_entity(uid, eid)
+    changes = dict(changes)
+    # Namensteile und Gesamtname immer gemeinsam pflegen
+    if any(k in changes for k in NAME_PARTS):
+        parts = {k: ((changes[k] if k in changes else e[k]) or "").strip() or None for k in NAME_PARTS}
+        changes.update(parts)
+        changes["name"] = compose_name(parts["first_name"], parts["middle_names"], parts["last_name"])
+    elif "name" in changes:
+        f, m, l = split_name(changes["name"])
+        changes.update({"first_name": f, "middle_names": m, "last_name": l})
     upd = {}
     for k in ENTITY_PROPS:
         if k not in changes:
@@ -376,7 +406,7 @@ def patch_entity(uid, eid, changes: dict, source="manual"):
             v = int(bool(v))
         if k == "aliases":
             v = [a.strip() for a in (v or []) if a and a.strip()]
-        if k in ("name", "description"):
+        if k in ("name", "description", *NAME_PARTS):
             v = (v or "").strip() or None
         if k in ("valid_from", "valid_to") and v:
             v = parse_date(v)
@@ -587,7 +617,8 @@ def load_rows(ctx, at: str | None = None, ids=None) -> list[dict]:
         rows.append({
             "id": e["id"], "kind": e["kind"], "is_self": bool(e["is_self"]), "name": e["name"],
             "name_uncertain": bool(e["name_uncertain"]), "description": e["description"],
-            "display": display_name(e), "aliases": db.jl(e["aliases"], []), "avatar": e["avatar"],
+            "display": ordered_name(e, ctx.settings.get("name_order", "first")), "aliases": db.jl(e["aliases"], []), "avatar": e["avatar"],
+            "first_name": e["first_name"], "middle_names": e["middle_names"], "last_name": e["last_name"],
             "main_circle_id": main, "circles": circle_ids, "circles_all": sorted(eff),
             "memberships": [{"id": m["id"], "circle_id": m["circle_id"], "role": m["role"],
                              "valid_from": m["valid_from"], "approx_from": not m["valid_from"],

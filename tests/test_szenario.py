@@ -284,3 +284,15 @@ def test_kennengelernt_ueber_quelle(client):
     c.post("/api/v1/importers/whatsapp/run", files={"files": ("WhatsApp Chat mit Kletterteam.txt", chat.encode(), "text/plain")})
     assert c.get(f"/api/v1/entities/{anna['id']}").json()["ihr_zwei"]["fields"]["f_via"][0]["value"]["id"] == "instagram"
     assert c.post("/api/v1/entities", json={"name": "X", "fields": {"f_via": {"value": {"type": "service", "id": "gibtsnicht"}}}}).status_code == 400
+
+
+def test_namensteile_und_reihenfolge(client):
+    c = client
+    e = c.post("/api/v1/entities", json={"name": "Anna Maria Schmidt"}).json()
+    assert (e["first_name"], e["middle_names"], e["last_name"]) == ("Anna", "Maria", "Schmidt")
+    e = c.patch(f"/api/v1/entities/{e['id']}", json={"first_name": "Annika", "middle_names": "", "last_name": "Schmidt-Berg"}).json()
+    assert e["name"] == "Annika Schmidt-Berg"
+    c.patch("/api/v1/me/settings", json={"name_order": "last"})
+    row = next(r for r in c.get("/api/v1/entities").json() if r["id"] == e["id"])
+    assert row["display"] == "Schmidt-Berg, Annika"
+    assert c.get(f"/api/v1/entities/{e['id']}").json()["display"] == "Schmidt-Berg, Annika"

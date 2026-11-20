@@ -148,8 +148,27 @@ def init(path=None):
     close()
     c = conn()
     c.executescript(SCHEMA)
+    migrate(c)
     install_undo_triggers(c)
     c.commit()
+
+
+def migrate(c):
+    """Kleine Schema-Ergänzungen für bestehende Datenbanken."""
+    cols = {r[1] for r in c.execute("PRAGMA table_info(entities)")}
+    added = False
+    for col in ("first_name", "middle_names", "last_name"):
+        if col not in cols:
+            c.execute(f"ALTER TABLE entities ADD COLUMN {col} TEXT")
+            added = True
+    if added:
+        # bestehende Namen einmalig aufteilen: erstes Wort Vorname, letztes Nachname, dazwischen weitere Vornamen
+        for eid, name in c.execute("SELECT id, name FROM entities WHERE name IS NOT NULL").fetchall():
+            parts = name.split()
+            first = parts[0] if parts else None
+            last = parts[-1] if len(parts) > 1 else None
+            middle = " ".join(parts[1:-1]) or None
+            c.execute("UPDATE entities SET first_name=?, middle_names=?, last_name=? WHERE id=?", (first, middle, last, eid))
 
 
 def install_undo_triggers(c):

@@ -151,10 +151,11 @@ export function inputFor(def, value, { onEnter } = {}) {
 
 // ---------------------------------------------------------------- Bearbeiten-Dialog für ein Feld
 // path: z.B. /entities/p_x/fields/f_phone  (Bund-Felder einer Person landen automatisch bei „Ihr zwei“)
-export async function editField(def, values, path, { title } = {}) {
+export async function editField(def, values, path, { title, addNew = false } = {}) {
   const list = h("div.col.fv-list");
   const items = (values || []).map((v) => ({ ...v }));
   if (!items.length) items.push({ value: null, primary: true, label: null });
+  else if (addNew && def.multi) items.push({ value: null, primary: false, label: null, _new: true });
   const labels = def.options?.labels || [];
   const sync = () => items.forEach((it) => { if (it._get) it.value = it._get(); });
   const pill = (on, ic, label, onClick, title) => h("button.pill" + (on ? ".on" : ""), { type: "button", title, on: { click: onClick } }, icon(ic, "xs"), label);
@@ -185,14 +186,14 @@ export async function editField(def, values, path, { title } = {}) {
     def.multi ? h("button.fv-add", { type: "button", on: { click: () => { sync(); items.push({ value: null, primary: !items.length }); render(); } } }, icon("plus"), "Weiteren Wert hinzufügen") : null);
   };
   render();
-  setTimeout(() => list.querySelector(".fv-body input, .fv-body textarea, .fv-body select")?.focus(), 80);
+  setTimeout(() => { const cards = list.querySelectorAll(".fv"); const c = addNew ? cards[cards.length - 1] : cards[0]; c?.scrollIntoView({ block: "nearest" }); c?.querySelector(".fv-body input, .fv-body textarea, .fv-body select")?.focus(); }, 80);
   const note = h("p.small.t3", def.multi ? "Alte Werte lieber als „veraltet“ markieren statt löschen: Importe und die Erkennung von Doppelten finden die Person weiter darüber." : "Unsichere Werte erscheinen gestrichelt mit „?“.");
   const titleEl = h("span.row", { style: { gap: "10px" } }, title || def.name, h("span.tag", TYPE_NAMES[def.type]), h("span.tag.t3", def.id));
   const res = await modal(titleEl, h("div.col", list, note),
     [{ label: "Abbrechen", value: null }, { label: "Speichern", primary: true, action: async () => {
       sync();
       const values = items.filter((it) => it.value !== null && it.value !== "" && !(Array.isArray(it.value) && !it.value.length))
-        .map(({ _get, _range, ...rest }) => rest);
+        .map(({ _get, _range, _new, ...rest }) => rest);
       try { return await PUT(path, { values }); } catch (_) { return false; }
     } }]);
   if (res) invalidate();

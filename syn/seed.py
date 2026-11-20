@@ -41,7 +41,8 @@ DEFAULT_SETTINGS = {
     "services": SERVICES,
     "routine_time": "08:00",
     "shortcuts": {},
-    "map_provider": "osm",  # osm | google | apple – wohin Adressen verlinken  # Aktion -> Tastenkombination, überschreibt die Standardbelegung
+    "map_provider": "osm",
+    "name_order": "first",  # first: „Vorname Nachname“ · last: „Nachname, Vorname“  # osm | google | apple – wohin Adressen verlinken  # Aktion -> Tastenkombination, überschreibt die Standardbelegung
 }
 
 CIRCLE_KINDS = [
@@ -55,6 +56,28 @@ LOSE_COLORS = ("#ECEEF2", "#4B5563")
 # Weitere Paare nach demselben Muster (helle Fläche, dunkle Schrift aus derselben Familie)
 EXTRA_PAIRS = [("#FCE7F3", "#9D174D"), ("#E0F2FE", "#075985"), ("#ECFCCB", "#3F6212"), ("#FFEDD5", "#9A3412"),
                ("#F3E8FF", "#6B21A8"), ("#E0E7FF", "#3730A3"), ("#FFE4E6", "#9F1239"), ("#CCFBF1", "#115E59")]
+
+# Standardkreise für den Start – frei änder- und löschbar
+DEFAULT_CIRCLES = [("Familie", "familie"), ("Freunde", "freundschaft"), ("Arbeit", "arbeit"), ("Schule & Uni", "schule"),
+                   ("Sport & Hobby", "hobby")]
+
+
+def seed_circles(uid):
+    t = now()
+    for name, kind in DEFAULT_CIRCLES:
+        db.insert("circles", {"id": new_id("c"), "user_id": uid, "name": name, "kind_id": kind, "parent_id": None,
+                              "description": None, "created_at": t, "updated_at": t})
+
+
+def backfill_circles():
+    """Einmalig: Konten ohne einen einzigen Kreis bekommen die Standardkreise."""
+    if db.val("SELECT value FROM instance WHERE key='default_circles_v1'"):
+        return
+    for u in db.q("SELECT id FROM users"):
+        if not db.val("SELECT 1 FROM circles WHERE user_id=?", u["id"]):
+            seed_circles(u["id"])
+    db.ex("INSERT OR REPLACE INTO instance(key,value) VALUES('default_circles_v1', ?)", now())
+
 
 BUND_KINDS = [
     ("freundschaft", "Freundschaft", "Freund", "Freund"),
@@ -114,6 +137,7 @@ def seed_user(uid: str, display_name: str = "Ich"):
     for i, (fid, scope, name, typ, opts, multi) in enumerate(FIELDS):
         db.insert("field_defs", {"user_id": uid, "id": fid, "scope": scope, "name": name, "type": typ,
                                  "options": db.jd(opts), "multi": multi, "position": i, "is_base": 1})
+    seed_circles(uid)
     # dein eigener Eintrag
     db.insert("entities", {"id": new_id("p"), "user_id": uid, "kind": "person", "is_self": 1,
                            "name": display_name or "Ich", "created_at": t, "updated_at": t})

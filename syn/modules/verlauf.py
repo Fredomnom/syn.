@@ -34,7 +34,8 @@ def entity_history(eid: str, limit: int = 300, ctx: Ctx = Depends(current)):
     return out
 
 
-ATTR_LABELS = {"created": "Erfasst", "name": "Name", "name_uncertain": "Name unsicher", "description": "Beschreibung",
+ATTR_LABELS = {"created": "Erfasst", "name": "Name", "first_name": "Vorname", "middle_names": "Weitere Vornamen",
+               "last_name": "Nachname", "name_uncertain": "Name unsicher", "description": "Beschreibung",
                "aliases": "Aliase", "avatar": "Profilbild", "main_circle_id": "Hauptkreis", "on_phone": "Aufs Handy",
                "kind": "Art", "membership": "Kreis", "bund": "Bund", "merged": "Zusammengeführt",
                "kind_id": "Bund-Art", "valid_from": "Gültig von", "valid_to": "Gültig bis", "deleted": "Gelöscht"}
