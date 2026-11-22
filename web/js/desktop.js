@@ -550,7 +550,7 @@ async function todayPage(main) {
   const mode = LS("calmode", "list");
   const calBox = h("div.col", { style: { gap: "12px" } });
   const draw = () => (LS("calmode", "list") === "month" ? C.monthView(calBox) : C.upcoming(calBox));
-  const seg = h("div.seg", [["list", "Demnächst", "list"], ["month", "Monat", "calendar"]].map(([k, l, ic]) =>
+  const seg = h("div.seg", [["list", "Zeitleiste", "list"], ["month", "Monat", "calendar"]].map(([k, l, ic]) =>
     h("button" + (mode === k ? ".on" : ""), { type: "button", on: { click: (e) => { SAVE("calmode", k); [...seg.children].forEach((b) => b.classList.toggle("on", b === e.currentTarget)); draw(); } } }, icon(ic), l)));
   page.append(h("div.page-h", h("h1", "Heute"), h("span.t2", new Date().toLocaleDateString(LOCALE(), { weekday: "long", day: "numeric", month: "long" }))),
     h("div.today-grid", h("section.col", { style: { gap: "12px", minWidth: 0 } }, inner),

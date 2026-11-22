@@ -1380,5 +1380,9 @@
 "Dazu ohne Datum (frühere Treffen)": "Plus without date (earlier meetings)",
 "Bitte ein Datum wählen": "Please pick a date",
 "Dieses Datum steht schon drin": "That date is already in the list",
-"Werte aus Importen und Daten, die syn nicht ungefragt übernimmt.": "Values from imports and data that syn doesn't take over without asking."
+"Werte aus Importen und Daten, die syn nicht ungefragt übernimmt.": "Values from imports and data that syn doesn't take over without asking.",
+"Zeitleiste": "Timeline",
+"Früher laden": "Load earlier",
+"Später laden": "Load later",
+"In diesem Zeitraum steht nichts an.": "Nothing in this period."
 }

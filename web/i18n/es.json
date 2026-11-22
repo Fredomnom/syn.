@@ -1380,5 +1380,9 @@
 "Dazu ohne Datum (frühere Treffen)": "Además sin fecha (encuentros anteriores)",
 "Bitte ein Datum wählen": "Elige una fecha",
 "Dieses Datum steht schon drin": "Esa fecha ya está",
-"Werte aus Importen und Daten, die syn nicht ungefragt übernimmt.": "Valores de importaciones y datos que syn no adopta sin preguntar."
+"Werte aus Importen und Daten, die syn nicht ungefragt übernimmt.": "Valores de importaciones y datos que syn no adopta sin preguntar.",
+"Zeitleiste": "Cronología",
+"Früher laden": "Cargar antes",
+"Später laden": "Cargar después",
+"In diesem Zeitraum steht nichts an.": "Nada en este periodo."
 }

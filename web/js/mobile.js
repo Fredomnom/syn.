@@ -414,7 +414,7 @@ export async function todayPage(page, { withUpcoming = true } = {}) {
   if (withUpcoming) {
     const C = await import("./calendar.js");
     const box = h("div.col", { style: { gap: "12px" } });
-    page.append(h("h2.m-sect", "Demnächst"), C.fieldPicker(() => C.upcoming(box)), box);
+    page.append(h("h2.m-sect", "Zeitleiste"), C.fieldPicker(() => C.upcoming(box)), box);
     await C.upcoming(box);
   }
 }

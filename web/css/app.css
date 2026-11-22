@@ -1401,3 +1401,9 @@ syn-personcard.with-banner .pc-head .av { box-shadow: 0 0 0 4px var(--white); }
 .dl-chip button svg.i { width: 13px; height: 13px; }
 .dl-prevrow { display: flex; align-items: center; gap: 10px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 13px; color: var(--text2); }
 .dl-prev { width: 90px; }
+/* Zeitleiste: vergangen etwas zurückgenommen, „Heute“ als Linie */
+.cal-day.past { opacity: .62; }
+.cal-day.past:hover { opacity: 1; }
+.cal-now { display: flex; align-items: center; gap: 10px; color: var(--yellow-line); font: 600 12px var(--f-ui); text-transform: uppercase; letter-spacing: .06em; }
+.cal-now::before, .cal-now::after { content: ""; flex: 1; height: 2px; border-radius: 2px; background: var(--yellow); }
+.cal-more-btn { align-self: center; }

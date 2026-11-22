@@ -57,19 +57,44 @@ export function fieldPicker(onChange) {
   return box;
 }
 
-// ---------------------------------------------------------------- Demnächst (Liste)
-export async function upcoming(box, { days = 30 } = {}) {
-  const t = new Date(), end = new Date(t); end.setDate(t.getDate() + days);
-  const d = await load(iso(t), iso(end));
+// ---------------------------------------------------------------- Zeitleiste (zurück und voraus)
+// Startet zwei Wochen zurück bis 30 Tage voraus; „Früher“/„Später“ laden je einen Monat nach.
+export async function upcoming(box, { back = 14, ahead = 30 } = {}) {
+  const today = iso(new Date());
+  let from = new Date(), to = new Date();
+  from.setDate(from.getDate() - back); to.setDate(to.getDate() + ahead);
   const byDay = new Map();
-  for (const it of d.items) (byDay.get(it.date) || byDay.set(it.date, []).get(it.date)).push(it);
-  if (!byDay.size) return clear(box, h("div.card.pad.empty", `In den nächsten ${days} Tagen steht nichts an.`));
-  clear(box, [...byDay].map(([day, items]) => h("div.cal-day",
-    h("button.cal-day-h", { type: "button", title: "Tag im Rückblick", on: { click: () => dayDialog(day) } },
-      h("b", dayLabel(day)), h("span.t3.small", parse(day).toLocaleDateString(LOCALE(), { day: "numeric", month: "numeric" }))),
-    h("div.list", items.map((it) => h("a.prow", { href: "#/p/" + it.entity.id }, avBadge(it, 36),
-      h("div.grow", h("div.nm", nameEl(it.entity)), h("div.sub", whatText(it))),
-      icon("right")))))));
+  const fetchRange = async (a, b) => { for (const it of (await load(iso(a), iso(b))).items) (byDay.get(it.date) || byDay.set(it.date, []).get(it.date)).push(it); };
+  await fetchRange(from, to);
+  const list = h("div.col.cal-tl");
+  const draw = () => {
+    const days = [...byDay.keys()].sort();
+    const parts = [];
+    let marked = false;
+    for (const day of days) {
+      if (!marked && day >= today) { parts.push(h("div.cal-now", h("span", "Heute"))); marked = true; }
+      const past = day < today;
+      parts.push(h("div.cal-day" + (past ? ".past" : ""),
+        h("button.cal-day-h", { type: "button", title: "Tag im Rückblick", on: { click: () => dayDialog(day) } },
+          h("b", dayLabel(day, today)), h("span.t3.small", parse(day).toLocaleDateString(LOCALE(), { day: "numeric", month: "numeric", year: parse(day).getFullYear() !== new Date().getFullYear() ? "numeric" : undefined }))),
+        h("div.list", byDay.get(day).map((it) => h("a.prow", { href: "#/p/" + it.entity.id }, avBadge(it, 36),
+          h("div.grow", h("div.nm", nameEl(it.entity)), h("div.sub", whatText(it, past))), icon("right"))))));
+    }
+    if (!marked) parts.push(h("div.cal-now", h("span", "Heute")));
+    clear(list, parts.length > 1 ? parts : [parts, h("div.card.pad.empty", "In diesem Zeitraum steht nichts an.")]);
+  };
+  const more = (dir) => h("button.btn.sm.ghost.cal-more-btn", { type: "button", on: { click: async (ev) => {
+    const btn = ev.currentTarget; btn.disabled = true;
+    if (dir < 0) { const a = new Date(from); a.setDate(a.getDate() - 30); const b = new Date(from); b.setDate(b.getDate() - 1); await fetchRange(a, b); from = a; }
+    else { const a = new Date(to); a.setDate(a.getDate() + 1); const b = new Date(to); b.setDate(b.getDate() + 30); await fetchRange(a, b); to = b; }
+    const sc = list.closest(".main") || document.scrollingElement; // Desktop scrollt im Hauptbereich, Handy im Fenster
+    const keep = list.scrollHeight, top = sc.scrollTop;
+    draw(); btn.disabled = false;
+    if (dir < 0) sc.scrollTop = top + (list.scrollHeight - keep); // Ansicht bleibt beim Früher-Laden stehen
+  } } }, icon(dir < 0 ? "up" : "down"), dir < 0 ? "Früher laden" : "Später laden");
+  draw();
+  clear(box, more(-1), list, more(1));
+  requestAnimationFrame(() => box.querySelector(".cal-now")?.scrollIntoView({ block: "center" }));
 }
 
 // ---------------------------------------------------------------- Monat (Desktop)
