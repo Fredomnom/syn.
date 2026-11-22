@@ -319,10 +319,11 @@ export async function net(body, list0) {
   let at = null, data = list0;
   const tbarN = await timeSlider(async (d) => { at = d; data = d ? filterRows(await GET("/entities" + qs({ at: d }))) : list0; layout(); draw(); });
   body.append(h("div.split", h("div.col", { style: { gap: 0 } }, box), side));
-  const W = 1000, H = 700;
-  let nodes = [], links = [], pos = LS("netpos", {});
+  const W = 1000, H = 700, MIN_D = 58;
+  let nodes = [], links = [], pos = LS("netpos", {}), needFit = false;
   const layout = () => {
-    nodes = data.filter((r) => opt.self || !r.is_self);
+    // Standard: nur bearbeitete Kontakte – frisch importierte, noch unbearbeitete blähen das Netz nur auf
+    nodes = data.filter((r) => (opt.self || !r.is_self) && (opt.unedited || r.edited || r.is_self));
     const ids = new Set(nodes.map((n) => n.id));
     links = bunds.filter((b) => ids.has(b.a_id) && ids.has(b.b_id)).map((b) => ({ a: b.a_id, b: b.b_id, kind: b.kind_id, label: b.kind_id ? bundKindName(b.kind_id) : [b.role_a, b.role_b].filter(Boolean).join(" – ") }));
     const P = {};
@@ -333,10 +334,12 @@ export async function net(body, list0) {
       const k = 1 - it / 300 + 0.05;
       for (let i = 0; i < nodes.length; i++) for (let j = i + 1; j < nodes.length; j++) {
         const A = P[nodes[i].id], B = P[nodes[j].id]; let dx = A.x - B.x, dy = A.y - B.y; const d2 = dx * dx + dy * dy || 1;
-        if (d2 > 250000) continue; const d = Math.sqrt(d2); const f = Math.min(30, 9000 / d2) * k; dx /= d; dy /= d;
+        if (d2 > 360000) continue; const d = Math.sqrt(d2); dx /= d; dy /= d;
+        // Abstoßung, dazu harter Mindestabstand, damit sich niemand überdeckt (die Fläche ist unbegrenzt)
+        const f = Math.min(40, 16000 / d2) * k + (d < MIN_D ? (MIN_D - d) / 2 : 0);
         A.x += dx * f; A.y += dy * f; B.x -= dx * f; B.y -= dy * f;
       }
-      for (const l of links) { const A = P[l.a], B = P[l.b]; const dx = B.x - A.x, dy = B.y - A.y; const d = Math.hypot(dx, dy) || 1; const f = (d - 110) * 0.03 * k; A.x += (dx / d) * f; A.y += (dy / d) * f; B.x -= (dx / d) * f; B.y -= (dy / d) * f; }
+      for (const l of links) { const A = P[l.a], B = P[l.b]; const dx = B.x - A.x, dy = B.y - A.y; const d = Math.hypot(dx, dy) || 1; const f = (d - 150) * 0.03 * k; A.x += (dx / d) * f; A.y += (dy / d) * f; B.x -= (dx / d) * f; B.y -= (dy / d) * f; }
       // Mitte jedes Kreises (alle Mitglieder, auch über Unterkreise)
       const cent = {};
       for (const n of nodes) for (const cid of n.circles_all || []) { const c = (cent[cid] ||= { x: 0, y: 0, n: 0 }); c.x += P[n.id].x; c.y += P[n.id].y; c.n++; }
@@ -351,17 +354,15 @@ export async function net(body, list0) {
           fx += (c.x / c.n - p.x) * w; fy += (c.y / c.n - p.y) * w; wsum += w;
         }
         if (wsum) { const s = 0.05 * k / Math.max(1, wsum * 0.6); p.x += fx * s; p.y += fy * s; }
-        p.x += (W / 2 - p.x) * 0.002; p.y += (H / 2 - p.y) * 0.002;
+        p.x += (W / 2 - p.x) * 0.001; p.y += (H / 2 - p.y) * 0.001;
       }
     }
-    if (fresh) {
-      // auf die Fläche einpassen
-      const xs = nodes.map((n) => P[n.id].x), ys = nodes.map((n) => P[n.id].y);
-      const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
-      const sc = Math.min((W - 140) / Math.max(1, x1 - x0), (H - 140) / Math.max(1, y1 - y0), 3);
-      for (const n of nodes) { P[n.id] = { x: W / 2 + (P[n.id].x - (x0 + x1) / 2) * sc, y: H / 2 + (P[n.id].y - (y0 + y1) / 2) * sc }; }
+    // zum Schluss Überlappungen auflösen
+    for (let it = 0; it < 40; it++) for (let i = 0; i < nodes.length; i++) for (let j = i + 1; j < nodes.length; j++) {
+      const A = P[nodes[i].id], B = P[nodes[j].id]; let dx = A.x - B.x, dy = A.y - B.y; const d = Math.hypot(dx, dy) || 0.01;
+      if (d >= MIN_D) continue; const f = (MIN_D - d) / 2; dx /= d; dy /= d; A.x += dx * f; A.y += dy * f; B.x -= dx * f; B.y -= dy * f;
     }
-    for (const n of nodes) { P[n.id].x = Math.max(30, Math.min(W - 30, P[n.id].x)); P[n.id].y = Math.max(30, Math.min(H - 30, P[n.id].y)); }
+    if (fresh) needFit = true; // Kamera zeigt danach alle – die Fläche selbst ist unbegrenzt
     for (const n of nodes) if (!pos[n.id]) pos[n.id] = P[n.id]; else pos[n.id] = P[n.id];
   };
   const hull = (pts) => {
@@ -379,6 +380,8 @@ export async function net(body, list0) {
   let camG = null, zoomLabel = null;
   // Bund-Beschriftungen erst ab 160 % Zoom (vorher wäre es nur Gewimmel)
   const LABEL_ZOOM = 1.6;
+  const labelAt = (A, B) => { let a = Math.atan2(B.y - A.y, B.x - A.x) * 180 / Math.PI; if (a > 90) a -= 180; if (a < -90) a += 180;
+    return `translate(${(A.x + B.x) / 2},${(A.y + B.y) / 2}) rotate(${a})`; };
   const applyCam = () => { camG?.setAttribute("transform", `translate(${cam.x},${cam.y}) scale(${cam.k})`); camG?.classList.toggle("show-blabels", cam.k >= LABEL_ZOOM); if (zoomLabel) zoomLabel.textContent = Math.round(cam.k * 100) + " %"; SAVE("netcam", cam); };
   const zoomAt = (factor, px, py) => {
     const k = Math.min(4, Math.max(0.3, cam.k * factor));
@@ -422,8 +425,8 @@ export async function net(body, list0) {
     for (const n of nodes) gN.append(node(n, pos[n.id].x, pos[n.id].y, 20, { approx: at && n.approx_created }));
     const gB = s("g", { class: "blabels" });
     for (const l of links) if (l.label) {
-      const x = (pos[l.a].x + pos[l.b].x) / 2, y = (pos[l.a].y + pos[l.b].y) / 2, w = l.label.length * 4.6 + 10;
-      gB.append(s("g", { transform: `translate(${x},${y})`, "data-a": l.a, "data-b": l.b }, s("rect", { x: -w / 2, y: -7, width: w, height: 14, rx: 7 }), s("text", { y: 3.2, "text-anchor": "middle" }, l.label)));
+      const w = l.label.length * 4.6 + 10;
+      gB.append(s("g", { transform: labelAt(pos[l.a], pos[l.b]), "data-a": l.a, "data-b": l.b }, s("rect", { x: -w / 2, y: -6.5, width: w, height: 13, rx: 6.5 }), s("text", { y: 2.8, "text-anchor": "middle" }, l.label)));
     }
     camG = s("g", {}, gA, gL, gN, gB); // Beschriftungen über den Personen, sonst verdeckt
     svg.append(camG);
@@ -435,6 +438,7 @@ export async function net(body, list0) {
       h("button.btn.sm.icon", { title: "Hineinzoomen", on: { click: () => zoomAt(1.25, ...cc()) } }, icon("plus")),
       h("button.btn.sm", { title: "Alle Personen zeigen", on: { click: fit } }, "Alles zeigen"));
     clear(box, svg, zoomUi);
+    if (needFit) { needFit = false; fit(); }
     svg.addEventListener("wheel", (e) => {
       e.preventDefault();
       const p = svgPoint(svg, e);
@@ -458,7 +462,7 @@ export async function net(body, list0) {
       const p = worldPoint(svg, e); drag.moved = true; pos[drag.id] = { x: p.x, y: p.y }; drag.g.setAttribute("transform", `translate(${p.x},${p.y})`);
       for (const ln of gL.children) { if (ln.dataset.a === drag.id) { ln.setAttribute("x1", p.x); ln.setAttribute("y1", p.y); } if (ln.dataset.b === drag.id) { ln.setAttribute("x2", p.x); ln.setAttribute("y2", p.y); } }
       for (const bl of camG.querySelector(".blabels").children) if (bl.dataset.a === drag.id || bl.dataset.b === drag.id) {
-        const A = pos[bl.dataset.a], B = pos[bl.dataset.b]; bl.setAttribute("transform", `translate(${(A.x + B.x) / 2},${(A.y + B.y) / 2})`); }
+        bl.setAttribute("transform", labelAt(pos[bl.dataset.a], pos[bl.dataset.b])); }
     });
     gN.addEventListener("pointerup", async (e) => {
       if (!drag) return; const d = drag; drag = null; SAVE("netpos", pos);
@@ -485,6 +489,7 @@ export async function net(body, list0) {
     h("div.card", h("div.card-h", h("h3", "Ansicht")), h("div.card-b.col",
       h("p.small.t2", "Punkte = Personen, Linien = Bünde, Flächen = Kreise. Fallenlassen auf einem Kreis macht zum Mitglied."),
       h("label.check", h("input", { type: "checkbox", checked: opt.self, on: { change: (e) => { opt.self = e.target.checked; SAVE("netopt", opt); layout(); draw(); } } }), "Dich zeigen"),
+      h("label.check", h("input", { type: "checkbox", checked: !!opt.unedited, on: { change: (e) => { opt.unedited = e.target.checked; SAVE("netopt", opt); layout(); draw(); fit(); } } }), "Unbearbeitete Kontakte zeigen"),
       h("button.btn.sm", { on: { click: () => { pos = {}; SAVE("netpos", {}); layout(); draw(); fit(); } } }, icon("refresh"), "Neu anordnen"),
       h("p.tiny.t3", "Trackpad: scrollen verschiebt, mit zwei Fingern auseinander/zusammen zoomt. Maus: Rad zoomt, mit gedrückter linker Taste ziehen verschiebt."))));
   layout(); draw();
