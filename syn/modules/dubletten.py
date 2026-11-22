@@ -465,4 +465,7 @@ def merge(body: MergeIn, ctx: Ctx = Depends(current)):
         model.record(uid, "entity", keep, "merged", {"id": other, "name": model.display_name(eo)}, {"id": keep},
                      "Zusammenführen")
     from .lebewesen import entity_full
+    # Zusammengeführt mit einer (unbenannten) Immich-Person: Name dorthin schreiben
+    from ..importers.immich import push_names
+    push_names(uid, keep)
     return entity_full(ctx, keep)

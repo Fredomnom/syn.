@@ -470,6 +470,10 @@ def patch_entity(uid, eid, changes: dict, source="manual"):
         if upd:
             upd["updated_at"] = now()
             db.update("entities", {"id": eid}, upd)
+    # neuer Name → auch in Immich (nicht, wenn er gerade aus Immich kommt)
+    if ("name" in upd or "name_uncertain" in upd) and source != "immich":
+        from .importers.immich import push_names
+        push_names(uid, eid)
     return upd
 
 

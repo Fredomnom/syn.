@@ -1323,5 +1323,7 @@
 "Personen ohne Namen erst ab … Fotos": "Personas sin nombre solo a partir de … fotos",
 "1 = alle. Mit 3 bleiben Zufallsgesichter (nur ein, zwei Fotos) draußen. Benannte Personen kommen immer.": "1 = todas. Con 3 se quedan fuera las caras casuales (solo una o dos fotos). Las personas con nombre siempre entran.",
 "Alle Personen aus der Gesichtserkennung mit Gesichtsbild, Geburtstag und ihren Fotos": "Todas las personas del reconocimiento facial con foto de cara, cumpleaños y sus fotos",
-"Importiert werden alle Personen aus der Gesichtserkennung – ohne Namen als Eintrag „Person von Fotos“. Die Fotos bleiben in Immich.": "Se importan todas las personas del reconocimiento facial; las que no tienen nombre, como entrada «Persona de fotos». Las fotos se quedan en Immich."
+"Importiert werden alle Personen aus der Gesichtserkennung – ohne Namen als Eintrag „Person von Fotos“. Die Fotos bleiben in Immich.": "Se importan todas las personas del reconocimiento facial; las que no tienen nombre, como entrada «Persona de fotos». Las fotos se quedan en Immich.",
+"Rechte: „person.read“, „person.update“ (Namen aus syn zurückschreiben), „asset.read“ und „asset.view“ – oder einfach alle.": "Permisos: «person.read», «person.update» (devolver los nombres de syn), «asset.read» y «asset.view», o simplemente todos.",
+"Alle Personen aus der Gesichtserkennung mit Gesichtsbild, Geburtstag und ihren Fotos; Namen aus syn gehen zurück": "Todas las personas del reconocimiento facial con foto de cara, cumpleaños y sus fotos; los nombres de syn vuelven a Immich"
 }

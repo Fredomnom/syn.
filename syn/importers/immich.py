@@ -28,12 +28,12 @@ class Immich(Importer):
     service = "immich"
     way = "Immich-API mit eigenem API-Schlüssel"
     official = "ja"
-    brings = "Alle Personen aus der Gesichtserkennung mit Gesichtsbild, Geburtstag und ihren Fotos"
+    brings = "Alle Personen aus der Gesichtserkennung mit Gesichtsbild, Geburtstag und ihren Fotos; Namen aus syn gehen zurück"
     rate = 0.0
     match_by_name = True  # die Namen hast du in Immich selbst vergeben
     steps = [
         'Öffne Immich → Konto (oben rechts) → Kontoeinstellungen → API-Schlüssel → „Neuer API-Schlüssel“.',
-        'Rechte: mindestens „person.read“, „asset.read“ und „asset.view“ – oder einfach alle.',
+        'Rechte: „person.read“, „person.update“ (Namen aus syn zurückschreiben), „asset.read“ und „asset.view“ – oder einfach alle.',
         'Trag hier die Adresse deiner Immich-Instanz ein (z.B. http://192.168.178.76:2283) und den Schlüssel.',
         'Importiert werden alle Personen aus der Gesichtserkennung – ohne Namen als Eintrag „Person von Fotos“. Die Fotos bleiben in Immich.',
     ]
@@ -110,3 +110,35 @@ class Immich(Importer):
 
 
 IMPORTER = Immich()
+
+
+def push_names(uid, eid):
+    """Name aus syn nach Immich schreiben – für jede Immich-Person dieses Eintrags, deren Name dort abweicht.
+    Braucht das Recht „person.update“. Fehler bremsen syn nicht aus, sie landen nur im Log."""
+    import logging
+
+    import httpx
+
+    from ..importe import get_config
+    log = logging.getLogger("syn.immich")
+    cfg = get_config(uid, "immich")
+    e = db.q1("SELECT name, name_uncertain FROM entities WHERE id=? AND user_id=?", eid, uid)
+    if not cfg.get("api_key") or not e or not e["name"] or e["name_uncertain"]:
+        return 0
+    name, n = e["name"], 0
+    for v in db.q("SELECT id, value FROM field_values WHERE user_id=? AND owner_type='entity' AND owner_id=? "
+                  "AND field_id='f_profile'", uid, eid):
+        val = db.jl(v["value"])
+        if not isinstance(val, dict) or val.get("service") != "immich" or not val.get("id") or val.get("handle") == name:
+            continue
+        try:
+            r = httpx.put(f"{base_url(cfg)}/api/people/{val['id']}", json={"name": name}, timeout=6,
+                          headers={"x-api-key": cfg["api_key"].strip()})
+            r.raise_for_status()
+        except httpx.HTTPError as ex:
+            log.warning("Name nach Immich schreiben (%s): %s", val["id"], ex)
+            continue
+        val["handle"] = name
+        db.ex("UPDATE field_values SET value=? WHERE id=?", db.jd(val), v["id"])
+        n += 1
+    return n

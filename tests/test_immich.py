@@ -108,3 +108,33 @@ def test_immich_untergrenze_fuer_unbenannte(client, immich):
     # imm-2 (unbenannt, 1 Foto) bleibt draußen; benannte kommen auch mit 0 Fotos („Versteckt“)
     assert "2 gelesen, 2 neu" in status, status
     assert not any((x["description"] or "").startswith("Person von Fotos") for x in c.get("/api/v1/entities").json())
+
+
+def test_immich_namen_zurueckschreiben(client, immich, monkeypatch):
+    """Umbenennen oder Zusammenführen schreibt den Namen nach Immich (PUT /api/people/{id})."""
+    puts = []
+    def fake_put(url, json=None, headers=None, timeout=None):
+        assert headers["x-api-key"] == "geheim"
+        puts.append((url.rsplit("/", 1)[-1], json["name"]))
+        return httpx.Response(200, json={}, request=httpx.Request("PUT", url))
+    monkeypatch.setattr(httpx, "put", fake_put)
+    c = client
+    c.put("/api/v1/importers/immich", json={"config": {"url": "http://immich.local:2283", "api_key": "geheim"}, "enabled": True})
+    from syn import auth, db
+    from syn.importe import run_importer
+    run_importer(auth.ctx_for(db.q1("SELECT * FROM users LIMIT 1")), "immich")
+    assert puts == []                                           # Import schreibt nichts zurück
+    alle = c.get("/api/v1/entities").json()
+    ohne = next(x for x in alle if not x["name"])
+    c.patch(f"/api/v1/entities/{ohne['id']}", json={"name": "Tom Weiß"})
+    assert puts == [("imm-2", "Tom Weiß")]
+    c.patch(f"/api/v1/entities/{ohne['id']}", json={"name": "Tom Weiß"})   # unverändert → kein zweites Mal
+    assert len(puts) == 1
+    # unsicherer Name bleibt in syn
+    c.patch(f"/api/v1/entities/{ohne['id']}", json={"name": "Tommy", "name_uncertain": True})
+    assert len(puts) == 1
+    # Zusammenführen: Kontakt mit Namen + Immich-Person → Immich bekommt den Namen
+    paula = c.post("/api/v1/entities", json={"name": "Paula Grün"}).json()
+    versteckt = next(x for x in alle if x["name"] == "Versteckt")
+    c.post("/api/v1/merge", json={"keep": paula["id"], "other": versteckt["id"], "choices": {"name": "a"}})
+    assert puts[-1] == ("imm-3", "Paula Grün")

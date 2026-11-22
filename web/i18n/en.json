@@ -1323,5 +1323,7 @@
 "Personen ohne Namen erst ab … Fotos": "People without a name only from … photos",
 "1 = alle. Mit 3 bleiben Zufallsgesichter (nur ein, zwei Fotos) draußen. Benannte Personen kommen immer.": "1 = all. With 3, random faces (only one or two photos) stay out. Named people always come in.",
 "Alle Personen aus der Gesichtserkennung mit Gesichtsbild, Geburtstag und ihren Fotos": "All people from face recognition with face picture, birthday and their photos",
-"Importiert werden alle Personen aus der Gesichtserkennung – ohne Namen als Eintrag „Person von Fotos“. Die Fotos bleiben in Immich.": "All people from face recognition are imported – those without a name as an entry “Person from photos”. The photos stay in Immich."
+"Importiert werden alle Personen aus der Gesichtserkennung – ohne Namen als Eintrag „Person von Fotos“. Die Fotos bleiben in Immich.": "All people from face recognition are imported – those without a name as an entry “Person from photos”. The photos stay in Immich.",
+"Rechte: „person.read“, „person.update“ (Namen aus syn zurückschreiben), „asset.read“ und „asset.view“ – oder einfach alle.": "Permissions: “person.read”, “person.update” (write names from syn back), “asset.read” and “asset.view” – or simply all.",
+"Alle Personen aus der Gesichtserkennung mit Gesichtsbild, Geburtstag und ihren Fotos; Namen aus syn gehen zurück": "All people from face recognition with face picture, birthday and their photos; names from syn go back"
 }
