@@ -245,10 +245,10 @@ async function profile(page, id) {
     e.is_self ? null : { label: "Person löschen", icon: "trash", action: () => deletePerson(e) },
   ], { align: "right" });
   page.append(
-    h("div.mtop", h("a.back", { href: e.is_self ? "#/me" : "#/" }, icon("left"), e.is_self ? "Ich" : "Personen"),
+    cards.banner ? h("div.m-banner", cards.banner) : null, // Foto bis ganz nach oben, die Kopfzeile liegt darüber
+    h("div.mtop" + (cards.banner ? ".m-top-over" : ""), h("a.back", { href: e.is_self ? "#/me" : "#/" }, icon("left"), e.is_self ? "Ich" : "Personen"),
       h("div.row", h("button.btn.ghost.sm", { on: { click: async () => { const r = await editPerson(e); if (r) reload(); } } }, "Bearbeiten"),
         h("button.btn.ghost.sm.icon", { "aria-label": "Mehr", on: { click: more } }, icon("more")))),
-    cards.banner ? h("div.m-banner", cards.banner) : null, // verschwindet samt Abstand, wenn das Foto nicht lädt
     h("div.col" + (cards.banner ? ".m-hero-over" : ""), { style: { alignItems: "center", gap: "6px", textAlign: "center" } },
       avatar(e, 72),
       h("h1", { style: { fontSize: "24px" } }, e.name || e.description || "Ohne Namen", " ", !e.name ? h("span.qmark", "ohne Namen") : e.name_uncertain ? h("span.qmark", "Name ?") : null),

@@ -1331,10 +1331,18 @@ a.so-stat:hover { border-color: var(--ink); transform: translateY(-1px); }
 syn-personcard.with-banner .pc-head { margin-top: -36px; position: relative; z-index: 1; }
 syn-personcard.with-banner .pc-head .av { box-shadow: 0 0 0 4px var(--white); }
 /* Handy */
-.mob .mpage > .m-banner { margin: -14px -16px 0; width: calc(100% + 32px); max-width: none; }
-.mob .m-banner .ph-banner { border-radius: 0; height: 190px; }
+.mob .mpage > .m-banner { margin: -14px -16px 0; width: calc(100% + 32px); max-width: none; position: relative; }
+.mob .m-banner::before { content: ""; position: absolute; inset: 0 0 auto; height: 84px; z-index: 1; pointer-events: none;
+  background: linear-gradient(to bottom, rgba(0,0,0,.55), transparent); }
+.mob .mtop.m-top-over { position: absolute; top: calc(14px + env(safe-area-inset-top)); left: 16px; right: 16px; z-index: 2; color: #fff; }
+.mob .mtop.m-top-over .btn.ghost { color: #fff; }
+.mob .mtop.m-top-over a, .mob .mtop.m-top-over .btn { text-shadow: 0 1px 6px rgba(0,0,0,.5); }
+.mob .m-banner:empty ~ .mtop.m-top-over { position: static; color: inherit; }
+.mob .m-banner:empty ~ .mtop.m-top-over .btn.ghost { color: inherit; }
+.mob .m-banner .ph-banner { border-radius: 0; height: 250px; }
 .mob .m-hero-over { margin-top: -58px; position: relative; }
 .mob .m-hero-over .av { box-shadow: 0 0 0 4px var(--bg); }
 .mob .ph-grid { grid-template-columns: repeat(3, 1fr); gap: 4px; }
 @media (prefers-reduced-motion: reduce) { .ph-banner img, .ss-img { animation: none; } }
-.mob .m-banner:empty { display: none; } .mob .m-banner:empty + .m-hero-over { margin-top: 0; }
+.mob .m-banner:empty { display: none; } .mob .m-banner:empty ~ .m-hero-over { margin-top: 0; }
+.mob .mpage { position: relative; }
