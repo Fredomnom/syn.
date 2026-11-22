@@ -193,6 +193,22 @@ def _index(uid, country):
     return svc, phones, emails
 
 
+def _import_note(ctx, eid, d, note, source, svc_name, stats):
+    """Notiz aus einem Dienst: leer → setzen; dieselbe Quelle → aktualisieren; schon eine andere Notiz da →
+    nicht überschreiben, sondern als Vorschlag „anhängen“ (nichts geht verloren, nichts wird ungefragt ersetzt)."""
+    from .modules.vorschlaege import add_suggestion
+    ot, oid = model.owner_for(ctx.uid, eid, d)
+    cur = model.primary(model.get_values(ot, oid).get(d["id"]))
+    if cur is None or cur["source"] == source:
+        return _set_if_allowed(ctx, eid, d, note, source, stats)
+    have = str(cur["value"] or "")
+    if note in have:
+        return
+    if add_suggestion(ctx.uid, "field", eid, {"field": d["id"], "value": f"{have}\n\n{svc_name}: {note}",
+                                              "why": f"Notiz aus {svc_name} anhängen"}, source):
+        stats["suggestions"] += 1
+
+
 def _set_if_allowed(ctx, eid, d, value, source, stats):
     """Setzt einen Einzelwert nur, wenn leer oder aus derselben Quelle."""
     ot, oid = model.owner_for(ctx.uid, eid, d)
@@ -352,7 +368,7 @@ def apply_contacts(ctx, imp: Importer, contacts, run: Run):
             for g in c.groups or []:
                 group_members.setdefault(g, set()).add(eid)
             if c.note and c.note.strip() and "f_note" in defs:
-                _set_if_allowed(ctx, eid, defs["f_note"], c.note.strip(), src, stats)
+                _import_note(ctx, eid, defs["f_note"], c.note.strip(), src, imp.name, stats)
             for kind, val in (("message", c.last_contact), ("seen", c.seen)):
                 if val:
                     d = str(val)[:10]

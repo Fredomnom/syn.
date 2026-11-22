@@ -39,12 +39,23 @@ class Mastodon(Importer):
         ids = set(following) & set(followers) if cfg.get("only_mutual", "ja") == "ja" else \
             set(following) | set(followers)
         host = base.split("//")[1]
+        notes = {}
+        idl = list(ids)
+        for k in range(0, len(idl), 40):  # private Notizen zu Accounts („Notiz“ im Profil)
+            try:
+                for rel in run.get(f"{base}/api/v1/accounts/relationships", headers=h,
+                                   params=[("id[]", x) for x in idl[k:k + 40]]).json():
+                    if (rel.get("note") or "").strip():
+                        notes[rel["id"]] = rel["note"].strip()
+            except Exception as e:
+                run.log(f"Notizen nicht lesbar: {e}")
+                break
         out = []
         for i in ids:
             a = following.get(i) or followers[i]
             acct = a["acct"] if "@" in a["acct"] else f"{a['acct']}@{host}"
             out.append(Contact(service_id=acct, handle="@" + acct, name=a.get("display_name") or a["username"],
-                               url=a.get("url"), avatar_url=a.get("avatar"), bot=bool(a.get("bot"))))
+                               url=a.get("url"), avatar_url=a.get("avatar"), bot=bool(a.get("bot")), note=notes.get(i)))
         return out
 
 

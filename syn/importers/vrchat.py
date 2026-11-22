@@ -29,7 +29,7 @@ class VRChat(Importer):
     service = "vrchat"
     way = "Web-API mit dem Sitzungs-Cookie aus deinem Browser"
     official = "nein"
-    brings = "Freunde mit Profilbild, Bio und zuletzt online"
+    brings = "Freunde mit Profilbild, deinen Notizen zu ihnen und ihrer Bio"
     unofficial = True
     rate = 1.0
     steps = [
@@ -74,6 +74,9 @@ class VRChat(Importer):
             raise ValueError("VRChat verlangt eine Zwei-Faktor-Bestätigung. Kopiere zusätzlich das Cookie "
                              "„twoFactorAuth“ aus dem Browser, oder melde dich dort neu an und kopiere „auth“ erneut.")
         run.log(f"Angemeldet als {me.get('displayName', '?')}")
+        notes = self._notes(run, headers)
+        if notes:
+            run.log(f"{len(notes)} Notizen gefunden")
         modes = [False, True] if (cfg.get("offline") or "ja") == "ja" else [False]
         seen, out = set(), []
         total = len(me.get("friends") or []) or None
@@ -88,7 +91,7 @@ class VRChat(Importer):
                     if not uid or uid in seen:
                         continue
                     seen.add(uid)
-                    out.append(self._contact(f, headers))
+                    out.append(self._contact(f, headers, notes.get(uid) or f.get("note")))
                 run.progress(done=len(out))
                 if len(page) < PAGE:
                     break
@@ -97,13 +100,32 @@ class VRChat(Importer):
         return out
 
     @staticmethod
-    def _contact(f, headers):
+    def _notes(run, headers):
+        """Deine eigenen Notizen zu Usern (VRChat → Profil → Notiz), seitenweise."""
+        out, offset = {}, 0
+        try:
+            while True:
+                page = run.get(f"{API}/userNotes", headers=headers, params={"n": PAGE, "offset": offset}).json()
+                for n in page if isinstance(page, list) else []:
+                    if n.get("targetUserId") and (n.get("note") or "").strip():
+                        out[n["targetUserId"]] = n["note"].strip()
+                if not isinstance(page, list) or len(page) < PAGE:
+                    break
+                offset += PAGE
+        except httpx.HTTPError as e:
+            run.log(f"Notizen nicht lesbar: {e}")
+        return out
+
+    @staticmethod
+    def _contact(f, headers, my_note=None):
         name = f.get("displayName") or f.get("username")
         pic = f.get("userIcon") or f.get("profilePicOverrideThumbnail") or f.get("profilePicOverride") \
             or f.get("currentAvatarThumbnailImageUrl")
         bio = (f.get("bio") or "").strip()
         links = [x for x in (f.get("bioLinks") or []) if isinstance(x, str) and x.startswith("http")]
-        note = "\n".join(filter(None, [bio, *links])) or None
+        about = "\n".join(filter(None, [bio, *links]))
+        # deine Notiz zuerst, die Bio der Person darunter
+        note = "\n\n".join(filter(None, [(my_note or "").strip(), ("VRChat-Bio: " + about) if about else ""])) or None
         return Contact(
             service_id=f["id"], handle=name, name=name,
             url=f"https://vrchat.com/home/user/{f['id']}",

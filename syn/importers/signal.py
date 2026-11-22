@@ -43,11 +43,13 @@ class Signal(Importer):
             run.log(f"Gruppen nicht lesbar: {e}")
         for c in self._cmd(cfg, "listContacts"):
             num = c.get("number")
-            name = c.get("name") or (c.get("profile") or {}).get("givenName") or c.get("username")
+            nick = " ".join(x for x in (c.get("nickGivenName"), c.get("nickFamilyName")) if x) or c.get("nickName")
+            name = nick or c.get("name") or (c.get("profile") or {}).get("givenName") or c.get("username")
             if not (num or c.get("uuid")):
                 continue
             out.append(Contact(service_id=c.get("uuid") or num, handle=c.get("username") or num, name=name,
-                               phones=[(num, "mobil")] if num else [], groups=groups.get(num, [])))
+                               phones=[(num, "mobil")] if num else [], groups=groups.get(num, []),
+                               note=(c.get("note") or "").strip() or None))
         run.log(f"{len(groups)} Nummern in Gruppen")
         return out
 
