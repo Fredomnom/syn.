@@ -146,6 +146,7 @@ def reset(iid: str, ctx: Ctx = Depends(current)):
     db.ex("DELETE FROM importer_configs WHERE user_id=? AND importer_id=?", ctx.uid, iid)
     if iid == "immich":  # Foto-Verweise gehören zur Verbindung
         db.ex("DELETE FROM immich_assets WHERE user_id=?", ctx.uid)
+        db.ex("DELETE FROM immich_faces WHERE user_id=?", ctx.uid)
     r = _routine(ctx.uid, iid)
     if r:
         db.ex("DELETE FROM routines WHERE id=?", r["id"])

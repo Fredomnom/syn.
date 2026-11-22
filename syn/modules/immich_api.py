@@ -35,7 +35,11 @@ def photos(eid: str, random_n: int | None = None, limit: int = 500, ctx: Ctx = D
     q = ",".join("?" * len(pids))
     rows = db.q(f"SELECT asset_id, MAX(taken_at) AS taken_at FROM immich_assets WHERE user_id=? AND person_id IN ({q}) "
                 f"GROUP BY asset_id ORDER BY taken_at DESC", ctx.uid, *pids)
-    items = [{"id": r["asset_id"], "taken_at": r["taken_at"]} for r in rows]
+    faces = {r["asset_id"]: r for r in db.q(f"SELECT asset_id, x, y FROM immich_faces WHERE user_id=? AND person_id IN ({q})",
+                                            ctx.uid, *pids)}
+    items = [{"id": r["asset_id"], "taken_at": r["taken_at"],
+              "face": ({"x": faces[r["asset_id"]]["x"], "y": faces[r["asset_id"]]["y"]} if r["asset_id"] in faces
+                       and faces[r["asset_id"]]["x"] is not None else None)} for r in rows]
     total = len(items)
     if random_n:
         items = random.sample(items, min(random_n, total))
@@ -61,3 +65,37 @@ def asset(asset_id: str, size: str = "thumbnail", ctx: Ctx = Depends(current)):
         raise HTTPException(502 if r.status_code >= 500 else 404, "Immich liefert das Foto nicht")
     return Response(r.content, media_type=r.headers.get("content-type", "image/jpeg"),
                     headers={"Cache-Control": "private, max-age=604800, immutable"})
+
+
+@router.get("/entities/{eid}/photos/{asset_id}/face")
+def face(eid: str, asset_id: str, ctx: Ctx = Depends(current)):
+    """Wo auf dem Foto das Gesicht dieser Person ist ({x, y} als Anteil 0–1) – für den Bildausschnitt.
+    Wird einmal bei Immich nachgefragt und dann gemerkt (auch „kein Gesicht gefunden“)."""
+    model.get_entity(ctx.uid, eid)
+    pids = person_ids(ctx.uid, eid)
+    if not pids or not db.val(f"SELECT 1 FROM immich_assets WHERE user_id=? AND asset_id=? AND person_id IN ({','.join('?' * len(pids))})",
+                              ctx.uid, asset_id, *pids):
+        raise HTTPException(404, "Foto nicht gefunden")
+    q = ",".join("?" * len(pids))
+    hit = db.q1(f"SELECT x, y FROM immich_faces WHERE user_id=? AND asset_id=? AND person_id IN ({q})", ctx.uid, asset_id, *pids)
+    if hit:
+        return {"x": hit["x"], "y": hit["y"]} if hit["x"] is not None else {"x": None, "y": None}
+    cfg = get_config(ctx.uid, "immich")
+    if not cfg.get("api_key"):
+        raise HTTPException(404, "Immich ist nicht verbunden")
+    try:
+        r = _client.get(f"{base_url(cfg)}/api/faces", params={"id": asset_id}, headers={"x-api-key": cfg["api_key"].strip()})
+        r.raise_for_status()
+        faces = r.json()
+    except (httpx.HTTPError, ValueError):
+        return {"x": None, "y": None}  # nicht merken – vielleicht klappt es beim nächsten Mal
+    x = y = None
+    for f in faces:
+        if (f.get("person") or {}).get("id") in pids and f.get("imageWidth") and f.get("imageHeight"):
+            x = (f["boundingBoxX1"] + f["boundingBoxX2"]) / 2 / f["imageWidth"]
+            y = (f["boundingBoxY1"] + f["boundingBoxY2"]) / 2 / f["imageHeight"]
+            x, y = round(min(1, max(0, x)), 4), round(min(1, max(0, y)), 4)
+            break
+    db.ex("INSERT OR REPLACE INTO immich_faces(user_id, asset_id, person_id, x, y) VALUES(?,?,?,?,?)",
+          ctx.uid, asset_id, pids[0], x, y)
+    return {"x": x, "y": y}

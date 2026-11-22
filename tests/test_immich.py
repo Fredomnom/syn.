@@ -7,6 +7,7 @@ PEOPLE = [{"id": "imm-1", "name": "Lena Berg", "birthDate": "1994-03-02", "isHid
           {"id": "imm-3", "name": "Versteckt", "isHidden": True}]             # versteckt → trotzdem, wie alle
 ASSETS = {"imm-2": [{"id": "u1", "localDateTime": "2025-05-05T10:00:00"}], "imm-1": [{"id": f"a{i}", "localDateTime": f"2026-0{1 + i % 9}-1{i % 9}T10:00:00"} for i in range(260)]}
 JPEG = b"\xff\xd8\xff\xe0fakejpeg"
+CALLS = []
 
 
 def handler(req: httpx.Request):
@@ -24,6 +25,11 @@ def handler(req: httpx.Request):
         return httpx.Response(200, json={"assets": {"items": chunk, "nextPage": nxt, "total": len(items)}, "albums": {}})
     if p.startswith("/api/people/") and p.endswith("/thumbnail"):
         return httpx.Response(200, content=JPEG, headers={"content-type": "image/jpeg"})
+    if p == "/api/faces":
+        CALLS.append(req.url.params["id"])
+        return httpx.Response(200, json=[
+            {"person": {"id": "jemand-anders"}, "imageWidth": 1000, "imageHeight": 500, "boundingBoxX1": 0, "boundingBoxX2": 100, "boundingBoxY1": 0, "boundingBoxY2": 100},
+            {"person": {"id": "imm-1"}, "imageWidth": 1000, "imageHeight": 500, "boundingBoxX1": 700, "boundingBoxX2": 900, "boundingBoxY1": 50, "boundingBoxY2": 150}])
     if p.startswith("/api/assets/") and p.endswith("/thumbnail"):
         return httpx.Response(200, content=JPEG + req.url.params["size"].encode(), headers={"content-type": "image/jpeg"})
     return httpx.Response(404)
@@ -63,6 +69,14 @@ def test_immich_personen_und_fotos(client, immich):
     assert len(rnd["items"]) == 8
     img = c.get("/api/v1/immich/assets/a5", params={"size": "preview"})
     assert img.status_code == 200 and img.content.endswith(b"preview") and "private" in img.headers["cache-control"]
+    # Gesichtsposition: Mitte des Rahmens dieser Person, einmal geholt und gemerkt
+    f = c.get(f"/api/v1/entities/{lena['id']}/photos/a5/face").json()
+    assert f == {"x": 0.8, "y": 0.2}
+    c.get(f"/api/v1/entities/{lena['id']}/photos/a5/face")
+    assert CALLS.count("a5") == 1
+    a5 = next(x for x in c.get(f"/api/v1/entities/{lena['id']}/photos").json()["items"] if x["id"] == "a5")
+    assert a5["face"] == {"x": 0.8, "y": 0.2}
+    assert c.get(f"/api/v1/entities/{lena['id']}/photos/fremd/face").status_code == 404
     # fremde oder unbekannte Fotos werden nicht durchgereicht
     assert c.get("/api/v1/immich/assets/fremd").status_code == 404
     assert c.get("/api/v1/immich/assets/a5", params={"size": "original"}).status_code == 400

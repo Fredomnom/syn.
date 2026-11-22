@@ -10,9 +10,33 @@ export async function loadPhotos(eid, { random } = {}) {
   if (!random && cache.has(key)) return cache.get(key);
   let d;
   try { d = await GET(`/entities/${eid}/photos` + (random ? `?random_n=${random}` : "")); } catch (_) { d = { total: 0, items: [] }; }
+  d.eid = eid;
   if (!random) cache.set(key, d);
   return d;
 }
+
+// Bildausschnitt aufs Gesicht dieser Person legen (Position kommt aus Immich, wird beim ersten Mal geholt und gemerkt).
+// Genau gerechnet: das Gesicht kommt in die Mitte des Rahmens, ohne dass das Bild über seinen Rand hinaus verschoben wird.
+function center(img, f) {
+  const apply = () => {
+    const bw = img.clientWidth, bh = img.clientHeight, iw = img.naturalWidth, ih = img.naturalHeight;
+    if (!bw || !bh || !iw || !ih) { img.style.objectPosition = `${(f.x * 100).toFixed(1)}% ${(f.y * 100).toFixed(1)}%`; return; }
+    const sc = Math.max(bw / iw, bh / ih), w = iw * sc, hh = ih * sc;
+    const x = Math.min(0, Math.max(bw - w, bw / 2 - f.x * w)), y = Math.min(0, Math.max(bh - hh, bh * 0.45 - f.y * hh));
+    img.style.objectPosition = `${x.toFixed(1)}px ${y.toFixed(1)}px`;
+  };
+  if (img.complete && img.naturalWidth) apply(); else img.addEventListener("load", apply, { once: true });
+}
+export async function aimAtFace(img, data, it) {
+  if (it.face) return center(img, it.face);
+  if (it.face === false || !data?.eid) return;
+  try {
+    const f = await GET(`/entities/${data.eid}/photos/${encodeURIComponent(it.id)}/face`);
+    it.face = f.x == null ? false : f;
+    if (it.face) center(img, it.face);
+  } catch (_) { it.face = false; }
+}
+
 const fmtDay = (t) => { try { return t ? new Date(t).toLocaleDateString(LOCALE(), { day: "numeric", month: "long", year: "numeric" }) : ""; } catch (_) { return ""; } };
 
 // Breites Titelbild über der Person: ein zufälliges der neueren Fotos, langsam gleitend; Klick öffnet die Großansicht
@@ -21,6 +45,7 @@ export function photoBanner(data) {
   const pool = data.items.slice(0, 40);
   const pick = pool[Math.floor(Math.random() * pool.length)];
   const img = h("img", { src: photoUrl(pick.id, "preview"), alt: "", loading: "eager", decoding: "async" });
+  aimAtFace(img, data, pick);
   img.addEventListener("load", () => img.classList.add("in"));
   img.addEventListener("error", () => img.closest(".ph-banner")?.remove()); // Foto nicht (mehr) in Immich
   return h("button.ph-banner", { type: "button", title: "Foto groß zeigen", on: { click: () => lightbox(data, data.items.indexOf(pick)) } }, img);
@@ -36,6 +61,7 @@ export function photoGallery(data, { profileUrl } = {}) {
     const next = data.items.slice(shown, shown + n);
     next.forEach((it, j) => {
       const img = h("img", { src: photoUrl(it.id), alt: "", loading: "lazy", decoding: "async" });
+      if (it.face) center(img, it.face); else img.addEventListener("load", () => aimAtFace(img, data, it), { once: true });
       img.addEventListener("load", () => img.classList.add("in"));
       img.addEventListener("error", () => img.closest(".ph-cell")?.remove());
       grid.append(h("button.ph-cell", { type: "button", title: fmtDay(it.taken_at), on: { click: () => lightbox(data, shown - next.length + j) } }, img));
@@ -85,11 +111,12 @@ export function lightbox(data, start = 0) {
 }
 
 // Diashow (Hover-Popup): Bilder gleiten langsam durch und blenden ineinander über. Gibt eine Stopp-Funktion zurück.
-export function slideshow(box, items, { every = 2800 } = {}) {
+export function slideshow(box, items, { every = 2800, data } = {}) {
   if (!items?.length) return () => {};
   let i = 0, stop = false, t = null;
   const layer = (it) => {
     const im = h("img.ss-img", { src: photoUrl(it.id, "preview"), alt: "" });
+    aimAtFace(im, data, it);
     im.style.setProperty("--dx", (Math.random() * 10 - 5).toFixed(1) + "%");
     im.style.setProperty("--dy", (Math.random() * 8 - 4).toFixed(1) + "%");
     im.style.setProperty("--dur", every * 1.6 + "ms");

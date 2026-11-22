@@ -118,7 +118,7 @@ document.addEventListener("mouseover", (e) => {
         if (!pd.total || cardFor !== pEl) return;
         const ban = h("div.pc-banner");
         cardEl.prepend(ban); cardEl.classList.add("with-banner");
-        stopShow = P.slideshow(ban, pd.items);
+        stopShow = P.slideshow(ban, pd.items, { data: pd });
         cardEl.place(pEl, x, y);
       }, 420);
     }

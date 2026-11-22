@@ -104,6 +104,11 @@ CREATE TABLE IF NOT EXISTS immich_assets(
   PRIMARY KEY(user_id, person_id, asset_id)
 );
 CREATE INDEX IF NOT EXISTS immich_assets_asset ON immich_assets(user_id, asset_id);
+-- Gesichtsposition einer Person auf einem Foto (Mitte des Rahmens, 0–1), wird beim ersten Zeigen geholt
+CREATE TABLE IF NOT EXISTS immich_faces(
+  user_id TEXT NOT NULL, asset_id TEXT NOT NULL, person_id TEXT NOT NULL, x REAL, y REAL,
+  PRIMARY KEY(user_id, asset_id, person_id)
+);
 CREATE TABLE IF NOT EXISTS importer_configs(
   user_id TEXT NOT NULL, importer_id TEXT NOT NULL, enabled INTEGER DEFAULT 0, config_enc TEXT,
   state TEXT DEFAULT '{}', last_run_at TEXT, last_status TEXT, last_log TEXT, risk_ack INTEGER DEFAULT 0,
