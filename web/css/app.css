@@ -765,7 +765,7 @@ textarea.input { resize: none; }
 .fr-main { min-width: 0; cursor: pointer; border-radius: 9px; }
 .fr.inline .fr-main:hover .fr-text { text-decoration: underline dotted var(--text3); text-underline-offset: 4px; }
 .fr-val { display: flex; flex-direction: column; min-height: 34px; justify-content: center; }
-.fr-val.chips { flex-direction: row; flex-wrap: wrap; gap: 6px; align-items: center; padding: 3px 0; }
+.fr-val.chips { flex-direction: row; flex-wrap: wrap; gap: 6px; align-items: center; justify-content: flex-start; padding: 3px 0; } /* linksbündig – center gilt hier waagerecht */
 .fr-line { display: flex; align-items: center; gap: 8px; min-height: 34px; font-size: 14.5px; font-weight: 500; }
 .fr-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fr-text .mono, .fr-line .mono { font-size: 13.5px; }
