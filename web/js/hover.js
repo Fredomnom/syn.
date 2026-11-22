@@ -106,6 +106,8 @@ document.addEventListener("mouseover", (e) => {
     if (cardFor !== pEl) {
       hideCard(); hideTip(); cardFor = pEl;
       const x = e.clientX, y = e.clientY;
+      // Fotos schon während der Hover-Verzögerung holen und das erste vorladen
+      const photosP = import("./photos.js").then(async (P) => { const pd = await P.loadPhotos(pid, { random: 8 }); if (pd.items?.[0]) P.preload(pd.items[0].id); return [P, pd]; });
       cardT = setTimeout(async () => {
         let r = (S.rows || []).find((x) => x.id === pid);
         if (!r) { try { r = (await rows()).find((x) => x.id === pid); } catch (_) { return; } }
@@ -113,8 +115,7 @@ document.addEventListener("mouseover", (e) => {
         cardEl.render(r); cardEl.place(pEl, x, y);
         requestAnimationFrame(() => cardEl.classList.add("on"));
         // Fotos aus Immich: zufällige Auswahl läuft als Diashow durch ein Banner oben in der Karte
-        const P = await import("./photos.js");
-        const pd = await P.loadPhotos(pid, { random: 8 });
+        const [P, pd] = await photosP;
         if (!pd.total || cardFor !== pEl) return;
         const ban = h("div.pc-banner");
         cardEl.prepend(ban); cardEl.classList.add("with-banner");

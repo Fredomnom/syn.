@@ -9,7 +9,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 
-from .. import db, model
+from .. import config, db, model
 from ..auth import Ctx, current
 from ..importe import get_config
 from ..importers.immich import base_url
@@ -53,6 +53,12 @@ def asset(asset_id: str, size: str = "thumbnail", ctx: Ctx = Depends(current)):
         raise HTTPException(400, "Größe: thumbnail oder preview")
     if not db.val("SELECT 1 FROM immich_assets WHERE user_id=? AND asset_id=?", ctx.uid, asset_id):
         raise HTTPException(404, "Foto nicht gefunden")
+    # Zwischenspeicher im Datenordner: einmal geholt, danach ohne Umweg über Immich
+    cdir = config.DATA_DIR / "cache" / "immich" / ctx.uid / size
+    cf = cdir / "".join(ch for ch in asset_id if ch.isalnum() or ch == "-")
+    if cf.is_file():
+        return Response(cf.read_bytes(), media_type=(cf.with_suffix(".type").read_text() if cf.with_suffix(".type").is_file() else "image/jpeg"),
+                        headers={"Cache-Control": "private, max-age=604800, immutable"})
     cfg = get_config(ctx.uid, "immich")
     if not cfg.get("api_key"):
         raise HTTPException(404, "Immich ist nicht verbunden")
@@ -63,6 +69,12 @@ def asset(asset_id: str, size: str = "thumbnail", ctx: Ctx = Depends(current)):
         raise HTTPException(502, "Immich nicht erreichbar") from None
     if r.status_code != 200:
         raise HTTPException(502 if r.status_code >= 500 else 404, "Immich liefert das Foto nicht")
+    try:
+        cdir.mkdir(parents=True, exist_ok=True)
+        cf.write_bytes(r.content)
+        cf.with_suffix(".type").write_text(r.headers.get("content-type", "image/jpeg"))
+    except OSError:
+        pass  # ohne Zwischenspeicher geht es auch
     return Response(r.content, media_type=r.headers.get("content-type", "image/jpeg"),
                     headers={"Cache-Control": "private, max-age=604800, immutable"})
 

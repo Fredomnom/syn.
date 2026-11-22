@@ -7,11 +7,11 @@ export const photoUrl = (id, size = "thumbnail") => `/api/v1/immich/assets/${enc
 const cache = new Map();
 export async function loadPhotos(eid, { random } = {}) {
   const key = eid + (random ? ":r" + random : "");
-  if (!random && cache.has(key)) return cache.get(key);
+  if (cache.has(key)) return cache.get(key); // auch die Zufallsauswahl bleibt in der Sitzung gleich → Bilder aus dem Cache
   let d;
   try { d = await GET(`/entities/${eid}/photos` + (random ? `?random_n=${random}` : "")); } catch (_) { d = { total: 0, items: [] }; }
   d.eid = eid;
-  if (!random) cache.set(key, d);
+  cache.set(key, d);
   return d;
 }
 
@@ -111,20 +111,27 @@ export function lightbox(data, start = 0) {
 }
 
 // Diashow (Hover-Popup): Bilder gleiten langsam durch und blenden ineinander über. Gibt eine Stopp-Funktion zurück.
+// Foto vorladen und fertig dekodieren – erst dann wird es gezeigt (sonst ruckelt die Überblendung)
+export function preload(id, size = "preview") {
+  const im = new Image(); im.decoding = "async"; im.src = photoUrl(id, size);
+  return im.decode().then(() => im, () => null);
+}
+
 export function slideshow(box, items, { every = 2800, data } = {}) {
   if (!items?.length) return () => {};
   let i = 0, stop = false, t = null;
-  const layer = (it) => {
-    const im = h("img.ss-img", { src: photoUrl(it.id, "preview"), alt: "" });
+  const layer = async (it) => {
+    const ready = await preload(it.id);
+    if (stop || !ready) return;
+    const im = h("img.ss-img", { src: ready.src, alt: "" });
+    im.style.setProperty("--dx", (Math.random() * 8 - 4).toFixed(1) + "%");
+    im.style.setProperty("--dy", (Math.random() * 6 - 3).toFixed(1) + "%");
+    im.style.setProperty("--dur", every * 1.7 + "ms");
     aimAtFace(im, data, it);
-    im.style.setProperty("--dx", (Math.random() * 10 - 5).toFixed(1) + "%");
-    im.style.setProperty("--dy", (Math.random() * 8 - 4).toFixed(1) + "%");
-    im.style.setProperty("--dur", every * 1.6 + "ms");
-    im.addEventListener("load", () => { if (!stop) im.classList.add("in"); });
-    im.addEventListener("error", () => im.remove());
     box.append(im);
-    const old = [...box.querySelectorAll(".ss-img")].slice(0, -2); old.forEach((o) => o.remove());
-    if (items.length > 1) new Image().src = photoUrl(items[(i + 1) % items.length].id, "preview");
+    requestAnimationFrame(() => requestAnimationFrame(() => im.classList.add("in")));
+    [...box.querySelectorAll(".ss-img")].slice(0, -2).forEach((o) => o.remove());
+    if (items.length > 1) preload(items[(items.indexOf(it) + 1) % items.length].id); // nächstes schon holen
   };
   layer(items[0]);
   const tick = () => { if (stop) return; i = (i + 1) % items.length; layer(items[i]); t = setTimeout(tick, every); };
