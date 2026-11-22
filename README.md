@@ -70,7 +70,7 @@ Settings → Sync so contacts on your phone carry a link to the person's page.
 - **Undo/redo** covers every change (including deleting, merging, imports) – per user, the last 200 steps.
   Passwords and permissions are never reset by it.
 - **Appearance:** light, dark or follow the system (Settings → Account, on the phone under “Me”).
-- **Photos from Immich:** connect Immich under Settings → Imports. Every person you named in Immich's face recognition
+- **Photos from Immich:** connect Immich under Settings → Imports. Every person from Immich's face recognition (unnamed ones as entries without a name)
   appears in syn, with a banner, a gallery and a slideshow on hover. The photos stay in Immich; syn shows them through
   itself, so the browser never needs access to Immich.
 - **Business card:** a short link like `/@you` (and a QR code) – whoever opens it sees what you share and can send their details back.

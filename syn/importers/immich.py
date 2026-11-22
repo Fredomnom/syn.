@@ -1,4 +1,5 @@
-"""Immich: jede benannte Person aus der Gesichtserkennung wird eine Person in syn – mit Gesichtsbild, Geburtstag
+"""Immich: jede Person aus der Gesichtserkennung wird eine Person in syn (wie bei anderen Diensten alle Kontakte –
+auch ohne Namen: dann als Eintrag ohne Namen, den du später benennst) – mit Gesichtsbild, Geburtstag
 und den Fotos, auf denen sie zu sehen ist (als Verweise; die Bilder bleiben in Immich und werden über syn gezeigt).
 
 API (Immich ≥ 1.100, getestet gegen 3.x):
@@ -27,14 +28,14 @@ class Immich(Importer):
     service = "immich"
     way = "Immich-API mit eigenem API-Schlüssel"
     official = "ja"
-    brings = "Personen aus der Gesichtserkennung mit Gesichtsbild, Geburtstag und ihren Fotos"
+    brings = "Alle Personen aus der Gesichtserkennung mit Gesichtsbild, Geburtstag und ihren Fotos"
     rate = 0.0
     match_by_name = True  # die Namen hast du in Immich selbst vergeben
     steps = [
         'Öffne Immich → Konto (oben rechts) → Kontoeinstellungen → API-Schlüssel → „Neuer API-Schlüssel“.',
         'Rechte: mindestens „person.read“, „asset.read“ und „asset.view“ – oder einfach alle.',
         'Trag hier die Adresse deiner Immich-Instanz ein (z.B. http://192.168.178.76:2283) und den Schlüssel.',
-        'Importiert werden alle Personen, denen du in Immich einen Namen gegeben hast. Die Fotos bleiben in Immich.',
+        'Importiert werden alle Personen aus der Gesichtserkennung – ohne Namen als Eintrag „Person von Fotos“. Die Fotos bleiben in Immich.',
     ]
     config = [
         {"key": "url", "label": "Immich-Adresse", "type": "text", "required": True,
@@ -49,20 +50,23 @@ class Immich(Importer):
         people, page = [], 1
         run.progress(phase="Personen laden")
         while True:
-            r = run.get(f"{base}/api/people", headers=h, params={"page": page, "size": PAGE, "withHidden": "false"}).json()
-            people += [p for p in r.get("people", []) if (p.get("name") or "").strip() and not p.get("isHidden")]
+            r = run.get(f"{base}/api/people", headers=h, params={"page": page, "size": PAGE, "withHidden": "true"}).json()
+            people += r.get("people", [])
             if not r.get("hasNextPage"):
                 break
             page += 1
-        run.log(f"{len(people)} benannte Personen")
+        named = sum(1 for p in people if (p.get("name") or "").strip())
+        run.log(f"{len(people)} Personen, davon {named} mit Namen")
         out, total_assets = [], 0
         run.progress(done=0, total=len(people), phase="Fotos zuordnen")
         for i, p in enumerate(people):
             assets = self._assets(run, base, h, p["id"])
             total_assets += len(assets)
             self._store(run.ctx.uid, p["id"], assets)
+            name = (p.get("name") or "").strip() or None
             out.append(Contact(
-                service_id=p["id"], handle=p["name"].strip(), name=p["name"].strip(),
+                service_id=p["id"], handle=name, name=name,
+                description=None if name else f"Person von Fotos ({len(assets)} Foto{'' if len(assets) == 1 else 's'})",
                 url=f"{base}/people/{p['id']}", birthday=p.get("birthDate") or None,
                 avatar_url=f"{base}/api/people/{p['id']}/thumbnail", avatar_headers={"x-api-key": h["x-api-key"]},
                 seen=assets[0][1][:10] if assets and assets[0][1] else None,  # letztes gemeinsames Foto

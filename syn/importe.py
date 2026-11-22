@@ -43,6 +43,7 @@ class Contact:
     groups: list = field(default_factory=list)  # Gruppen/Räume, in denen die Person mit dir ist (→ Kreis-Vorschläge)
     note: str | None = None  # Notiz aus dem Dienst (z.B. vCard NOTE, Google, Discord, prate)
     bot: bool = False  # Bots werden nie importiert
+    description: str | None = None  # ohne Namen: Beschreibung wie „Person von Fotos“ – der Eintrag hat dann keinen Namen
 
 
 class Importer:
@@ -308,10 +309,10 @@ def apply_contacts(ctx, imp: Importer, contacts, run: Run):
                     if add_suggestion(uid, "name", eid, {"value": c.name}, src):
                         stats["suggestions"] += 1
             else:
-                name = c.name or c.handle or c.service_id
-                if not name or c.only_existing:
+                name = c.name or c.handle or (None if c.description else c.service_id)
+                if not (name or c.description) or c.only_existing:
                     continue
-                eid = model.create_entity(uid, name=name, source=src)
+                eid = model.create_entity(uid, name=name, description=None if name else c.description, source=src)
                 stats["new"] += 1
                 # Neu über diesen Dienst: „Kennengelernt über“ zeigt auf die Quelle (Handeingaben gewinnen später)
                 if "f_via" in defs:

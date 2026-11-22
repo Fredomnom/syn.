@@ -3,9 +3,9 @@ import httpx
 import pytest
 
 PEOPLE = [{"id": "imm-1", "name": "Lena Berg", "birthDate": "1994-03-02", "isHidden": False},
-          {"id": "imm-2", "name": "", "isHidden": False},                     # unbenannt → nicht importieren
-          {"id": "imm-3", "name": "Versteckt", "isHidden": True}]
-ASSETS = {"imm-1": [{"id": f"a{i}", "localDateTime": f"2026-0{1 + i % 9}-1{i % 9}T10:00:00"} for i in range(260)]}
+          {"id": "imm-2", "name": "", "isHidden": False},                     # unbenannt → Eintrag ohne Namen
+          {"id": "imm-3", "name": "Versteckt", "isHidden": True}]             # versteckt → trotzdem, wie alle
+ASSETS = {"imm-2": [{"id": "u1", "localDateTime": "2025-05-05T10:00:00"}], "imm-1": [{"id": f"a{i}", "localDateTime": f"2026-0{1 + i % 9}-1{i % 9}T10:00:00"} for i in range(260)]}
 JPEG = b"\xff\xd8\xff\xe0fakejpeg"
 
 
@@ -45,7 +45,11 @@ def test_immich_personen_und_fotos(client, immich):
     from syn.importe import run_importer
     ctx = auth.ctx_for(db.q1("SELECT * FROM users LIMIT 1"))
     status = run_importer(ctx, "immich")
-    assert "1 gelesen, 1 neu" in status, status
+    assert "3 gelesen, 3 neu" in status, status
+    alle = c.get("/api/v1/entities").json()
+    ohne = next(x for x in alle if not x["name"] and x["description"] == "Person von Fotos (1 Foto)")
+    assert c.get(f"/api/v1/entities/{ohne['id']}/photos").json()["total"] == 1
+    assert any(x["name"] == "Versteckt" for x in alle)
     lena = next(x for x in c.get("/api/v1/entities").json() if x["name"] == "Lena Berg")
     e = c.get(f"/api/v1/entities/{lena['id']}").json()
     prof = e["fields"]["f_profile"][0]["value"]
@@ -77,5 +81,5 @@ def test_immich_erkennt_vorhandene_person_am_namen(client, immich):
     from syn import auth, db
     from syn.importe import run_importer
     status = run_importer(auth.ctx_for(db.q1("SELECT * FROM users LIMIT 1")), "immich")
-    assert "0 neu, 1 erkannt" in status, status
+    assert "2 neu, 1 erkannt" in status, status
     assert c.get(f"/api/v1/entities/{vorhanden['id']}/photos").json()["total"] == 260
