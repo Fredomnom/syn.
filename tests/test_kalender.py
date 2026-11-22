@@ -44,3 +44,26 @@ def test_kalender_filter_und_neuer_link(client):
     assert c.post("/api/v1/calendars", json={"fields": [{"field": "f_phone", "repeat": "yearly"}]}).status_code == 400
     c.delete(f"/api/v1/calendars/{f['id']}")
     assert c.get(neu).status_code == 404
+
+
+def test_kalender_in_syn_vorschau_und_tag(client):
+    from datetime import date, timedelta
+    c = client
+    t = date.today()
+    in5 = t + timedelta(days=5)
+    e = c.post("/api/v1/entities", json={"name": "Mia Bald"}).json()
+    c.put(f"/api/v1/entities/{e['id']}/fields/f_bday", json={"values": [{"value": f"{in5.year - 30}-{in5:%m-%d}"}]})
+    d = c.get("/api/v1/calendar").json()
+    it = next(x for x in d["items"] if x["entity"]["id"] == e["id"])
+    assert it["date"] == in5.isoformat() and it["years"] == 30 and it["field"] == "f_bday"
+    m = c.get("/api/v1/calendar", params={"start": f"{in5:%Y-%m}-01", "end": f"{in5:%Y-%m}-28", "fields": "f_met"}).json()
+    assert not any(x["entity"]["id"] == e["id"] for x in m["items"])      # Feldauswahl greift
+    assert c.get("/api/v1/calendar", params={"start": "2020-01-01", "end": "2026-01-01"}).status_code == 400
+    # Rückblick: Fotos von diesem Tag in früheren Jahren (Immich-Verweise)
+    from syn import db
+    uid = db.val("SELECT id FROM users LIMIT 1")
+    c.put(f"/api/v1/entities/{e['id']}/fields/f_profile", json={"values": [{"value": {"service": "immich", "id": "imm-x", "handle": "Mia"}}]})
+    db.ex("INSERT INTO immich_assets(user_id, person_id, asset_id, taken_at) VALUES(?,?,?,?)", uid, "imm-x", "alt1", f"{t.year - 2}-{t:%m-%d}T15:00:00")
+    db.ex("INSERT INTO immich_assets(user_id, person_id, asset_id, taken_at) VALUES(?,?,?,?)", uid, "imm-x", "anderer-tag", f"{t.year - 2}-01-01T15:00:00" if t.month != 1 or t.day != 1 else f"{t.year - 2}-02-02T15:00:00")
+    day = c.get(f"/api/v1/calendar/day/{t.isoformat()}").json()
+    assert [p["id"] for p in day["photos"]] == ["alt1"] and day["photos"][0]["entity_id"] == e["id"] and day["photos"][0]["year"] == t.year - 2

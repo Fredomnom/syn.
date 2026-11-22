@@ -533,12 +533,25 @@ async function circlePage(main, id) {
 }
 
 // ---------------------------------------------------------------- Heute & Notizen
+// Heute + Kalender: links, was heute ansteht (Routinen); rechts Demnächst oder der Monat
 async function todayPage(main) {
-  const page = h("div.page", { style: { maxWidth: "720px" } }); main.append(page);
+  const page = h("div.page"); main.append(page);
   const m = await import("./mobile.js");
-  const inner = h("div.col.mob", { style: { minHeight: 0, background: "transparent" } });
-  page.append(inner); await m.todayPage(inner);
+  const C = await import("./calendar.js");
+  const inner = h("div.col.mob.today-col", { style: { minHeight: 0, background: "transparent" } });
+  await m.todayPage(inner, { withUpcoming: false });
   inner.querySelector(".mtop")?.remove();
+  const mode = LS("calmode", "list");
+  const calBox = h("div.col", { style: { gap: "12px" } });
+  const draw = () => (LS("calmode", "list") === "month" ? C.monthView(calBox) : C.upcoming(calBox));
+  const seg = h("div.seg", [["list", "Demnächst", "list"], ["month", "Monat", "calendar"]].map(([k, l, ic]) =>
+    h("button" + (mode === k ? ".on" : ""), { type: "button", on: { click: (e) => { SAVE("calmode", k); [...seg.children].forEach((b) => b.classList.toggle("on", b === e.currentTarget)); draw(); } } }, icon(ic), l)));
+  page.append(h("div.page-h", h("h1", "Heute"), h("span.t2", new Date().toLocaleDateString(LOCALE(), { weekday: "long", day: "numeric", month: "long" }))),
+    h("div.today-grid", h("section.col", { style: { gap: "12px", minWidth: 0 } }, inner),
+      h("section.col.cal-side", { style: { gap: "12px", minWidth: 0 } },
+        h("div.row.wrap", { style: { justifyContent: "space-between" } }, seg, h("a.btn.sm.ghost", { href: "#/settings/calendars" }, icon("calendar"), "Als Kalender abonnieren")),
+        C.fieldPicker(draw), calBox)));
+  await draw();
 }
 
 async function notesPage(main) {

@@ -111,7 +111,7 @@ def delete_feed(fid: str, ctx: Ctx = Depends(current)):
 # ---------------------------------------------------------------- iCal
 
 def _esc(s: str) -> str:
-    return str(s).replace("\\", "\\\\").replace(";", "\;").replace(",", "\\,").replace("\n", "\\n")
+    return str(s).replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace("\n", "\\n")
 
 
 def _start(raw, repeat):
@@ -184,3 +184,95 @@ def feed(token: str):
     return Response(build_ics(f["user_id"], f), media_type="text/calendar; charset=utf-8",
                     headers={"Cache-Control": "private, max-age=900",
                              "Content-Disposition": f'inline; filename="{f["id"]}.ics"'})
+
+
+# ---------------------------------------------------------------- Kalender in syn („Heute“ mit Vorschau und Monat)
+
+def _occurs(raw, start: date, end: date, yearly=True):
+    """Alle Tage zwischen start und end (einschließlich), an denen ein Datumswert fällig ist.
+    Mit Jahr und yearly=False: nur der eine Tag. Ohne Jahr oder yearly: jedes Jahr am selben Tag."""
+    y, m, d, season = date_parts(raw) if isinstance(raw, str) else (None, None, None, None)
+    if season or not (m and d):
+        return []
+    out = []
+    if not yearly:
+        if y:
+            try:
+                t = date(y, m, d)
+                if start <= t <= end:
+                    out.append((t, None))
+            except ValueError:
+                pass
+        return out
+    for yy in range(start.year, end.year + 1):
+        try:
+            t = date(yy, m, d)
+        except ValueError:          # 29.2. in Nicht-Schaltjahren → 28.2.
+            t = date(yy, 2, 28)
+        if start <= t <= end and (not y or yy >= y):
+            out.append((t, (yy - y) if y else None))
+    return out
+
+
+# Wie die Felder im Kalender erscheinen: jährlich wiederkehrend, oder nur am Tag selbst
+ONCE_FIELDS = {"f_seen"}
+
+
+def occurrences(ctx, start: date, end: date, fields=None, circles=None, max_level=None):
+    defs = _date_fields(ctx.uid)
+    want = [f for f in (fields or defs.keys()) if f in defs]
+    circles = set(circles or [])
+    out = []
+    for r in model.load_rows(ctx):
+        if r["is_self"]:
+            continue
+        if circles and not circles & set(r.get("circles_all") or []):
+            continue
+        if max_level and (r.get("level") is None or r["level"] > int(max_level)):
+            continue
+        for fid in want:
+            v = (r.get("v") or {}).get(fid)
+            if not v or not isinstance(v.get("raw"), str):
+                continue
+            for day, years in _occurs(v["raw"], start, end, yearly=fid not in ONCE_FIELDS):
+                out.append({"date": day.isoformat(), "field": fid, "field_name": defs[fid]["name"], "years": years,
+                            "raw": v["raw"], "entity": {k: r.get(k) for k in ("id", "display", "name", "avatar", "kind",
+                                                                              "main_circle_id", "level", "name_uncertain")}})
+    out.sort(key=lambda x: (x["date"], x["field"] != "f_bday", x["entity"]["display"].lower()))
+    return out
+
+
+@router.get("/api/v1/calendar")
+def calendar(start: str | None = None, end: str | None = None, days: int = 30, fields: str | None = None,
+             circles: str | None = None, max_level: int | None = None, ctx: Ctx = Depends(current)):
+    """Termine deiner Leute im Zeitraum (Standard: heute + 30 Tage). fields/circles kommagetrennt."""
+    s = date.fromisoformat(start) if start else date.today()
+    e = date.fromisoformat(end) if end else s + timedelta(days=max(0, min(days, 400)))
+    if (e - s).days > 400:
+        raise HTTPException(400, "Höchstens 400 Tage auf einmal")
+    return {"start": s.isoformat(), "end": e.isoformat(),
+            "items": occurrences(ctx, s, e, fields.split(",") if fields else None, circles.split(",") if circles else None, max_level)}
+
+
+@router.get("/api/v1/calendar/day/{day}")
+def calendar_day(day: str, ctx: Ctx = Depends(current)):
+    """Ein Tag im Rückblick: wer an diesem Tag dran ist und Fotos (Immich) von diesem Tag in früheren Jahren."""
+    d = date.fromisoformat(day)
+    items = occurrences(ctx, d, d)
+    md = f"-{d.month:02d}-{d.day:02d}"
+    rows = db.q("SELECT asset_id, person_id, taken_at FROM immich_assets WHERE user_id=? AND substr(taken_at, 5, 6)=? "
+                "AND substr(taken_at, 1, 4) < ? ORDER BY taken_at DESC LIMIT 400", ctx.uid, md, str(d.year))
+    people = {}
+    if rows:
+        for v in db.q("SELECT owner_id, value FROM field_values WHERE user_id=? AND owner_type='entity' AND field_id='f_profile'", ctx.uid):
+            val = db.jl(v["value"])
+            if isinstance(val, dict) and val.get("service") == "immich" and val.get("id"):
+                people[str(val["id"])] = v["owner_id"]
+    seen, photos = set(), []
+    for r in rows:
+        if r["asset_id"] in seen:
+            continue
+        seen.add(r["asset_id"])
+        photos.append({"id": r["asset_id"], "taken_at": r["taken_at"], "year": int(r["taken_at"][:4]),
+                       "entity_id": people.get(r["person_id"])})
+    return {"date": d.isoformat(), "items": items, "photos": photos[:120]}

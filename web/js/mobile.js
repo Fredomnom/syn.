@@ -377,11 +377,11 @@ async function mePage(page) {
 }
 
 // ---------------------------------------------------------------- Heute
-export async function todayPage(page) {
+export async function todayPage(page, { withUpcoming = true } = {}) {
   const t = await GET("/today");
   const d = new Date();
-  const reload = () => rebuild(page, todayPage);
-  page.append(h("div.mtop", h("a.back", { href: "#/" }, icon("left"), "Personen")),
+  const reload = () => rebuild(page, (p) => todayPage(p, { withUpcoming }));
+  if (withUpcoming) page.append(h("div.mtop", h("a.back", { href: "#/" }, icon("left"), "Personen")),
     h("div.small.t2", d.toLocaleDateString(LOCALE(), { weekday: "long", day: "numeric", month: "long" })), h("h1", "Heute"));
   if (!t.items.length) page.append(h("div.card.pad.empty", "Nichts Neues. Routinen melden sich hier."));
   for (const it of t.items) {
@@ -399,6 +399,12 @@ export async function todayPage(page) {
         (it.data.items || []).map((x) => h("a.prow", { href: "#/p/" + x.id }, avatar({ display: x.name, name: x.name, ...(x.row || {}) }, 32), h("div.grow", h("div.nm", x.name), h("div.sub", x.text)),
           h("button.btn.sm.icon", { title: "Heute gesehen", on: { click: async (ev) => { ev.preventDefault(); await POST(`/seen-today/${x.id}`); ev.currentTarget.classList.add("active"); } } }, icon("eye"))))));
     }
+  }
+  if (withUpcoming) {
+    const C = await import("./calendar.js");
+    const box = h("div.col", { style: { gap: "12px" } });
+    page.append(h("h2.m-sect", "Demnächst"), C.fieldPicker(() => C.upcoming(box)), box);
+    await C.upcoming(box);
   }
 }
 
