@@ -466,10 +466,16 @@ export function iconButton(value, onPick, { title = "Symbol wählen" } = {}) {
   return b;
 }
 
-export function menu(anchor, items, opts) {
-  const m = h("div.menu", items.filter(Boolean).map((it) => it.label && !it.action && !it.href ? h("div.lbl", it.label)
+// opts.stay: Funktion, die die Einträge neu liefert – dann bleibt das Menü nach einem Klick offen (z.B. Filter)
+export function menu(anchor, items, opts = {}) {
+  const build = (list) => list.filter(Boolean).map((it) => it.label && !it.action && !it.href ? h("div.lbl", it.label)
     : it.href ? h("a", { href: it.href, on: { click: closePop } }, it.icon ? icon(it.icon) : null, it.label)
-      : h("button" + (it.on ? ".on" : ""), { on: { click: () => { closePop(); it.action(); } } }, it.icon ? icon(it.icon) : null, h("span.grow", it.label), it.hint ? h("span.t3.small", it.hint) : null)));
+      : h("button" + (it.on ? ".on" : ""), { on: { click: async () => {
+        if (!opts.stay) { closePop(); return it.action(); }
+        await it.action();
+        const top = m.scrollTop; m.replaceChildren(...build(opts.stay())); m.scrollTop = top;
+      } } }, it.icon ? icon(it.icon) : null, h("span.grow", it.label), it.hint ? h("span.t3.small", it.hint) : null));
+  const m = h("div.menu", build(items));
   return popover(anchor, m, opts);
 }
 

@@ -188,9 +188,12 @@ function refreshFilterBtn() { const b = document.querySelector(".filter-btn"); i
 function sortLabel() { const k = VS.sort.replace("-", ""); return ({ name: "Name", created: "Erfasst", level: "Ring", seen: "Zuletzt gesehen", main_circle_id: "Hauptkreis", kind: "Art" })[k] || S.fields[k]?.name || k; }
 
 function filterMenu(anchor, redraw) {
-  const it = (label, key, val) => ({ label, on: VS[key] === val, action: () => { VS[key] = VS[key] === val ? "" : val; redraw(); refreshToolbar(); } });
+  menu(anchor, filterItems(redraw), { stay: () => filterItems(redraw) }); // bleibt offen, bis man daneben klickt
+}
+function filterItems(redraw) {
+  const it = (label, key, val) => ({ label, on: VS[key] === val, action: () => { VS[key] = VS[key] === val ? "" : val; redraw(); refreshFilterBtn(); } });
   const ncf = Object.keys(VS.colFilters || {}).length;
-  menu(anchor, [ncf ? { label: `Spaltenfilter entfernen (${ncf})`, icon: "x", action: () => { VS.colFilters = {}; redraw(); refreshFilterBtn(); } } : null, { label: "Zeigen" }, it("Neue Personen (noch unbearbeitet)", "filter", "new"), it("Lose (ohne Kreis)", "filter", "lose"), S.settings.use_levels ? it("Ohne Ring", "filter", "no_ring") : null, it("Mit unsicheren Angaben", "filter", "uncertain"),
+  return [ncf ? { label: `Spaltenfilter entfernen (${ncf})`, icon: "x", action: () => { VS.colFilters = {}; redraw(); refreshFilterBtn(); } } : null, { label: "Zeigen" }, it("Neue Personen (noch unbearbeitet)", "filter", "new"), it("Lose (ohne Kreis)", "filter", "lose"), S.settings.use_levels ? it("Ohne Ring", "filter", "no_ring") : null, it("Mit unsicheren Angaben", "filter", "uncertain"),
     S.settings.use_ist ? it("Nah, aber lange nicht gesehen", "filter", "long_unseen") : null,
     S.settings.use_levels ? { label: "Ring höchstens" } : null, ...(S.settings.use_levels ? [1, 2, 3, 4].map((n) => it(ringName(n), "max_level", String(n))) : []),
     { label: "Kreis" }, ...Object.values(S.circles).sort((a, b) => a.name.localeCompare(b.name)).map((c) => it(c.name, "circle", c.id)),
@@ -208,7 +211,7 @@ function filterMenu(anchor, redraw) {
       return [{ label: "Quelle" }, ...[...origins].sort((a, b) => name(a[0]).localeCompare(name(b[0]), LOCALE())).map(([o, n]) => ({
         label: name(o), icon: VS.hideSources?.includes(o) ? "x" : "check", hint: String(n),
         action: () => { const s = new Set(VS.hideSources || []); s.has(o) ? s.delete(o) : s.add(o); VS.hideSources = [...s]; redraw(); refreshFilterBtn(); } }))];
-    })()]);
+    })()];
 }
 function refreshToolbar() { /* Toolbar wird beim nächsten Rendern aktualisiert */ }
 function sortMenu(anchor, redraw) {
