@@ -1,5 +1,5 @@
 // Räumliche Ansichten: Ringe, Achsen, Netz, Kreis-Bereiche – dazu der Zeitregler.
-import { S, h, icon, GET, POST, PUT, PATCH, clear, invalidate, avatar, circleChip, nameEl, rel, ringName, menu, toast, rows, RING,
+import { S, h, icon, GET, POST, PUT, PATCH, pickPerson, clear, invalidate, avatar, circleChip, nameEl, rel, ringName, menu, toast, rows, RING,
   circleColors, kindColors, initials, daysSince, today, qs, reloadCircles, pickCircle, modal, popover, closePop, cssVar as V, loseColors } from "./core.js";
 import { VS, filterRows, newCircle } from "./desktop.js";
 import { LOCALE } from "./i18n.js";
@@ -61,15 +61,40 @@ async function timeSlider(onChange) {
 
 // ---------------------------------------------------------------- Ringe
 export async function rings(body, list0, all) {
-  const opt = Object.assign({ dist: "level", sector: "kind", pets: true }, LS("ringopt", {}));
+  const opt = Object.assign({ dist: "level", sector: "kind", pets: true, center: "" }, LS("ringopt", {}));
   let at = null, data = list0;
+  // Mitte: du (Ringe = deine Bünde) oder eine andere Person (Ringe = ihre Bünde zu anderen)
+  let centerRow = null, cbunds = {};
+  const loadCenter = async () => {
+    centerRow = opt.center ? (all || list0).find((r) => r.id === opt.center) : null;
+    if (opt.center && !centerRow) { opt.center = ""; SAVE("ringopt", opt); }
+    cbunds = {};
+    if (centerRow) for (const b of await GET("/bunds" + qs({ entity_id: centerRow.id }))) cbunds[b.a_id === centerRow.id ? b.b_id : b.a_id] = b;
+  };
+  await loadCenter();
+  const setCenter = async (id) => { opt.center = id || ""; SAVE("ringopt", opt); await loadCenter(); draw(); };
+  // Ring zwischen der Mitte und r setzen (bei dir: dein Ring; sonst der Bund der beiden, wird bei Bedarf angelegt)
+  const setLevel = async (r, level) => {
+    if (!centerRow || r.is_self) return setRing(centerRow && r.is_self ? centerRow.id : r.id, level);
+    let b = cbunds[r.id];
+    if (!b) { if (level == null) return; b = await POST("/bunds", { a_id: centerRow.id, b_id: r.id }); cbunds[r.id] = b; }
+    await PUT(`/bunds/${b.id}/fields/f_level`, { values: level == null ? [] : [{ value: level }] });
+    b.values = { ...(b.values || {}), f_level: level };
+  };
   const vizBox = h("div.viz", { style: { height: "calc(100vh - 230px)", minHeight: "460px" } });
   const side = h("div.col.rs-side", { style: { gap: "16px" } });
   const wrap = h("div.col", { style: { gap: 0 } }, vizBox, await timeSlider(async (d) => { at = d; data = d ? filterRows(await GET("/entities" + qs({ at: d }))) : list0; draw(); }));
   body.append(h("div.split", wrap, side));
   const draw = () => {
-    const list = data.filter((r) => !r.is_self && (opt.pets || r.kind !== "pet"));
-    const lvl = (r) => (opt.dist === "ist" ? r.ist?.ring : r.level);
+    const cid = centerRow?.id;
+    // bei anderer Mitte: du bist eine der Personen (dein Ring zu ihr), die Mitte selbst nicht
+    const list = data.filter((r) => (cid ? r.id !== cid : !r.is_self) && (opt.pets || r.kind !== "pet"));
+    if (cid && !list.some((r) => r.is_self)) { const me = (all || []).find((r) => r.is_self); if (me) list.push(me); }
+    const lvl = (r) => {
+      if (!cid) return opt.dist === "ist" ? r.ist?.ring : r.level;
+      if (r.is_self) return centerRow.level ?? null;
+      const v = cbunds[r.id]?.values?.f_level; return v == null ? null : +v;
+    };
     const placed = list.filter((r) => lvl(r) != null), unplaced = list.filter((r) => lvl(r) == null);
     const W = 760, Hh = 760, cx = W / 2, cy = Hh / 2, R = 330, R0 = 62, band = (R - R0) / 4;
     const rad = (i) => R0 + band * i;
@@ -118,7 +143,7 @@ export async function rings(body, list0, all) {
     });
     const nodes = s("g");
     for (const r of placed) nodes.append(node(r, r._x, r._y, 21, { approx: at && r.approx_created }));
-    svg.append(nodes, node({ is_self: true, display: "Du" }, cx, cy, 26));
+    svg.append(nodes, cid ? node(centerRow, cx, cy, 26) : node({ is_self: true, display: "Du" }, cx, cy, 26));
     clear(vizBox, svg);
     // Ziehen: Abstand = Ring, Sektor = Kreis-Art des Hauptkreises
     let drag = null;
@@ -140,17 +165,25 @@ export async function rings(body, list0, all) {
       const level = dist > R ? null : Math.min(4, Math.max(1, Math.ceil((dist - R0) / band)));
       let ang = Math.atan2(p.y - cy, p.x - cx); if (ang < -Math.PI / 2) ang += Math.PI * 2;
       const sec = sectors.find((x) => ang >= x.a0 && ang < x.a1);
-      if (opt.dist === "level" && level !== r.level) { await setRing(r.id, level); r.level = level; toast(`${r.display}: ${level ? ringName(level) : "ohne Ring"}`); }
+      if ((opt.dist === "level" || cid) && level !== lvl(r)) {
+        await setLevel(r, level);
+        if (!cid) r.level = level; else if (r.is_self) centerRow.level = level;
+        toast(`${r.is_self ? "Du" : r.display}${cid ? " ↔ " + centerRow.display : ""}: ${level ? ringName(level) : "ohne Ring"}`);
+      }
       invalidate(); draw();
-      if (sec && dist <= R && sec.k !== keyOf(r) && sec.k !== "_lose" && opt.sector !== "via") { await moveSector(r, sec.k); invalidate(); draw(); }
+      if (!r.is_self && sec && dist <= R && sec.k !== keyOf(r) && sec.k !== "_lose" && opt.sector !== "via") { await moveSector(r, sec.k); invalidate(); draw(); }
     };
     svg.addEventListener("dragover", (e) => e.preventDefault());
-    svg.addEventListener("drop", async (e) => { e.preventDefault(); const id = e.dataTransfer.getData("text/syn-id"); const r = list.find((x) => x.id === id); if (r) { r.level = null; await dropAt(r, svgPoint(svg, e)); } });
+    svg.addEventListener("drop", async (e) => { e.preventDefault(); const id = e.dataTransfer.getData("text/syn-id"); const r = list.find((x) => x.id === id); if (r) { if (!cid) r.level = null; await dropAt(r, svgPoint(svg, e)); } });
     // Seitenleiste: oben die Ansicht, darunter „Ohne Ring“ – nur diese Liste scrollt
     clear(side,
       h("div.card", h("div.card-h", h("h3", "Ansicht")), h("div.card-b.col",
-        h("div.row.between", h("span", "Mitte"), h("span.chip.plain", "Du")),
-        h("div.row.between", h("span", "Abstand"), h("select.input", { style: { height: "28px" }, on: { change: (e) => { opt.dist = e.target.value; SAVE("ringopt", opt); draw(); } } },
+        h("div.row.between", h("span", "Mitte"), h("div.row", { style: { gap: "6px" } },
+          h("button.chip.plain.rs-center", { title: "Andere Person in die Mitte stellen", on: { click: (ev) => pickPerson(ev.currentTarget, { allowNew: false, onPick: (r) => setCenter(r.is_self ? "" : r.id) }) } },
+            cid ? avatar(centerRow, 18) : null, cid ? centerRow.display : "Du", " ▾"),
+          cid ? h("button.btn.sm.ghost.icon", { title: "Zurück zu dir", on: { click: () => setCenter("") } }, icon("x")) : null)),
+        cid ? h("p.tiny.t2", { style: { margin: 0 } }, `Ringe zeigen die Bünde von ${centerRow.display} zu anderen. Ziehen setzt den Ring dieses Bunds (und legt ihn bei Bedarf an).`) : null,
+        cid ? null : h("div.row.between", h("span", "Abstand"), h("select.input", { style: { height: "28px" }, on: { change: (e) => { opt.dist = e.target.value; SAVE("ringopt", opt); draw(); } } },
           h("option", { value: "level", selected: opt.dist === "level" }, "Ring"), S.settings.use_ist ? h("option", { value: "ist", selected: opt.dist === "ist" }, "Ist (berechnet)") : null)),
         h("div.row.between", h("span", "Sektoren"), h("select.input", { style: { height: "28px" }, on: { change: (e) => { opt.sector = e.target.value; SAVE("ringopt", opt); draw(); } } },
           h("option", { value: "kind", selected: opt.sector === "kind" }, "Kreis-Art"), h("option", { value: "circle", selected: opt.sector === "circle" }, "Hauptkreis"),
