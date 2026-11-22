@@ -98,6 +98,12 @@ CREATE TABLE IF NOT EXISTS contact_signals(
   user_id TEXT NOT NULL, entity_id TEXT NOT NULL, source TEXT NOT NULL, kind TEXT NOT NULL, at TEXT,
   PRIMARY KEY(entity_id, source, kind)
 );
+-- Pflege-Links: eine Person prüft ihre eigenen Kontaktdaten, Änderungen kommen als Vorschläge
+CREATE TABLE IF NOT EXISTS update_links(
+  id TEXT PRIMARY KEY, user_id TEXT NOT NULL, entity_id TEXT NOT NULL, token TEXT NOT NULL UNIQUE,
+  fields TEXT NOT NULL DEFAULT '[]', created_at TEXT, expires_at TEXT, revoked_at TEXT, last_used_at TEXT,
+  answers INTEGER DEFAULT 0
+);
 -- Kalender-Feeds (iCal): Datumsfelder von Kontakten als abonnierbarer Kalender, Adresse mit geheimem Token
 CREATE TABLE IF NOT EXISTS cal_feeds(
   id TEXT PRIMARY KEY, user_id TEXT NOT NULL, name TEXT NOT NULL, token TEXT NOT NULL UNIQUE,

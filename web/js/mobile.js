@@ -241,6 +241,7 @@ async function profile(page, id) {
   const more = (ev) => menu(ev.currentTarget, [
     { label: "Bearbeiten", icon: "edit", action: async () => { if (await editPerson(e)) reload(); } },
     { label: "Feld hinzufügen", icon: "plus", action: () => addField(e, { onDone: reload }) },
+      e.is_self ? null : { label: "Angaben prüfen lassen …", icon: "link", action: async () => { await (await import("./shared.js")).updateLinkDialog(e); reload(); } },
     e.is_self ? null : { label: "Zusammenführen mit …", icon: "merge", action: () => pickPerson(ev.target, { exclude: [id], allowNew: false, onPick: (r) => (location.hash = `#/merge/${id}/${r.id}`) }) },
     e.is_self ? null : { label: e.on_phone ? "Nicht mehr mit Handy synchronisieren" : "Mit Handy synchronisieren", icon: "smartphone", action: async () => { await PATCH("/entities/" + id, { on_phone: !e.on_phone }); invalidate(); reload(); } },
     e.is_self ? null : { label: "Person löschen", icon: "trash", action: () => deletePerson(e) },

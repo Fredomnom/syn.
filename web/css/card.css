@@ -55,3 +55,18 @@ a.vk-row:hover { background: var(--bg); }
 }
 .vk-me:not(:has(.vk-rows)):not(:has(.vk-save)) { padding-bottom: 0; }
 .vk-me:not(:has(.vk-rows)):not(:has(.vk-save)) .vk-head { border-radius: 24px; padding-bottom: 32px; }
+/* Pflege-Link: eigene Angaben prüfen */
+.up-field { display: flex; flex-direction: column; gap: 6px; }
+.up-label { font-weight: 600; font-size: 13px; color: var(--text2); }
+.up-list { display: flex; flex-direction: column; gap: 8px; }
+.up-row { display: flex; flex-direction: column; gap: 6px; }
+.up-edit { display: flex; gap: 6px; align-items: flex-start; }
+.up-edit > :first-child { flex: 1; min-width: 0; }
+.up-row.gone .up-edit > :first-child { opacity: .45; text-decoration: line-through; pointer-events: none; }
+.up-comment { display: none; font-size: 13px; }
+.up-comment.show { display: block; }
+.up-addr { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.up-addr input[data-k="street"] { grid-column: 1 / -1; }
+.up-note { font-size: 12px; color: var(--text3); text-align: center; margin: 4px 0 0; }
+.vk-update .vk-card { max-width: 560px; }
+.up-edit .vk-x { width: 44px; height: 44px; flex: none; }

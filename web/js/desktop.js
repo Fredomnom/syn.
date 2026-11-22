@@ -321,6 +321,7 @@ async function personPage(main, id) {
       { label: "Bearbeiten", icon: "edit", action: async () => { if (await editPerson(e)) reload(); } },
       { label: "Feld hinzufügen", icon: "plus", action: () => addField(e, { onDone: reload }) },
       e.is_self || !S.settings.use_levels ? null : { label: "In den Ringen in die Mitte", icon: "rings", action: () => { const o = LS("ringopt", {}); SAVE("ringopt", { ...o, center: id }); location.hash = "#/people/rings"; } },
+      e.is_self ? null : { label: "Angaben prüfen lassen …", icon: "link", action: async () => { await (await import("./shared.js")).updateLinkDialog(e); reload(); } },
       e.is_self ? null : { label: "Zusammenführen mit …", icon: "merge", action: () => pickPerson(ev.target, { exclude: [id], allowNew: false, onPick: (r) => (location.hash = `#/merge/${id}/${r.id}`) }) },
       e.is_self ? null : { label: e.on_phone ? "Nicht mehr mit Handy synchronisieren" : "Mit Handy synchronisieren", icon: "smartphone", action: async () => { await PATCH("/entities/" + id, { on_phone: !e.on_phone }); reload(); } },
       e.is_self ? null : { label: "Person löschen", icon: "trash", action: () => deletePerson(e) },

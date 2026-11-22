@@ -294,3 +294,40 @@ export function historyText(ev) {
   if (ev.new === null || ev.new === undefined) return `${ev.label} entfernt (${v(ev.old)})`;
   return `${ev.label}: ${v(ev.old)} → ${v(ev.new)}`;
 }
+
+// Pflege-Link: die Person prüft ihre eigenen Kontaktdaten, Änderungen kommen als Vorschläge zurück
+export async function updateLinkDialog(e) {
+  const { GET: get, POST: post, DEL: del, toast: t, modal: md } = await import("./core.js");
+  const box = h("div.col", { style: { gap: "14px" } });
+  const draw = async () => {
+    const st = await get(`/entities/${e.id}/update-link`);
+    const l = st.link?.active ? st.link : null;
+    if (l) {
+      const url = location.origin + l.path;
+      const days = Math.max(0, Math.ceil((new Date(l.expires_at) - new Date()) / 86400000));
+      const copy = async () => { try { await navigator.clipboard.writeText(url); t("Link kopiert"); } catch (_) { t(url); } };
+      clear(box,
+        h("p.small.t2", `${e.display || e.name} sieht über diesen Link nur die freigegebenen Kontaktdaten – nie Ring, Kreise, Notizen oder Bünde. Änderungen kommen als Vorschläge zu dir.`),
+        h("div.card-link", h("div.card-link-url", icon("link"), h("span.mono", url.replace(/^https?:\/\//, ""))),
+          h("div.row.wrap", h("button.btn.sm.primary", { on: { click: copy } }, icon("copy"), "Link kopieren"),
+            navigator.share ? h("button.btn.sm", { on: { click: () => navigator.share({ title: "Deine Angaben", text: "Magst du kurz prüfen, ob deine Kontaktdaten noch stimmen?", url }).catch(() => {}) } }, icon("ext"), "Teilen") : null,
+            h("button.btn.sm", { on: { click: async () => { const { qrDialog } = await import("./qr.js"); qrDialog("Angaben prüfen", url, { hint: "Zum Scannen für die Person." }); } } }, icon("qr"), "QR-Code"))),
+        h("div.small.t2", `Gilt noch ${days} ${days === 1 ? "Tag" : "Tage"}` + (l.answers ? ` · ${l.answers}× beantwortet` : " · noch nicht beantwortet")),
+        h("div.small.t3", "Freigegeben: " + l.fields.map((f) => S.fields[f]?.name || f).join(", ")),
+        h("div.row.wrap", h("button.btn.sm", { on: { click: async () => { await post(`/entities/${e.id}/update-link`, { fields: l.fields }); t("Neuer Link – der alte gilt nicht mehr"); draw(); } } }, icon("refresh"), "Neuer Link"),
+          h("button.btn.sm.danger", { on: { click: async () => { await del(`/update-links/${l.id}`); t("Link zurückgezogen"); draw(); } } }, icon("x"), "Zurückziehen")));
+    } else {
+      const sel = new Set(st.default.filter((f) => st.available.some((a) => a.id === f)));
+      const chips = h("div.sugg");
+      const drawChips = () => clear(chips, st.available.map((a) => h("span.chip" + (sel.has(a.id) ? ".sel" : ".plain"), { on: { click: () => { sel.has(a.id) ? sel.delete(a.id) : sel.add(a.id); drawChips(); } } }, sel.has(a.id) ? icon("check", "xs") : null, a.name)));
+      drawChips();
+      clear(box,
+        h("p.small.t2", `Schick ${e.display || e.name} einen Link, um die eigenen Kontaktdaten zu prüfen und zu ergänzen. Nichts wird direkt geändert – alles kommt als Vorschlag zu dir. Der Link gilt ${st.days} Tage.`),
+        h("div.small.t2", "Was die Person sehen und ändern darf:"), chips,
+        st.link && !st.link.active ? h("div.small.t3", st.link.revoked ? "Der letzte Link wurde zurückgezogen." : "Der letzte Link ist abgelaufen.") : null,
+        h("button.btn.primary", { style: { alignSelf: "flex-start" }, on: { click: async () => { if (!sel.size) return t("Mindestens ein Feld wählen", { err: true }); await post(`/entities/${e.id}/update-link`, { fields: [...sel] }); draw(); } } }, icon("link"), "Link erstellen"));
+    }
+  };
+  await draw();
+  return md("Angaben prüfen lassen", box, []);
+}

@@ -176,7 +176,13 @@ def accept(sid: str, ctx: Ctx = Depends(current)):
         if s["kind"] == "field":
             d = model.fdef(ctx.uid, p["field"])
             ot, oid = model.owner_for(ctx.uid, s["entity_id"], d)
-            if p.get("replace_value") is not None and d["multi"]:
+            if p.get("deprecate_value") and d["multi"]:
+                vals = model.get_values(ot, oid).get(d["id"], [])
+                for v in vals:
+                    if v["value"] == p["value"]:
+                        v["deprecated"] = True
+                model.set_values(ctx.uid, ot, oid, d, vals)
+            elif p.get("replace_value") is not None and d["multi"]:
                 vals = model.get_values(ot, oid).get(d["id"], [])
                 for v in vals:
                     if v["value"] == p["replace_value"]:
