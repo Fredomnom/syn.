@@ -20,7 +20,7 @@ export const DEFAULT_HIDE = ["card"];
 export const VS = { hideSources: DEFAULT_HIDE, view: LS("view", "table"), filter: "", kind: "all", q: "", sort: "name", circle: "", max_level: "", columns: null, savedId: null, cfg: {} };
 
 let lastPath = null, lastPlace = null;
-const SET_ORDER = ["account", "appearance", "shortcuts", "fields", "circle-kinds", "bund-kinds", "rings", "routines", "importers", "suggestions", "sync", "tokens", "modules", "admin"];
+const SET_ORDER = ["account", "appearance", "shortcuts", "fields", "circle-kinds", "bund-kinds", "rings", "routines", "importers", "suggestions", "sync", "calendars", "tokens", "modules", "admin"];
 // Position einer Seite innerhalb ihrer Leiste (für die Richtung der Übergänge)
 function place(route) {
   const [p0, p1] = route.parts;

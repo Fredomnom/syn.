@@ -17,7 +17,7 @@ const NAV = [
     ["bund-kinds", "Bund-Arten", "bund", "Arten von Beziehungen und ihre Rollen"], ["rings", "Ringe & Ist", "rings", "Ringe benennen, „Ist“ berechnen"]]],
   ["Automatisierung", [["routines", "Routinen", "zap", "Erinnerungen, Webhooks und Schnellaktionen"], ["importers", "Importe", "download", "Leute aus Diensten und Dateien holen"],
     ["suggestions", "Vorschläge", "merge", "Offene Vorschläge aus Importen und Daten"]]],
-  ["Verbindungen", [["sync", "Handy & Sync", "smartphone", "Wer aufs Handy kommt, CardDAV und Google"], ["tokens", "API-Tokens", "link", "Zugänge für Skripte, n8n und Home Assistant"]]],
+  ["Verbindungen", [["sync", "Handy & Sync", "smartphone", "Wer aufs Handy kommt, CardDAV und Google"], ["calendars", "Kalender", "calendar", "Geburtstage und andere Daten zum Abonnieren"], ["tokens", "API-Tokens", "link", "Zugänge für Skripte, n8n und Home Assistant"]]],
   ["System", [["modules", "Module & Daten", "layers", "Notizen-Modul, Export und API"], ["admin", "Konten", "users", "Konten anlegen und verwalten (Admin)"]]],
 ];
 const ALL = NAV.flatMap(([, items]) => items);
@@ -38,7 +38,7 @@ export async function settingsPage(main, tab, route) {
     items.filter(([k]) => visible(k)).map(([k, l, ic]) => h("a.set-item" + (k === tab ? ".on" : ""), { href: "#/settings/" + k }, h("span.set-ic", icon(ic)), l)))));
   const head = h("div.set-head", mobile ? h("a.back", { href: "#/settings" }, icon("left"), "Einstellungen") : null, h("h1", cur[1]), h("p.t2", cur[3]));
   page.append(h("div.set-layout", nav, h("div.set-main.slide-zone", head, body)));
-  const fn = { card: cardTab, fields, "circle-kinds": circleKinds, "bund-kinds": bundKinds, rings: ringsTab, routines, importers, sync, suggestions, modules, shortcuts, account, appearance, tokens, admin }[tab] || account;
+  const fn = { calendars, card: cardTab, fields, "circle-kinds": circleKinds, "bund-kinds": bundKinds, rings: ringsTab, routines, importers, sync, suggestions, modules, shortcuts, account, appearance, tokens, admin }[tab] || account;
   await fn(body, route);
 }
 const reloadTab = (body, fn, route) => rebuild(body, (b) => fn(b, route));
@@ -419,6 +419,51 @@ async function googleCard() {
       h("button.btn.sm", { on: { click: async (e) => { e.target.disabled = true; const r = await POST("/google/sync"); toast(r.status, { err: r.status.startsWith("Fehler") }); e.target.disabled = false; } } }, icon("refresh"), "Jetzt synchronisieren"),
       h("button.btn.sm.ghost.danger", { on: { click: async () => { if (await confirmDlg("Google trennen?", "Die Verbindung und die Zuordnungen werden gelöscht. Kontakte in Google bleiben.", "Trennen", true)) { await DEL("/google"); location.reload(); } } } }, "Trennen")) : null,
     g.last_sync ? h("div.small.t3", `Zuletzt ${fmtTs(g.last_sync)}: ${g.last_status} · ${g.mapped} Kontakte in Google`) : null);
+}
+
+// ---------------------------------------------------------------- Kalender (iCal-Feeds)
+const REPEAT = [["yearly", "jährlich"], ["monthly", "monatlich"], ["once", "einmalig"]];
+async function calendars(body) {
+  const feeds = await GET("/calendars");
+  const dateFields = S.fieldList.filter((f) => f.type === "date" && f.scope !== "kreis");
+  const reload = () => reloadTab(body, calendars);
+  const feedCard = (f) => {
+    const url = location.origin + f.path;
+    const webcal = url.replace(/^https?:/, "webcal:");
+    const save = async (patch) => { try { Object.assign(f, await api("PATCH", "/calendars/" + f.id, patch, { quiet: true })); toast("Gespeichert"); } catch (e) { toast(e.message, { err: true }); } };
+    const fieldsBox = h("div.col.cal-fields");
+    const drawFields = () => clear(fieldsBox, dateFields.map((d) => {
+      const cur = f.fields.find((x) => x.field === d.id);
+      const set = (repeat) => { f.fields = f.fields.filter((x) => x.field !== d.id); if (repeat) f.fields.push({ field: d.id, repeat }); save({ fields: f.fields }); drawFields(); };
+      return h("div.cal-field", h("label.check.grow", h("input", { type: "checkbox", checked: !!cur, on: { change: (e) => set(e.target.checked ? "yearly" : null) } }), d.name,
+        d.scope === "bund" ? h("span.tiny.t3", " (Ihr zwei)") : null),
+        cur ? h("div.seg.sm", REPEAT.map(([k, l]) => h("button" + (cur.repeat === k ? ".on" : ""), { type: "button", on: { click: () => set(k) } }, l))) : null);
+    }));
+    drawFields();
+    const circleSel = h("select.input", { multiple: true, size: Math.min(6, Math.max(3, Object.keys(S.circles).length)), on: { change: (e) => save({ circles: [...e.target.selectedOptions].map((o) => o.value) }) } },
+      Object.values(S.circles).sort((a, b) => a.name.localeCompare(b.name, LOCALE())).map((c) => h("option", { value: c.id, selected: f.circles.includes(c.id) }, c.name)));
+    const ringSel = h("select.input", { on: { change: (e) => save({ max_level: e.target.value ? +e.target.value : null }) } },
+      h("option", { value: "" }, "alle Ringe"), [1, 2, 3, 4].map((n) => h("option", { value: n, selected: f.max_level === n }, `bis ${n} · ${RING()[n]}`)));
+    const name = h("input.input", { value: f.name, on: { change: (e) => save({ name: e.target.value }) } });
+    const copy = async (t) => { try { await navigator.clipboard.writeText(t); toast("Kopiert"); } catch (_) { toast(t); } };
+    return panel(f.name,
+      srow("Name", null, name),
+      srow("Adresse zum Abonnieren", "Google Kalender: „Über URL hinzufügen“. Apple/Thunderbird: Abonnement. Android: ICSx⁵. Wer die Adresse kennt, sieht den Kalender.",
+        h("div.row.wrap", h("button.btn.sm.primary", { on: { click: () => copy(url) } }, icon("copy"), "Adresse kopieren"),
+          h("a.btn.sm", { href: webcal }, icon("calendar"), "Abonnieren"),
+          h("button.btn.sm", { on: { click: async () => { const { qrDialog } = await import("./qr.js"); qrDialog(f.name, url, { hint: "Mit dem Handy scannen und in der Kalender-App abonnieren." }); } } }, icon("qr"), "QR-Code"))),
+      h("div.srow-full", h("div.small.t2", { style: { margin: "4px 0 8px" } }, "Welche Daten, und wie oft sie wiederkehren:"), fieldsBox),
+      srow("Nur Personen in diesen Kreisen", "Nichts gewählt = alle.", circleSel),
+      S.settings.use_levels ? srow("Nur bis Ring", null, ringSel) : null,
+      srow("Haustiere", null, sw(f.with_pets, (v) => save({ with_pets: v }))),
+      srow("", null, h("div.row.wrap",
+        h("button.btn.sm", { on: { click: async () => { if (await confirmDlg("Neue Adresse?", "Die alte Adresse funktioniert dann nicht mehr – überall neu abonnieren.", "Neue Adresse")) { await POST(`/calendars/${f.id}/new-link`); reload(); } } } }, icon("refresh"), "Neue Adresse"),
+        h("button.btn.sm.danger", { on: { click: async () => { if (await confirmDlg("Kalender löschen?", f.name, "Löschen", true)) { await DEL("/calendars/" + f.id); reload(); } } } }, icon("trash"), "Löschen"))));
+  };
+  body.append(
+    panel("", srow("Kalender zum Abonnieren", "Geburtstage, Jahrestage, „Kennengelernt“ … aus syn in deinem Kalender. Der Kalender aktualisiert sich selbst (alle paar Stunden).",
+      h("button.btn.primary", { on: { click: async () => { await POST("/calendars", { name: feeds.length ? "Neuer Kalender" : "Geburtstage", fields: [{ field: "f_bday", repeat: "yearly" }] }); reload(); } } }, icon("plus"), "Kalender anlegen"))),
+    ...feeds.map(feedCard));
 }
 
 // ---------------------------------------------------------------- Vorschläge

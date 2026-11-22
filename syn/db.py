@@ -98,6 +98,11 @@ CREATE TABLE IF NOT EXISTS contact_signals(
   user_id TEXT NOT NULL, entity_id TEXT NOT NULL, source TEXT NOT NULL, kind TEXT NOT NULL, at TEXT,
   PRIMARY KEY(entity_id, source, kind)
 );
+-- Kalender-Feeds (iCal): Datumsfelder von Kontakten als abonnierbarer Kalender, Adresse mit geheimem Token
+CREATE TABLE IF NOT EXISTS cal_feeds(
+  id TEXT PRIMARY KEY, user_id TEXT NOT NULL, name TEXT NOT NULL, token TEXT NOT NULL UNIQUE,
+  config TEXT NOT NULL DEFAULT '{}', created_at TEXT, updated_at TEXT
+);
 -- Fotos aus Immich: nur Verweise (Person in Immich → Foto), die Bilder bleiben in Immich
 CREATE TABLE IF NOT EXISTS immich_assets(
   user_id TEXT NOT NULL, person_id TEXT NOT NULL, asset_id TEXT NOT NULL, taken_at TEXT,

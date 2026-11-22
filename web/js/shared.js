@@ -178,7 +178,7 @@ export function dupHint(e, { desktop = false, onChange } = {}) {
   return h("div.hint", icon("eye"),
     h("div.grow", h("b", "Vielleicht schon bekannt? "), `„${d.other_name}“ – ${d.reasons.join(", ")}.`,
       h("div.row.wrap", { style: { marginTop: "8px" } },
-        desktop ? h("a.btn.sm.dark", { href: `#/merge/${d.other_id}/${e.id}` }, icon("merge"), "Zusammenführen") : h("span.small.t2", "Am Desktop prüfen und zusammenführen."),
+        h("a.btn.sm.dark", { href: `#/merge/${d.other_id}/${e.id}` }, icon("merge"), "Zusammenführen"),
         h("a.btn.sm", { href: "#/p/" + d.other_id }, "Ansehen"),
         h("button.btn.sm", { on: { click: async () => { await POST("/duplicates/distinct", { a: d.a, b: d.b }); toast("Als verschiedene Personen markiert"); onChange?.(); } } }, "Verschiedene Personen"),
         h("button.btn.sm.ghost", { on: { click: async () => { await POST("/duplicates/later", { a: d.a, b: d.b }); onChange?.(); } } }, "Später"))));

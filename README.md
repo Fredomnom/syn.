@@ -73,6 +73,8 @@ Settings → Sync so contacts on your phone carry a link to the person's page.
 - **Photos from Immich:** connect Immich under Settings → Imports. Every person from Immich's face recognition (unnamed ones as entries without a name)
   appears in syn, with a banner, a gallery and a slideshow on hover. The photos stay in Immich; syn shows them through
   itself, so the browser never needs access to Immich.
+- **Calendar feeds:** Settings → Calendars. Pick date fields (birthday, anniversary, “met” …) and repeat each
+  once, monthly or yearly; optionally only certain circles or rings. Subscribe by URL in Google, Apple, Thunderbird or ICSx⁵.
 - **Business card:** a short link like `/@you` (and a QR code) – whoever opens it sees what you share and can send their details back.
 
 ## API
