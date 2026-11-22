@@ -42,6 +42,8 @@ class Immich(Importer):
          "help": "So, wie syn Immich erreicht, z.B. http://192.168.178.76:2283"},
         {"key": "api_key", "label": "API-Schlüssel", "type": "secret", "required": True,
          "help": "Immich → Kontoeinstellungen → API-Schlüssel"},
+        {"key": "min_photos", "label": "Personen ohne Namen erst ab … Fotos", "type": "number", "placeholder": "1",
+         "help": "1 = alle. Mit 3 bleiben Zufallsgesichter (nur ein, zwei Fotos) draußen. Benannte Personen kommen immer."},
     ]
 
     def fetch(self, cfg, run):
@@ -59,8 +61,17 @@ class Immich(Importer):
         run.log(f"{len(people)} Personen, davon {named} mit Namen")
         out, total_assets = [], 0
         run.progress(done=0, total=len(people), phase="Fotos zuordnen")
+        try:
+            min_photos = max(1, int(cfg.get("min_photos") or 1))
+        except ValueError:
+            min_photos = 1
+        skipped = 0
         for i, p in enumerate(people):
             assets = self._assets(run, base, h, p["id"])
+            if not (p.get("name") or "").strip() and len(assets) < min_photos:
+                skipped += 1  # unbenannt und zu wenige Fotos: eher ein Zufallsgesicht
+                run.progress(done=i + 1)
+                continue
             total_assets += len(assets)
             self._store(run.ctx.uid, p["id"], assets)
             name = (p.get("name") or "").strip() or None
@@ -72,7 +83,7 @@ class Immich(Importer):
                 seen=assets[0][1][:10] if assets and assets[0][1] else None,  # letztes gemeinsames Foto
             ))
             run.progress(done=i + 1)
-        run.log(f"{total_assets} Fotos zugeordnet")
+        run.log(f"{total_assets} Fotos zugeordnet" + (f", {skipped} unbenannte Personen mit weniger als {min_photos} Fotos übersprungen" if skipped else ""))
         return out
 
     @staticmethod

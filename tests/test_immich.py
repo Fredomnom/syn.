@@ -83,3 +83,14 @@ def test_immich_erkennt_vorhandene_person_am_namen(client, immich):
     status = run_importer(auth.ctx_for(db.q1("SELECT * FROM users LIMIT 1")), "immich")
     assert "2 neu, 1 erkannt" in status, status
     assert c.get(f"/api/v1/entities/{vorhanden['id']}/photos").json()["total"] == 260
+
+
+def test_immich_untergrenze_fuer_unbenannte(client, immich):
+    c = client
+    c.put("/api/v1/importers/immich", json={"config": {"url": "http://immich.local:2283", "api_key": "geheim", "min_photos": "3"}, "enabled": True})
+    from syn import auth, db
+    from syn.importe import run_importer
+    status = run_importer(auth.ctx_for(db.q1("SELECT * FROM users LIMIT 1")), "immich")
+    # imm-2 (unbenannt, 1 Foto) bleibt draußen; benannte kommen auch mit 0 Fotos („Versteckt“)
+    assert "2 gelesen, 2 neu" in status, status
+    assert not any((x["description"] or "").startswith("Person von Fotos") for x in c.get("/api/v1/entities").json())
