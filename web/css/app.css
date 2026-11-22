@@ -1324,15 +1324,15 @@ a.so-stat:hover { border-color: var(--ink); transform: translateY(-1px); }
 .lb-cap { font-size: 13px; }
 @media (max-width: 700px) { .lb-stage { padding: 12px 8px 4px; } .lb-nav { display: none; } }
 /* Diashow im Hover-Popup: gleitet langsam (Ken Burns) und blendet über */
-.pc-banner { position: relative; height: 140px; margin: -18px -18px -6px; border-radius: 22px 22px 0 0; overflow: hidden; transform: translateZ(0); }
-/* Verlauf in die Karte als darübergelegte Fläche – keine Maske, kein opacity am Behälter (beides rechnet jedes Bild neu) */
-.pc-banner::after { content: ""; position: absolute; inset: 0; z-index: 2; pointer-events: none;
-  background: linear-gradient(to bottom, transparent 35%, color-mix(in srgb, var(--white) 55%, transparent) 72%, color-mix(in srgb, var(--white) 92%, transparent) 100%); }
+.pc-banner { position: relative; height: 140px; margin: -18px -18px -6px; border-radius: 22px 22px 0 0; overflow: hidden;
+  /* echter Verlauf ins Durchsichtige (die Karte ist leicht transparent) – als eigene GPU-Ebene, damit es nicht ruckelt */
+  -webkit-mask-image: linear-gradient(to bottom, #000 40%, rgba(0,0,0,.6) 70%, transparent 100%); mask-image: linear-gradient(to bottom, #000 40%, rgba(0,0,0,.6) 70%, transparent 100%);
+  will-change: transform; transform: translateZ(0); }
 .ss-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center 28%; opacity: 0;
-  transform: translate3d(0, 0, 0) scale(1.1); will-change: transform, opacity; backface-visibility: hidden;
+  transform: translate3d(0, 0, 0) scale(1.1) rotate(.02deg); will-change: transform, opacity; backface-visibility: hidden;
   transition: opacity 1.8s ease; animation: ss-pan var(--dur, 4.8s) cubic-bezier(.35, 0, .65, 1) forwards; }
 .ss-img.in { opacity: .85; } /* etwas transparenter */
-@keyframes ss-pan { from { transform: translate3d(calc(var(--dx) * -1), calc(var(--dy) * -1), 0) scale(1.1); } to { transform: translate3d(var(--dx), var(--dy), 0) scale(1.03); } }
+@keyframes ss-pan { from { transform: translate3d(calc(var(--dx) * -1), calc(var(--dy) * -1), 0) scale(1.1) rotate(.02deg); } to { transform: translate3d(var(--dx), var(--dy), 0) scale(1.03) rotate(.02deg); } }
 syn-personcard.with-banner .pc-head { margin-top: -36px; position: relative; z-index: 1; }
 syn-personcard.with-banner .pc-head .av { box-shadow: 0 0 0 4px var(--white); }
 /* Handy */
@@ -1355,3 +1355,28 @@ syn-personcard.with-banner .pc-head .av { box-shadow: 0 0 0 4px var(--white); }
 .cal-field { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 6px 0; border-bottom: 1px solid var(--line); }
 .cal-field:last-child { border-bottom: 0; }
 .seg.sm button { height: 26px; padding: 0 10px; font-size: 12px; }
+/* Heute + Kalender */
+.today-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 24px; align-items: start; }
+@media (max-width: 1100px) { .today-grid { grid-template-columns: minmax(0, 1fr); } }
+.today-col.mob { padding: 0; }
+.cal-day { display: flex; flex-direction: column; gap: 6px; }
+.cal-day-h { display: flex; align-items: baseline; gap: 8px; border: 0; background: none; padding: 0 4px; color: inherit; font: inherit; cursor: pointer; text-align: left; }
+.cal-day-h b { font: 600 15px var(--f-head); }
+.cal-day-h:hover b { text-decoration: underline; text-decoration-color: var(--yellow); text-underline-offset: 3px; }
+.cal-day .list { background: var(--white); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.cal-pick .chip { cursor: pointer; }
+.cal-head { display: flex; align-items: center; gap: 6px; }
+.cal-head h3 { min-width: 170px; text-align: center; text-transform: capitalize; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.cal-wd { font-size: 11px; font-weight: 600; color: var(--text3); text-transform: uppercase; padding: 2px 6px; }
+.cal-cell { min-height: 92px; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 6px; border: 1px solid var(--line); border-radius: 10px; background: var(--white); color: inherit; font: inherit; cursor: pointer; text-align: left; min-width: 0; transition: border-color .12s; }
+.cal-cell:hover { border-color: var(--ink); }
+.cal-cell.other { opacity: .45; }
+.cal-cell.today { border-color: var(--yellow); box-shadow: inset 0 0 0 1px var(--yellow); }
+.cal-num { font: 600 13px var(--f-head); }
+.cal-cell.today .cal-num { background: var(--yellow); color: var(--on-yellow); border-radius: 999px; padding: 0 7px; }
+.cal-avs { display: flex; flex-wrap: wrap; gap: 2px; align-items: center; }
+.cal-more { font-size: 11px; color: var(--text2); padding-left: 2px; }
+.cal-one { font-size: 11.5px; color: var(--text2); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal-sub { font-size: 15px; margin-top: 4px; }
+.mob .m-sect { font-size: 18px; margin-top: 10px; }
