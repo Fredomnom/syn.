@@ -22,6 +22,7 @@ export function photoBanner(data) {
   const pick = pool[Math.floor(Math.random() * pool.length)];
   const img = h("img", { src: photoUrl(pick.id, "preview"), alt: "", loading: "eager", decoding: "async" });
   img.addEventListener("load", () => img.classList.add("in"));
+  img.addEventListener("error", () => img.closest(".ph-banner")?.remove()); // Foto nicht (mehr) in Immich
   return h("button.ph-banner", { type: "button", title: "Foto groß zeigen", on: { click: () => lightbox(data, data.items.indexOf(pick)) } }, img);
 }
 
@@ -36,11 +37,12 @@ export function photoGallery(data, { profileUrl } = {}) {
     next.forEach((it, j) => {
       const img = h("img", { src: photoUrl(it.id), alt: "", loading: "lazy", decoding: "async" });
       img.addEventListener("load", () => img.classList.add("in"));
+      img.addEventListener("error", () => img.closest(".ph-cell")?.remove());
       grid.append(h("button.ph-cell", { type: "button", title: fmtDay(it.taken_at), on: { click: () => lightbox(data, shown - next.length + j) } }, img));
     });
     shown += next.length;
     more.textContent = `Mehr zeigen (${data.items.length - shown})`;
-    more.hidden = shown >= data.items.length;
+    more.style.display = shown >= data.items.length ? "none" : ""; // .btn setzt display, „hidden“ greift dort nicht
   };
   add(24);
   return h("div.card.ph-card",
@@ -92,6 +94,7 @@ export function slideshow(box, items, { every = 2800 } = {}) {
     im.style.setProperty("--dy", (Math.random() * 8 - 4).toFixed(1) + "%");
     im.style.setProperty("--dur", every * 1.6 + "ms");
     im.addEventListener("load", () => { if (!stop) im.classList.add("in"); });
+    im.addEventListener("error", () => im.remove());
     box.append(im);
     const old = [...box.querySelectorAll(".ss-img")].slice(0, -2); old.forEach((o) => o.remove());
     if (items.length > 1) new Image().src = photoUrl(items[(i + 1) % items.length].id, "preview");
