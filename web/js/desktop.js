@@ -107,9 +107,9 @@ async function sidebar(route) {
       });
       return a; })(),
     nav("#/circles", "circles", "Kreise", Object.keys(S.circles).length, ["circles", "c"].includes(p0)),
+    nav("#/today", "bell", "Heute", t.items.length || undefined, p0 === "today"),
     S.settings.notes_enabled ? nav("#/notes", "note", "Notizen", undefined, p0 === "notes")
       : h("a.nav", { href: "#/settings/modules", title: "Notizen" }, icon("note"), h("span.lab.t3", "Notizen"), h("span.n.tag", "Modul aus")),
-    nav("#/today", "bell", "Heute", t.items.length || undefined, p0 === "today"),
     h("div.sect", "Gespeicherte Ansichten"),
     S.views.map((v) => h("a.view" + (route.parts[1] === v.id ? ".on" : ""), { href: "#/v/" + v.id }, h("span.ellipsis", v.name),
       v.view === "duplicates" ? null : null)),
