@@ -117,16 +117,16 @@ export function preload(id, size = "preview") {
   return im.decode().then(() => im, () => null);
 }
 
-export function slideshow(box, items, { every = 2800, data } = {}) {
+export function slideshow(box, items, { every = 5000, data } = {}) {
   if (!items?.length) return () => {};
   let i = 0, stop = false, t = null;
   const layer = async (it) => {
     const ready = await preload(it.id);
     if (stop || !ready) return;
     const im = h("img.ss-img", { src: ready.src, alt: "" });
-    im.style.setProperty("--dx", (Math.random() * 8 - 4).toFixed(1) + "%");
-    im.style.setProperty("--dy", (Math.random() * 6 - 3).toFixed(1) + "%");
-    im.style.setProperty("--dur", every * 1.7 + "ms");
+    im.style.setProperty("--dx", (Math.random() * 4 - 2).toFixed(1) + "%");
+    im.style.setProperty("--dy", (Math.random() * 3 - 1.5).toFixed(1) + "%");
+    im.style.setProperty("--dur", every * 1.8 + "ms");
     aimAtFace(im, data, it);
     box.append(im);
     requestAnimationFrame(() => requestAnimationFrame(() => im.classList.add("in")));

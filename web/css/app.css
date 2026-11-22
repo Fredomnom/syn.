@@ -1329,10 +1329,10 @@ a.so-stat:hover { border-color: var(--ink); transform: translateY(-1px); }
 .pc-banner::after { content: ""; position: absolute; inset: 0; z-index: 2; pointer-events: none;
   background: linear-gradient(to bottom, transparent 35%, color-mix(in srgb, var(--white) 55%, transparent) 72%, color-mix(in srgb, var(--white) 92%, transparent) 100%); }
 .ss-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center 28%; opacity: 0;
-  transform: translate3d(0, 0, 0) scale(1.16); will-change: transform, opacity; backface-visibility: hidden;
-  transition: opacity 1.1s ease; animation: ss-pan var(--dur, 4.8s) cubic-bezier(.35, 0, .65, 1) forwards; }
+  transform: translate3d(0, 0, 0) scale(1.1); will-change: transform, opacity; backface-visibility: hidden;
+  transition: opacity 1.8s ease; animation: ss-pan var(--dur, 4.8s) cubic-bezier(.35, 0, .65, 1) forwards; }
 .ss-img.in { opacity: .85; } /* etwas transparenter */
-@keyframes ss-pan { from { transform: translate3d(calc(var(--dx) * -1), calc(var(--dy) * -1), 0) scale(1.16); } to { transform: translate3d(var(--dx), var(--dy), 0) scale(1.05); } }
+@keyframes ss-pan { from { transform: translate3d(calc(var(--dx) * -1), calc(var(--dy) * -1), 0) scale(1.1); } to { transform: translate3d(var(--dx), var(--dy), 0) scale(1.03); } }
 syn-personcard.with-banner .pc-head { margin-top: -36px; position: relative; z-index: 1; }
 syn-personcard.with-banner .pc-head .av { box-shadow: 0 0 0 4px var(--white); }
 /* Handy */
