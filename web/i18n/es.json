@@ -1362,5 +1362,14 @@
 "vor {} Jahr kennengelernt": "os conocisteis hace {} año",
 "{}. Jahrestag": "{}.º aniversario",
 "{} · vor {} Jahren": "{} · hace {} años",
-"{} · vor {} Jahr": "{} · hace {} año"
+"{} · vor {} Jahr": "{} · hace {} año",
+"Frühere Treffen (ohne Datum)": "Encuentros anteriores (sin fecha)",
+"Heutiges Datum zur Liste hinzufügen (z.B. Treffen)": "Añadir la fecha de hoy a la lista (p. ej. encuentros)",
+"vor {} Jahren getroffen": "os visteis hace {} años",
+"vor {} Jahr getroffen": "os visteis hace {} año",
+"vor {} Jahren gesehen": "visto hace {} años",
+"vor {} Jahr gesehen": "visto hace {} año",
+"Gemeinsame Kreise, aber noch kein Bund. Antippen, um einen Bund anzulegen.": "Círculos en común pero aún sin vínculo. Toca para crear un vínculo.",
+"Bund anlegen …": "Crear vínculo …",
+"Profil öffnen": "Abrir perfil"
 }

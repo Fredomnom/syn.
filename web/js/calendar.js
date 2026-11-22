@@ -19,12 +19,22 @@ function dayLabel(s, today = iso(new Date())) {
   return d.toLocaleDateString(LOCALE(), { weekday: diff > 0 && diff < 7 ? "long" : "short", day: "numeric", month: "long" });
 }
 
+// Symbol unten rechts am Profilbild: welche Art Datum
+const KIND_ICON = { f_bday: "cake", f_anniv: "calendar", f_met: "handshake", f_meet: "coffee", f_seen: "eye" };
+export function avBadge(it, size) {
+  const ic = KIND_ICON[it.field] || "calendar";
+  const real = Math.round(size * 1.4); // Profilbilder sind in syn bewusst 1,4-mal so groß
+  return h("span.cal-avb" + (it.field === "f_bday" ? ".bday" : ""), { style: { "--bs": real + "px" }, title: it.field_name }, avatar(it.entity, size), h("span.cal-badge", icon(ic)));
+}
+
 // „wird 32“, „5. Jahrestag“, „vor 3 Jahren kennengelernt“ …
 export function whatText(it, past = false) {
   const n = it.years;
   if (it.field === "f_bday") return n != null ? (past ? `wurde ${n}` : n === 0 ? "geboren" : `wird ${n}`) : "Geburtstag";
   if (it.field === "f_met") return n ? `vor ${n} ${n === 1 ? "Jahr" : "Jahren"} kennengelernt` : "Kennengelernt";
   if (it.field === "f_anniv") return n ? `${n}. Jahrestag` : "Jahrestag";
+  if (it.field === "f_meet") return n ? `vor ${n} ${n === 1 ? "Jahr" : "Jahren"} getroffen` : "Treffen";
+  if (it.field === "f_seen") return n ? `vor ${n} ${n === 1 ? "Jahr" : "Jahren"} gesehen` : "Zuletzt gesehen";
   return n ? `${it.field_name} · ${n} ${n === 1 ? "Jahr" : "Jahre"}` : it.field_name;
 }
 
@@ -57,8 +67,8 @@ export async function upcoming(box, { days = 30 } = {}) {
   clear(box, [...byDay].map(([day, items]) => h("div.cal-day",
     h("button.cal-day-h", { type: "button", title: "Tag im Rückblick", on: { click: () => dayDialog(day) } },
       h("b", dayLabel(day)), h("span.t3.small", parse(day).toLocaleDateString(LOCALE(), { day: "numeric", month: "numeric" }))),
-    h("div.list", items.map((it) => h("a.prow", { href: "#/p/" + it.entity.id }, avatar(it.entity, 36),
-      h("div.grow", h("div.nm", nameEl(it.entity)), h("div.sub", it.field === "f_bday" ? icon("gift", "xs") : icon("calendar", "xs"), whatText(it))),
+    h("div.list", items.map((it) => h("a.prow", { href: "#/p/" + it.entity.id }, avBadge(it, 36),
+      h("div.grow", h("div.nm", nameEl(it.entity)), h("div.sub", whatText(it))),
       icon("right")))))));
 }
 
@@ -82,7 +92,7 @@ export async function monthView(box, { onNav } = {}) {
       return h("button.cal-cell" + (day.getMonth() !== cur.getMonth() ? ".other" : "") + (k === today ? ".today" : "") + (items.length ? ".has" : ""),
         { type: "button", on: { click: () => dayDialog(k) } },
         h("span.cal-num", day.getDate()),
-        h("div.cal-avs", items.slice(0, 4).map((it) => h("span.cal-av", { title: `${it.entity.display} · ${whatText(it)}` }, avatar(it.entity, 26))),
+        h("div.cal-avs", items.slice(0, 4).map((it) => h("span.cal-av", { title: `${it.entity.display} · ${whatText(it)}` }, avBadge(it, 26))),
           items.length > 4 ? h("span.cal-more", `+${items.length - 4}`) : null),
         items.length === 1 ? h("span.cal-one", items[0].entity.display.split(" ")[0]) : null);
     });
@@ -108,7 +118,7 @@ export async function dayDialog(day) {
   const all = { items: d.photos, immich: null };
   const body = h("div.col", { style: { gap: "14px" } },
     d.items.length ? h("div.list", d.items.map((it) => h("a.prow", { href: "#/p/" + it.entity.id, on: { click: () => document.querySelector(".backdrop:not(.leaving)")?._close(null) } },
-      avatar(it.entity, 36), h("div.grow", h("div.nm", nameEl(it.entity)), h("div.sub", whatText(it, past)))))) : h("p.small.t2", "An diesem Tag steht bei niemandem etwas an."),
+      avBadge(it, 36), h("div.grow", h("div.nm", nameEl(it.entity)), h("div.sub", whatText(it, past)))))) : h("p.small.t2", "An diesem Tag steht bei niemandem etwas an."),
     d.photos.length ? [h("h3.cal-sub", "An diesem Tag in früheren Jahren"),
       ...[...byYear].map(([y, ps]) => h("div.col", { style: { gap: "6px" } },
         h("div.small.t2", `${y} · vor ${parse(day).getFullYear() - y} ${parse(day).getFullYear() - y === 1 ? "Jahr" : "Jahren"}`),

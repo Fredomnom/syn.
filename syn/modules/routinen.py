@@ -17,7 +17,7 @@ router = APIRouter(prefix="/api/v1", tags=["Routinen"])
 log = logging.getLogger("syn.routinen")
 
 TRIGGERS = ("date", "schedule", "manual")
-ACTIONS = ("set_today", "increment", "set_value", "webhook", "card", "list", "import", "google_sync")
+ACTIONS = ("set_today", "add_today", "increment", "set_value", "webhook", "card", "list", "import", "google_sync")
 OPS = ("<=", "<", ">=", ">", "=", "!=", "contains", "in", "not_in", "empty", "not_empty", "days_since_gt",
        "days_since_lt", "is_true", "is_false")
 WEEKDAYS = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"]
@@ -54,6 +54,8 @@ def validate(ctx, body: dict):
     for a in body.get("actions") or []:
         if a.get("type") not in ACTIONS:
             raise Bad(f"Aktion {a.get('type')} unbekannt")
+        if a["type"] == "add_today" and (a.get("field") not in defs or defs[a["field"]]["type"] != "date"):
+            raise Bad("„Datum hinzufügen“ braucht ein Datumsfeld")
         if a["type"] in ("set_today", "increment", "set_value") and a.get("field") not in defs:
             raise Bad(f"Aktion {a['type']}: Feld-ID {a.get('field')} unbekannt")
         if a["type"] == "set_today" and defs[a["field"]]["type"] != "date":
@@ -288,7 +290,11 @@ def run_actions(ctx, routine, rows, on: date, source=None) -> list[str]:
     per_person = routine["trigger"]["type"] != "schedule"
     for a in routine["actions"]:
         t = a["type"]
-        if t in ("set_today", "increment", "set_value"):
+        if t == "add_today":
+            for r in rows:
+                model.add_entity_date(ctx.uid, r["id"], a["field"], on.isoformat(), src)
+            res.append(f"{t}: {len(rows)}")
+        elif t in ("set_today", "increment", "set_value"):
             for r in rows:
                 if t == "set_today":
                     model.set_entity_field(ctx.uid, r["id"], a["field"], on.isoformat(), src)

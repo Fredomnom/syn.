@@ -34,7 +34,8 @@ def test_woche(client):
 
     # 2. Mittwoch: Heute gesehen, Name nachtragen (unsicher), Alias bleibt, Auswahlfeld, Duplikat-Hinweis
     r = c.post(f"/api/v1/seen-today/{typ['id']}").json()
-    assert r["entity"]["fields"]["f_meet"][0]["value"] == 2
+    # Treffen ist eine Liste von Daten – derselbe Tag zählt nur einmal
+    assert [v["value"] for v in r["entity"]["fields"]["f_meet"]] == [today()]
     e = c.patch(f"/api/v1/entities/{typ['id']}", json={"name": "Kai", "name_uncertain": True}).json()
     assert "Typ aus dem Fitnessstudio" in e["aliases"] and e["description"] is None
     e = c.patch(f"/api/v1/entities/{typ['id']}/fields/f_train", json={"value": ["Mittwoch"]}).json()
@@ -398,3 +399,38 @@ def test_merge_uebernimmt_buende(client):
     bs = [x for x in c.get("/api/v1/bunds", params={"entity_id": ohne["id"]}).json() if dritte["id"] in (x["a_id"], x["b_id"])]
     assert len(bs) == 1 and bs[0]["kind_id"] == kinds[1], bs
     assert bs[0]["values"].get("f_anniv") == "2020-05-01"
+
+
+
+def test_treffen_als_liste_und_umstellung(client):
+    """Alte Treffen-Zahlen werden zu „Frühere Treffen (ohne Datum)“, „Zuletzt gesehen“ wird ein echtes Treffen."""
+    c = client
+    from syn import db, seed
+    e = c.post("/api/v1/entities", json={"name": "Altdaten Anna"}).json()
+    c.put(f"/api/v1/entities/{e['id']}/fields/f_seen", json={"values": [{"value": "2025-04-01"}]})
+    uid = db.val("SELECT id FROM users LIMIT 1")
+    # Zustand wie vor der Umstellung herstellen: Feld ist eine Zahl, Wert 7, Routine zählt hoch
+    db.ex("UPDATE field_defs SET type='number', multi=0 WHERE user_id=? AND id='f_meet'", uid)
+    db.ex("DELETE FROM field_defs WHERE user_id=? AND id='f_meet_prev'", uid)
+    db.insert("field_values", {"id": "v_alt", "user_id": uid, "owner_type": "entity", "owner_id": e["id"], "field_id": "f_meet",
+                               "value": "7", "is_primary": 1, "deprecated": 0, "uncertain": 0, "source": "manual", "recorded_at": "2025-01-01", "position": 0})
+    db.ex("UPDATE routines SET actions=? WHERE user_id=? AND name='+1 Treffen'", '[{"type":"increment","field":"f_meet","by":1}]', uid)
+    db.ex("DELETE FROM instance WHERE key='meet_dates_v1'")
+    seed.backfill_meet_dates()
+    from syn.auth import ctx_for
+    from syn import model
+    model.invalidate_defs(uid) if hasattr(model, "invalidate_defs") else None
+    got = c.get(f"/api/v1/entities/{e['id']}").json()["fields"]
+    assert [v["value"] for v in got["f_meet"]] == ["2025-04-01"]
+    assert got["f_meet_prev"][0]["value"] == 6
+    acts = c.get("/api/v1/routines").json()
+    plus = next(r for r in acts if r["name"] == "+1 Treffen")
+    assert plus["actions"] == [{"type": "add_today", "field": "f_meet"}]
+    # „+1 Treffen“ fügt heute hinzu, zweimal am selben Tag nur einmal
+    c.post(f"/api/v1/routines/{plus['id']}/run", params={"entity_id": e["id"]})
+    c.post(f"/api/v1/routines/{plus['id']}/run", params={"entity_id": e["id"]})
+    got = c.get(f"/api/v1/entities/{e['id']}").json()["fields"]
+    assert sorted(v["value"] for v in got["f_meet"]) == ["2025-04-01", today()]
+    # Treffen erscheint im Kalender, und „vor 1 Jahr getroffen“ im Rückblick
+    day = c.get("/api/v1/calendar/day/2026-04-01").json()
+    assert any(it["field"] == "f_meet" and it["years"] == 1 for it in day["items"])

@@ -154,7 +154,7 @@ async function ringsTab(body) {
 // ---------------------------------------------------------------- Routinen
 const SPECIAL = [["f_level", "Ring · Bund mit dir"], ["ist", "Ist (berechnet)"], ["kind", "Art"], ["circle", "Kreis"], ["circle_kind", "Kreis-Art"], ["lose", "Lose"], ["name_unknown", "Name unbekannt"], ["on_phone", "Mit Handy synchronisiert"]];
 const OPS = [["<=", "≤"], ["<", "<"], [">=", "≥"], [">", ">"], ["=", "="], ["!=", "≠"], ["contains", "enthält"], ["in", "ist einer von"], ["not_in", "ist keiner von"], ["empty", "ist leer"], ["not_empty", "ist gesetzt"], ["days_since_gt", "vor mehr als … Tagen"], ["days_since_lt", "vor weniger als … Tagen"], ["is_true", "ist wahr"], ["is_false", "ist falsch"]];
-const ACTS = [["webhook", "Webhook"], ["card", "In syn anzeigen: Karte unter „Heute“"], ["list", "In syn anzeigen: Liste unter „Heute“"], ["set_today", "Feld auf heute setzen"], ["increment", "Zahl erhöhen (+1)"], ["set_value", "Feld auf Wert setzen"], ["import", "Import ausführen"], ["google_sync", "Google-Sync ausführen"]];
+const ACTS = [["webhook", "Webhook"], ["card", "In syn anzeigen: Karte unter „Heute“"], ["list", "In syn anzeigen: Liste unter „Heute“"], ["set_today", "Feld auf heute setzen"], ["add_today", "Heutiges Datum zur Liste hinzufügen (z.B. Treffen)"], ["increment", "Zahl erhöhen (+1)"], ["set_value", "Feld auf Wert setzen"], ["import", "Import ausführen"], ["google_sync", "Google-Sync ausführen"]];
 const WD = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"];
 
 async function routines(body, route) {
@@ -214,7 +214,7 @@ async function routines(body, route) {
             h("input.input.mono.grow", { value: a.url || "", placeholder: "https://n8n.home.lan/webhook/…", on: { input: (e) => (a.url = e.target.value) } })] : null,
           ["card", "list"].includes(a.type) ? h("input.input.grow", { value: a.title || "", placeholder: a.type === "card" ? "{name} hat Geburtstag" : "Lange nicht gesehen", on: { input: (e) => (a.title = e.target.value) } }) : null,
           a.type === "card" ? h("input.input.grow", { value: a.text || "", placeholder: "{alter}", on: { input: (e) => (a.text = e.target.value) } }) : null,
-          ["set_today", "increment", "set_value"].includes(a.type) ? fieldSel(a.field, (f) => (a.type === "set_today" ? f.type === "date" : a.type === "increment" ? f.type === "number" : f.scope !== "kreis"), (v) => (a.field = v)) : null,
+          ["set_today", "add_today", "increment", "set_value"].includes(a.type) ? fieldSel(a.field, (f) => (a.type === "set_today" || a.type === "add_today" ? f.type === "date" : a.type === "increment" ? f.type === "number" : f.scope !== "kreis"), (v) => (a.field = v)) : null,
           a.type === "set_value" ? h("input.input", { value: a.value ?? "", placeholder: "Wert", on: { input: (e) => (a.value = e.target.value) } }) : null,
           a.type === "import" ? h("input.input.mono", { value: a.importer || "", placeholder: "Importer-ID", on: { input: (e) => (a.importer = e.target.value) } }) : null,
           h("button.btn.sm.ghost.icon", { on: { click: () => { r.actions.splice(i, 1); draw(); } } }, icon("x"))),

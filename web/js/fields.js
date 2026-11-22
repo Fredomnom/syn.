@@ -325,12 +325,12 @@ export function fieldSections(e, reload, { mobile = false } = {}) {
   for (const [g, title] of GROUPS) {
     const rows = [];
     for (const d of defs.filter((x) => groupOf(x) === g && has(x))) {
-      if (d.id === "f_meet" && has(S.fields.f_seen || {})) continue; // Treffen steht bei „Zuletzt gesehen“
+      if (d.id === "f_meet_prev") continue; // zählt bei „N Treffen“ mit
       let extra = null;
-      if (d.id === "f_seen" && (e.fields.f_meet || []).length) {
-        const meet = primaryOf(e.fields.f_meet);
+      const meetN = (e.fields.f_meet || []).filter((v) => !v.deprecated).length + Number(primaryOf(e.fields.f_meet_prev)?.value || 0);
+      if (d.id === "f_seen" && meetN) {
         const md = S.fields.f_meet;
-        extra = h("span.fr-meet", `${meet?.value ?? 0} Treffen`,
+        extra = h("span.fr-meet", `${meetN} Treffen`,
           md?.quick_routine_id && !e.is_self ? h("button.btn.sm.icon.fr-btn.show", { title: "+1 Treffen", on: { click: async (ev) => { ev.stopPropagation(); await runQuick(e.id, md.quick_routine_id); reload(); } } }, icon("plus")) : null);
       }
       rows.push(fieldRow(d, e.fields[d.id], `/entities/${e.id}/fields/${d.id}`, e, reload, { extra }));

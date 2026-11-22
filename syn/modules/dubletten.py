@@ -315,7 +315,7 @@ def plan_merge(ctx, a_id, b_id):
             if fid in ("f_seen",) or d["options"].get("newer_wins", fid != "f_bday"):
                 if da and db_ and da != db_:
                     auto, why = ("a" if da > db_ else "b"), "neueres Datum gewinnt"
-        elif d["type"] == "number" and fid == "f_meet" and pa and pb:
+        elif d["type"] == "number" and fid == "f_meet_prev" and pa and pb:
             auto, why = "sum", "Zähler werden addiert"
         return {"field": fid, "name": d["name"], "type": d["type"], "a": xa, "b": xb, "auto": auto, "why": why,
                 "owner": "bund" if d["scope"] == "bund" else "entity", "multi": bool(d["multi"])}

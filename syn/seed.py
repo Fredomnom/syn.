@@ -84,6 +84,43 @@ def seed_circles(uid):
                               "description": None, "created_at": t, "updated_at": t})
 
 
+def backfill_meet_dates():
+    """Einmalig: „Treffen“ war eine Zahl, jetzt eine Liste von Daten. Die alte Zahl bleibt als „Frühere Treffen
+    (ohne Datum)“ erhalten; war „Zuletzt gesehen“ gesetzt, wird dieses Datum gleich ein echtes Treffen."""
+    if db.val("SELECT value FROM instance WHERE key='meet_dates_v1'"):
+        return
+    with db.tx():
+        for u in db.q("SELECT id FROM users"):
+            uid = u["id"]
+            d = db.q1("SELECT * FROM field_defs WHERE user_id=? AND id='f_meet'", uid)
+            if not d:
+                continue
+            if not db.val("SELECT 1 FROM field_defs WHERE user_id=? AND id='f_meet_prev'", uid):
+                pos = db.val("SELECT COALESCE(MAX(position), 0) + 1 FROM field_defs WHERE user_id=?", uid)
+                db.insert("field_defs", {"user_id": uid, "id": "f_meet_prev", "scope": d["scope"], "name": "Frühere Treffen (ohne Datum)",
+                                         "type": "number", "options": "{}", "multi": 0, "position": pos, "is_base": 1})
+            if d["type"] == "number":
+                for v in db.q("SELECT * FROM field_values WHERE user_id=? AND field_id='f_meet'", uid):
+                    n = int(float(db.jl(v["value"]) or 0))
+                    seen = db.val("SELECT value FROM field_values WHERE owner_type=? AND owner_id=? AND field_id='f_seen' "
+                                  "AND deprecated=0 ORDER BY is_primary DESC LIMIT 1", v["owner_type"], v["owner_id"])
+                    db.ex("DELETE FROM field_values WHERE id=?", v["id"])
+                    if seen and n > 0:
+                        db.insert("field_values", {**{k: v[k] for k in v if k not in ("id", "value", "label")},
+                                                   "id": new_id("v", 10), "value": seen, "label": None, "is_primary": 1})
+                        n -= 1
+                    if n > 0:
+                        db.insert("field_values", {**{k: v[k] for k in v if k not in ("id", "value", "field_id", "label")},
+                                                   "id": new_id("v", 10), "field_id": "f_meet_prev", "value": db.jd(n), "label": None})
+                db.ex("UPDATE field_defs SET type='date', multi=1 WHERE user_id=? AND id='f_meet'", uid)
+            for r in db.q("SELECT id, actions FROM routines WHERE user_id=?", uid):
+                acts = db.jl(r["actions"], []) or []
+                new = [({"type": "add_today", "field": "f_meet"} if a.get("type") == "increment" and a.get("field") == "f_meet" else a) for a in acts]
+                if new != acts:
+                    db.ex("UPDATE routines SET actions=? WHERE id=?", db.jd(new), r["id"])
+        db.ex("INSERT OR REPLACE INTO instance(key,value) VALUES('meet_dates_v1', ?)", now())
+
+
 def backfill_new_services():
     """Neue mitgelieferte Dienste (z.B. VRChat) auch in schon gespeicherte Dienstlisten aufnehmen – jeden nur einmal,
     damit ein gelöschter Dienst nicht wiederkommt."""
@@ -156,7 +193,8 @@ BUND_KINDS = [
 # (id, scope, name, type, options, multi)
 FIELDS = [
     ("f_seen", "both", "Zuletzt gesehen", "date", {}, 0),
-    ("f_meet", "both", "Treffen", "number", {}, 0),
+    ("f_meet", "both", "Treffen", "date", {}, 1),          # jedes Treffen mit Datum → erscheint im Kalender
+    ("f_meet_prev", "both", "Frühere Treffen (ohne Datum)", "number", {}, 0),
     ("f_bday", "both", "Geburtstag", "date", {}, 0),
     ("f_phone", "person", "Telefon", "phone", {"labels": ["privat", "Arbeit", "Uni"]}, 1),
     ("f_email", "person", "E-Mail", "email", {"labels": ["privat", "Arbeit", "Uni"]}, 1),
@@ -208,9 +246,9 @@ def seed_user(uid: str, display_name: str = "Ich"):
     r_meet = new_id("r")
     routines = [
         (r_seen, "Heute gesehen", {"type": "manual", "label": "Heute gesehen", "icon": "eye"}, [],
-         [{"type": "set_today", "field": "f_seen"}, {"type": "increment", "field": "f_meet", "by": 1}], None),
+         [{"type": "set_today", "field": "f_seen"}, {"type": "add_today", "field": "f_meet"}], None),
         (r_meet, "+1 Treffen", {"type": "manual", "label": "+1", "icon": "plus"}, [],
-         [{"type": "increment", "field": "f_meet", "by": 1}], None),
+         [{"type": "add_today", "field": "f_meet"}], None),
         (new_id("r"), "Geburtstag enger Leute",
          {"type": "date", "field": "f_bday", "repeat": "yearly", "without_year": True, "feb29": "feb28",
           "offset_days": 0, "time": "08:00"},

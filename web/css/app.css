@@ -1381,3 +1381,9 @@ syn-personcard.with-banner .pc-head .av { box-shadow: 0 0 0 4px var(--white); }
 .cal-sub { font-size: 15px; margin-top: 4px; }
 .mob .m-sect { font-size: 18px; margin-top: 10px; }
 .knows-av { border: 0; padding: 0; background: none; border-radius: 50%; cursor: pointer; transition: transform .12s; } .knows-av:hover { transform: scale(1.1); }
+/* Kalender: Symbol für die Art des Datums unten rechts am Profilbild */
+.cal-avb { position: relative; display: inline-flex; flex: none; width: var(--bs); height: var(--bs); }
+.cal-badge { position: absolute; right: -3px; bottom: -3px; width: calc(var(--bs) * .5); height: calc(var(--bs) * .5); min-width: 14px; min-height: 14px;
+  border-radius: 50%; background: var(--white); color: var(--ink); display: grid; place-items: center; box-shadow: 0 0 0 2px var(--white); border: 1px solid var(--line-strong); }
+.cal-badge svg.i { width: 70%; height: 70%; stroke-width: 2.2; }
+.cal-avb.bday .cal-badge { background: var(--yellow); color: var(--on-yellow); border-color: var(--yellow-line); }

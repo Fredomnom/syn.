@@ -38,6 +38,38 @@ def _date_fields(uid):
     return {d["id"]: d for d in db.q("SELECT * FROM field_defs WHERE user_id=? AND type='date'", uid)}
 
 
+def _multi_dates(uid, defs):
+    """(Eintrag, Feld) → alle Daten, für Mehrfach-Datumsfelder wie „Treffen“ (sonst zählt nur der Hauptwert)."""
+    multi = [fid for fid, d in defs.items() if d["multi"]]
+    out = {}
+    if not multi:
+        return out
+    selfb = {}
+    for b in db.q("SELECT id, a_id, b_id FROM bunds WHERE user_id=?", uid):
+        selfb[b["id"]] = b
+    me = model.self_id(uid)
+    q = ",".join("?" * len(multi))
+    for v in db.q(f"SELECT owner_type, owner_id, field_id, value FROM field_values WHERE user_id=? AND deprecated=0 AND field_id IN ({q})", uid, *multi):
+        eid = v["owner_id"]
+        if v["owner_type"] == "bund":
+            b = selfb.get(eid)
+            if not b or me not in (b["a_id"], b["b_id"]):
+                continue
+            eid = b["b_id"] if b["a_id"] == me else b["a_id"]
+        raw = db.jl(v["value"])
+        if isinstance(raw, str):
+            out.setdefault((eid, v["field_id"]), []).append(raw)
+    return out
+
+
+def _raws(r, fid, multi):
+    """Alle Datumswerte eines Feldes für diese Person."""
+    if (r["id"], fid) in multi:
+        return multi[(r["id"], fid)]
+    v = (r.get("v") or {}).get(fid)
+    return [v["raw"]] if v and isinstance(v.get("raw"), str) else []
+
+
 def _out(f, base=""):
     cfg = db.jl(f["config"], {}) or {}
     return {"id": f["id"], "name": f["name"], "fields": cfg.get("fields", []), "circles": cfg.get("circles", []),
@@ -143,6 +175,7 @@ def build_ics(uid, f) -> str:
     stamp = now().replace("-", "").replace(":", "")[:15] + "Z"
     lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//syn//Kontaktbuch//DE", "CALSCALE:GREGORIAN", "METHOD:PUBLISH",
              f"X-WR-CALNAME:{_esc(f['name'])}", "X-PUBLISHED-TTL:PT6H", "REFRESH-INTERVAL;VALUE=DURATION:PT6H"]
+    multi = _multi_dates(uid, defs)
     for r in model.load_rows(ctx):
         if r["is_self"] or (r["kind"] == "pet" and not cfg.get("with_pets", True)):
             continue
@@ -152,19 +185,19 @@ def build_ics(uid, f) -> str:
             continue
         name = r["display"]
         for s in sel:
-            v = (r.get("v") or {}).get(s["field"])
-            start = _start(v.get("raw") if v else None, s["repeat"])
+          for raw in _raws(r, s["field"], multi):
+            start = _start(raw, s["repeat"])
             if not start:
                 continue
             d = defs[s["field"]]
-            y = date_parts(v["raw"])[0]
+            y = date_parts(raw)[0]
             title = f"{name} – {d['name']}"
-            desc = [f"{d['name']}: {v.get('d') or v['raw']}"]
+            desc = [f"{d['name']}: {raw}"]
             if y and s["repeat"] == "yearly":
                 desc.append(f"seit {y}")
             if host:
                 desc.append(f"{host}/#/p/{r['id']}")
-            lines += ["BEGIN:VEVENT", f"UID:{r['id']}-{s['field']}-{s['repeat']}@syn", f"DTSTAMP:{stamp}",
+            lines += ["BEGIN:VEVENT", f"UID:{r['id']}-{s['field']}-{s['repeat']}-{start:%Y%m%d}@syn", f"DTSTAMP:{stamp}",
                       f"DTSTART;VALUE=DATE:{start:%Y%m%d}", f"DTEND;VALUE=DATE:{start + timedelta(days=1):%Y%m%d}",
                       f"SUMMARY:{_esc(title)}", f"DESCRIPTION:{_esc(chr(10).join(desc))}", "TRANSP:TRANSPARENT"]
             if s["repeat"] in REPEAT_RULE:
@@ -215,11 +248,13 @@ def _occurs(raw, start: date, end: date, yearly=True):
 
 
 # Wie die Felder im Kalender erscheinen: jährlich wiederkehrend, oder nur am Tag selbst
-ONCE_FIELDS = {"f_seen"}
+ONCE_FIELDS = {"f_seen", "f_meet"}
 
 
-def occurrences(ctx, start: date, end: date, fields=None, circles=None, max_level=None):
+def occurrences(ctx, start: date, end: date, fields=None, circles=None, max_level=None, lookback=False):
+    """lookback: einmalige Daten (Treffen, gesehen) auch „heute vor N Jahren“ zeigen – für den Rückblick auf einen Tag."""
     defs = _date_fields(ctx.uid)
+    multi = _multi_dates(ctx.uid, defs)
     want = [f for f in (fields or defs.keys()) if f in defs]
     circles = set(circles or [])
     out = []
@@ -231,12 +266,14 @@ def occurrences(ctx, start: date, end: date, fields=None, circles=None, max_leve
         if max_level and (r.get("level") is None or r["level"] > int(max_level)):
             continue
         for fid in want:
-            v = (r.get("v") or {}).get(fid)
-            if not v or not isinstance(v.get("raw"), str):
-                continue
-            for day, years in _occurs(v["raw"], start, end, yearly=fid not in ONCE_FIELDS):
-                out.append({"date": day.isoformat(), "field": fid, "field_name": defs[fid]["name"], "years": years,
-                            "raw": v["raw"], "entity": {k: r.get(k) for k in ("id", "display", "name", "avatar", "kind",
+            for raw in _raws(r, fid, multi):
+                once = fid in ONCE_FIELDS
+                hits = _occurs(raw, start, end, yearly=not once)
+                if once and lookback:
+                    hits += [(dd, yy) for dd, yy in _occurs(raw, start, end, yearly=True) if yy]
+                for day, years in hits:
+                    out.append({"date": day.isoformat(), "field": fid, "field_name": defs[fid]["name"], "years": years,
+                                "raw": raw, "entity": {k: r.get(k) for k in ("id", "display", "name", "avatar", "kind",
                                                                               "main_circle_id", "level", "name_uncertain")}})
     out.sort(key=lambda x: (x["date"], x["field"] != "f_bday", x["entity"]["display"].lower()))
     return out
@@ -258,7 +295,7 @@ def calendar(start: str | None = None, end: str | None = None, days: int = 30, f
 def calendar_day(day: str, ctx: Ctx = Depends(current)):
     """Ein Tag im Rückblick: wer an diesem Tag dran ist und Fotos (Immich) von diesem Tag in früheren Jahren."""
     d = date.fromisoformat(day)
-    items = occurrences(ctx, d, d)
+    items = occurrences(ctx, d, d, lookback=True)
     md = f"-{d.month:02d}-{d.day:02d}"
     rows = db.q("SELECT asset_id, person_id, taken_at FROM immich_assets WHERE user_id=? AND substr(taken_at, 5, 6)=? "
                 "AND substr(taken_at, 1, 4) < ? ORDER BY taken_at DESC LIMIT 400", ctx.uid, md, str(d.year))

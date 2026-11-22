@@ -281,6 +281,21 @@ def _via_circles(uid, owner_type, owner_id, old_rows, values, source):
             add_member(uid, cid, eid, source=source)
 
 
+def add_entity_date(uid, eid, fid, day: str, source="manual"):
+    """Fügt einem (Mehrfach-)Datumsfeld einen Tag hinzu – z.B. ein Treffen. Derselbe Tag zählt nur einmal."""
+    d = fdef(uid, fid)
+    ot, oid = owner_for(uid, eid, d)
+    cur = get_values(ot, oid).get(fid, [])
+    if any(v["value"] == day and not v.get("deprecated") for v in cur):
+        return
+    if not d["multi"]:
+        return set_single(uid, ot, oid, d, day, source)
+    keep = [{k: v[k] for k in ("id", "value", "label", "primary", "deprecated", "uncertain", "valid_from", "valid_to") if k in v} for v in cur]
+    for v in keep:
+        v["primary"] = False
+    set_values(uid, ot, oid, d, [{"value": day, "primary": True, "source": source}] + keep, source)
+
+
 def set_single(uid, owner_type, owner_id, d: dict, value, source="manual", uncertain=None, label=None):
     """Setzt den Hauptwert eines Feldes (bei Mehrfachfeldern: ersetzt nur den Hauptwert)."""
     cur = get_values(owner_type, owner_id).get(d["id"], [])
@@ -653,7 +668,7 @@ def load_rows(ctx, at: str | None = None, ids=None) -> list[dict]:
             if cs.get(cid) and cs[cid]["parent_id"]:
                 eff.add(cs[cid]["parent_id"])
         main = e["main_circle_id"] if e["main_circle_id"] in circle_ids else (circle_ids[0] if circle_ids else None)
-        meet = v.get("f_meet", {}).get("raw")
+        meet = (v.get("f_meet", {}).get("n") or 0) + int(float(v.get("f_meet_prev", {}).get("raw") or 0))  # Anzahl Treffen
         seen = v.get("f_seen", {}).get("raw")
         ist = compute_ist(ctx.settings, seen, signals.get(e["id"]), meet) if ctx.settings.get("use_ist") else None
         rows.append({

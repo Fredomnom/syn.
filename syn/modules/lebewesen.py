@@ -189,7 +189,7 @@ def quick(body: Quick, ctx: Ctx = Depends(current)):
         fields["f_met"] = today()
     if body.seen_today:
         fields["f_seen"] = today()
-        fields["f_meet"] = 1
+        fields["f_meet"] = today()
     ne.fields = fields
     eid = create_full(ctx, ne)
     return entity_full(ctx, eid)
