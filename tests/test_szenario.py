@@ -377,3 +377,24 @@ def test_kennengelernt_ueber_kreis_fuegt_kreis_hinzu(client):
     c.put(f"/api/v1/entities/{e['id']}/fields/f_via", json={"values": [{"value": {"type": "circle", "id": k["id"]}}]})
     ms = [x for x in c.get(f"/api/v1/entities/{e['id']}").json()["memberships"] if x["circle_id"] == k["id"]]
     assert len(ms) == 1 and ms[0]["valid_to"]  # keine neue Mitgliedschaft, die alte bleibt beendet
+
+
+def test_merge_uebernimmt_buende(client):
+    """Kontakt ohne Bund + Kontakt mit Bund: „Ihr zwei“ (Art, Rollen, Felder) und Bünde zu anderen bleiben erhalten."""
+    c = client
+    kinds = [k["id"] for k in c.get("/api/v1/bund-kinds").json()]
+    ohne = c.post("/api/v1/entities", json={"name": "Jana Ohne"}).json()
+    mit = c.post("/api/v1/entities", json={"name": "Jana Mit"}).json()
+    dritte = c.post("/api/v1/entities", json={"name": "Dritte Person"}).json()
+    c.put(f"/api/v1/entities/{mit['id']}/ihr-zwei", json={"kind_id": kinds[0], "role_a": "Rolle A", "role_b": "Rolle B"})
+    c.put(f"/api/v1/entities/{mit['id']}/fields/f_level", json={"values": [{"value": 2}]})
+    b = c.post("/api/v1/bunds", json={"a_id": mit["id"], "b_id": dritte["id"], "kind_id": kinds[1]}).json()
+    c.put(f"/api/v1/bunds/{b['id']}/fields/f_anniv", json={"values": [{"value": "2020-05-01"}]})
+    # Doppelfall: auch „ohne“ hat schon einen (leeren) Bund zur dritten Person
+    c.post("/api/v1/bunds", json={"a_id": ohne["id"], "b_id": dritte["id"]})
+    m = c.post("/api/v1/merge", json={"keep": ohne["id"], "other": mit["id"], "choices": {}}).json()
+    assert m["ihr_zwei"]["kind_id"] == kinds[0], m["ihr_zwei"]
+    assert m["level"] == 2
+    bs = [x for x in c.get("/api/v1/bunds", params={"entity_id": ohne["id"]}).json() if dritte["id"] in (x["a_id"], x["b_id"])]
+    assert len(bs) == 1 and bs[0]["kind_id"] == kinds[1], bs
+    assert bs[0]["values"].get("f_anniv") == "2020-05-01"

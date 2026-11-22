@@ -259,6 +259,22 @@ def mark_later(body: Pair, ctx: Ctx = Depends(current)):
 ENTITY_ATTRS = ("name", "kind", "avatar", "main_circle_id")  # Beschreibung wird Alias, „unsicher“ folgt dem Namen
 
 
+def _adopt_bund(src, dst, other, keep):
+    """Übernimmt Art, Rollen und Felder aus Bund src in Bund dst, wo dst noch nichts hat.
+    Rollen werden passend gedreht: in src steht „other“, in dst „keep“ an der jeweiligen Seite."""
+    if not dst["kind_id"] and src["kind_id"]:
+        side = lambda b, who: "a" if b["a_id"] == who else "b"  # noqa: E731
+        s_me, d_me = side(src, other), side(dst, keep)           # Seite der zusammengeführten Person
+        ra, rb = src["role_a"], src["role_b"]
+        if s_me != d_me:
+            ra, rb = rb, ra
+        db.ex("UPDATE bunds SET kind_id=?, role_a=?, role_b=? WHERE id=?", src["kind_id"], ra, rb, dst["id"])
+    have = {r["field_id"] for r in db.q("SELECT DISTINCT field_id FROM field_values WHERE owner_type='bund' AND owner_id=?", dst["id"])}
+    for r in db.q("SELECT id, field_id FROM field_values WHERE owner_type='bund' AND owner_id=?", src["id"]):
+        if r["field_id"] not in have:
+            db.ex("UPDATE field_values SET owner_id=? WHERE id=?", dst["id"], r["id"])
+
+
 def _same_key(v):
     """Vergleichsschlüssel für „derselbe Wert“: Profile über Dienst + ID/Name, sonst sortiertes JSON."""
     if isinstance(v, dict) and v.get("service"):
@@ -398,23 +414,27 @@ def merge(body: MergeIn, ctx: Ctx = Depends(current)):
             if not db.val("SELECT 1 FROM memberships WHERE entity_id=? AND circle_id=? AND "
                           "COALESCE(valid_to,'')=COALESCE(?, '')", keep, m["circle_id"], m["valid_to"]):
                 db.ex("UPDATE memberships SET entity_id=? WHERE id=?", keep, m["id"])
-        # 4. Bünde zu anderen übernehmen
+        # 4. Bünde übernehmen. „Ihr zwei“ (dein Bund mit dem zweiten Eintrag) VOR dem Aufräumen merken –
+        #    sonst ist er weg, bevor Art und Rollen übernommen werden.
         me = model.self_id(uid)
+        so = model.self_bund(uid, other)
+        if so:
+            _adopt_bund(so, sk, other, keep)
         for b in db.q("SELECT * FROM bunds WHERE user_id=? AND (a_id=? OR b_id=?)", uid, other, other):
             o = b["b_id"] if b["a_id"] == other else b["a_id"]
             if o == me or o == keep:
                 db.ex("DELETE FROM field_values WHERE owner_type='bund' AND owner_id=?", b["id"])
                 db.ex("DELETE FROM bunds WHERE id=?", b["id"])
                 continue
-            if db.val("SELECT 1 FROM bunds WHERE (a_id=? AND b_id=?) OR (a_id=? AND b_id=?)", keep, o, o, keep):
+            dup = db.q1("SELECT * FROM bunds WHERE (a_id=? AND b_id=?) OR (a_id=? AND b_id=?)", keep, o, o, keep)
+            if dup:
+                # beide hatten einen Bund zur selben Person: zusammenlegen statt den zweiten wegzuwerfen
+                _adopt_bund(b, dup, other, keep)
+                db.ex("DELETE FROM field_values WHERE owner_type='bund' AND owner_id=?", b["id"])
                 db.ex("DELETE FROM bunds WHERE id=?", b["id"])
                 continue
             col = "a_id" if b["a_id"] == other else "b_id"
             db.ex(f"UPDATE bunds SET {col}=? WHERE id=?", keep, b["id"])
-        so = model.self_bund(uid, other)
-        if so and not sk["kind_id"] and so["kind_id"]:
-            db.ex("UPDATE bunds SET kind_id=?, role_a=?, role_b=? WHERE id=?", so["kind_id"], so["role_a"],
-                  so["role_b"], sk["id"])
         # 5. Verlauf beider Einträge bleibt erhalten
         db.ex("UPDATE history SET owner_id=? WHERE owner_type='entity' AND owner_id=?", keep, other)
         if so:
