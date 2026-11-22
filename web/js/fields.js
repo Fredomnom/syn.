@@ -8,7 +8,7 @@ import { S, h, icon, api, PUT, POST, clear, modal, rows, invalidate, avatar, cir
 export const TYPE_NAMES = { text: "Text", note: "Notiz", number: "Zahl", date: "Datum", choice: "Auswahl", checkbox: "Checkbox",
   person: "Person", ref: "Verweis", phone: "Telefon", email: "E-Mail", address: "Adresse", profile: "Profil", image: "Bild" };
 export const SOURCE = (s) => (!s || s === "manual" ? "von Hand" : s === "Zusammenführen" ? "zusammengeführt" : s === "card" ? "über deine Visitenkarte" : "aus " + (S.me?.importers_available?.includes(s) ? importerName(s) : s));
-function importerName(id) { return ({ card: "Visitenkarte", google: "Google Kontakte", vcard: "Handy-Kontakte", carddav: "CardDAV", imap: "E-Mail", kalender: "Kalender" })[id] || id[0].toUpperCase() + id.slice(1); }
+function importerName(id) { return ({ card: "Visitenkarte", google: "Google Kontakte", vcard: "Handy-Kontakte", carddav: "CardDAV", imap: "E-Mail", kalender: "Kalender", playstation: "PlayStation", instagram_api: "Instagram" })[id] || sources()[id] || id[0].toUpperCase() + id.slice(1); }
 
 export function fieldsFor(kind) {
   return S.fieldList.filter((f) => f.scope === "both" || f.scope === kind);

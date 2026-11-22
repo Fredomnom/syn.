@@ -529,7 +529,7 @@ syn-date .btn.icon { flex: none; }
 .fv-range { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .fv-range syn-date { flex: 1; min-width: 180px; }
 .fv-cap { font-size: 12px; color: var(--text2); }
-.fv-more { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; border: 0; background: none; color: var(--text2); font: 500 12.5px var(--f-ui); cursor: pointer; padding: 2px 0; }
+.fv-more { align-self: center; display: inline-flex; align-items: center; gap: 6px; border: 0; background: none; color: var(--text2); font: 500 12.5px var(--f-ui); cursor: pointer; padding: 2px 0; }
 .fv-more:hover { color: var(--ink); }
 .fv-add { display: flex; align-items: center; justify-content: center; gap: 8px; height: 44px; border: 1.5px dashed var(--line-strong); border-radius: 14px; background: none; color: var(--text2); font: 600 13.5px var(--f-ui); cursor: pointer; transition: background .14s, color .14s; }
 .fv-add:hover { background: var(--bg); color: var(--ink); }
