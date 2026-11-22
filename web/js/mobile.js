@@ -1,12 +1,13 @@
 // Handy (PWA): schnell erfassen und finden. Untere Leiste: Personen, Kreise, Plus, Suche, Ich.
-import { S, h, icon, GET, POST, PATCH, clear, rebuild, rows, themePref, setTheme, invalidate, avatar, circleChip, nameEl, rel, ringName, today, debounce,
-  postOrQueue, getOrBack, toast, modal, logo, qs, queued, fmtDate } from "./core.js";
+import { S, h, icon, GET, POST, PATCH, DEL, clear, rebuild, rows, themePref, setTheme, invalidate, avatar, circleChip, nameEl, rel, ringName, today, debounce,
+  postOrQueue, getOrBack, toast, modal, logo, qs, queued, fmtDate, menu, pickPerson } from "./core.js";
 import { primaryOf, valueEl, actionFor, editField, entityFieldList, runQuick, plain, bundFields, fieldSections, humanDate } from "./fields.js";
 import { LOCALE } from "./i18n.js";
+import { sourceName } from "./fields.js";
 import { guideAttach } from "./guide.js";
-import { editPerson, addField, dupHint, ringPopup, setRing, editIhrZwei, bundKindName, historyText } from "./shared.js";
+import { editPerson, addField, dupHint, ringPopup, setRing, editIhrZwei, bundKindName, historyText, deletePerson } from "./shared.js";
 
-let filt = "all", search = "";
+let search = "";
 
 let lastPath = null;
 export async function render(app, route) {
@@ -14,7 +15,7 @@ export async function render(app, route) {
   const path = route.parts.join("/");
   const same = path === lastPath; lastPath = path;
   const page = h("div.mpage");
-  const tab = !p0 ? "people" : ["settings"].includes(p0) ? "me" : p0;
+  const tab = !p0 || p0 === "v" ? (p0 === "v" ? "me" : "people") : ["settings", "notes", "today"].includes(p0) ? "me" : p0 === "c" ? "circles" : p0 === "p" ? "people" : p0;
   if (!p0 || p0 === "people" || p0 === "new") await people(page);
   else if (p0 === "p") await profile(page, p1);
   else if (p0 === "circles") await circles(page);
@@ -24,6 +25,8 @@ export async function render(app, route) {
   else if (p0 === "today") await todayPage(page);
   else if (p0 === "notes") await notesPage(page);
   else if (p0 === "settings") await settingsMobile(page, p1, route);
+  else if (p0 === "v") await savedViewMobile(page, p1);
+  else if (p0 === "merge") { page.append(h("div.mtop", h("a.back", { href: "#/p/" + p1 }, icon("left"), "Zurück"))); const box = h("div.col.m-embed"); page.append(box); await (await import("./merge.js")).mergePage(box, p1, route.parts[2]); }
   else if (p0 === "api") await (await import("./apidocs.js")).apiDocs(page, route);
   else await people(page);
   const old = app.querySelector(".mpage");
@@ -67,27 +70,117 @@ export function personRow(r, onSeen) {
     } } }, icon("eye")));
 }
 
-async function people(page) {
-  const all = (await rows()).filter((r) => !r.is_self);
-  const counts = { lose: all.filter((r) => !r.circles.length).length };
+// Personenliste: dieselben Filter wie am Desktop (Zustand VS wird geteilt), dazu „zuletzt aktiv“ als Sortierung
+let msort = "active";
+const activity = (r) => [r.v.f_seen?.raw || "", (r.created_at || "").slice(0, 10)].sort().pop();
+async function people(page, saved = null) {
+  const D = await import("./desktop.js");
+  const VS = D.VS;
+  if (!saved && VS.fromSaved) Object.assign(VS, { fromSaved: false, savedId: null, hideSources: D.DEFAULT_HIDE, filter: "", circle: "", max_level: "", via: "", q: "", kind: "all", colFilters: {} });
+  VS.view = "list";
+  const all = await rows();
   const listBox = h("div.list");
+  const nFilters = () => [VS.filter, VS.circle, VS.max_level, VS.via, VS.kind !== "all" ? VS.kind : ""].filter(Boolean).length
+    + ((VS.hideSources || []).slice().sort().join() === (saved ? [] : D.DEFAULT_HIDE).slice().sort().join() ? 0 : 1);
   const draw = () => {
-    let list = all.filter((r) => filt === "all" || (filt === "person" && r.kind === "person") || (filt === "pet" && r.kind === "pet") || (filt === "lose" && !r.circles.length));
-    if (search) { const q = search.toLowerCase(); list = list.filter((r) => [r.display, r.description, ...(r.aliases || [])].join(" ").toLowerCase().includes(q)); }
-    const act = (r) => [r.v.f_seen?.raw || "", (r.created_at || "").slice(0, 10)].sort().pop(); list.sort((a, b) => act(b).localeCompare(act(a)) || a.display.localeCompare(b.display));
-    clear(listBox, list.length ? list.map((r) => personRow(r, () => rebuild(page, people))) : h("div.empty", filt === "lose" ? "Niemand unter „Lose“ – alles einsortiert." : "Noch niemand hier. Tippe auf +."));
+    let list = D.filterRows(all);
+    if (msort === "active") list.sort((a, b) => activity(b).localeCompare(activity(a)) || a.display.localeCompare(b.display, LOCALE()));
+    count.textContent = `${list.length} von ${all.filter((r) => !r.is_self).length}`;
+    clear(listBox, list.length ? list.slice(0, 400).map((r) => personRow(r, () => rebuild(page, (p) => people(p, saved))))
+      : h("div.empty", VS.filter === "lose" ? "Niemand unter „Lose“ – alles einsortiert." : nFilters() || VS.q ? "Keine Personen für diese Auswahl." : "Noch niemand hier. Tippe auf +."));
+    if (list.length > 400) listBox.append(h("div.empty.small", `… und ${list.length - 400} weitere – Suche oder Filter grenzen ein.`));
+    fbtn.lastChild.textContent = "Filter" + (nFilters() ? " · " + nFilters() : "");
   };
-  const chip = (id, label) => h("span.chip" + (filt === id ? ".dark" : ".plain"), { on: { click: () => { filt = id; rebuild(page, people); } } }, label);
-  const q = h("input.input", { placeholder: "Name, Kreis oder Beschreibung", value: search, on: { input: debounce((e) => { search = e.target.value; draw(); }, 100) } });
+  const count = h("span.t2.small");
+  const quick = (id, label) => h("span.chip" + (VS.filter === id ? ".dark" : ".plain"), { on: { click: () => { VS.filter = VS.filter === id ? "" : id; rebuild(page, (p) => people(p, saved)); } } }, label);
+  const fbtn = h("span.chip.plain.m-fbtn", { on: { click: () => filterSheet(all, saved, () => rebuild(page, (p) => people(p, saved))) } }, icon("filter", "xs"), h("span", "Filter"));
+  const q = h("input.input", { type: "search", placeholder: "Name, Kreis, Feld …", value: VS.q || "", on: { input: debounce((e) => { VS.q = e.target.value; draw(); }, 120) } });
   const todayN = (await GET("/today")).items.length;
   const pending = queued();
+  const lose = all.filter((r) => !r.is_self && !r.circles.length).length;
   page.append(
-    h("div.mtop", h("h1", "Personen"), h("div.row", todayN ? h("a.btn.sm", { href: "#/today" }, icon("bell"), `Heute · ${todayN}`) : null, h("span.t2.small", `${all.length} Einträge`))),
+    h("div.mtop", saved ? h("a.back", { href: "#/me" }, icon("left"), "Ich") : h("h1", "Personen"),
+      h("div.row", todayN ? h("a.btn.sm", { href: "#/today" }, icon("bell"), `Heute · ${todayN}`) : null, count)),
+    saved ? h("h1", saved.name) : null,
     pending ? h("div.hint", icon("upload"), h("div.grow", `${pending} Erfassung(en) warten auf Netz.`)) : null,
     q,
-    h("div.filters", chip("all", "Alle"), chip("person", "Menschen"), chip("pet", "Haustiere"), chip("lose", `Lose · ${counts.lose}`)),
-    h("div.small.t2", "Zuletzt aktiv"), listBox);
+    h("div.filters", fbtn, quick("new", "Neu"), quick("lose", `Lose · ${lose}`), S.settings.use_ist ? quick("long_unseen", "Lange nicht gesehen") : null, quick("uncertain", "Unsicher")),
+    h("div.small.t2", sortText()), listBox);
   draw();
+}
+function sortText() {
+  if (msort === "active") return "Zuletzt aktiv";
+  const k = msort.replace("-", "");
+  const n = ({ name: "Name", created: "Erfasst", level: "Ring", seen: "Zuletzt gesehen" })[k] || S.fields[k]?.name || k;
+  return `Sortiert: ${n} ${msort.startsWith("-") ? "↓" : "↑"}`;
+}
+
+// Unteres Blatt (Handy): Titel, Inhalt, Fertig
+export function sheet(title, content, { onClose } = {}) {
+  const close = () => { bd.remove(); sh.remove(); onClose?.(); };
+  const sh = h("div.sheet-m", h("div.grab"), h("div.row.between", h("h2", title), h("button.btn.ghost.icon", { "aria-label": "Schließen", on: { click: close } }, icon("x"))), content);
+  const bd = h("div.backdrop", { style: { alignItems: "flex-end", padding: 0 }, on: { click: close } });
+  (document.querySelector(".mob") || document.body).append(bd, sh);
+  return close;
+}
+
+async function filterSheet(all, saved, done) {
+  const { VS, DEFAULT_HIDE } = await import("./desktop.js");
+  const box = h("div.col.m-fsheet");
+  const chips = (items, on, set) => h("div.sugg", items.map(([k, l]) => h("span.chip" + (on(k) ? ".sel" : ".plain"), { on: { click: () => { set(k); draw(); } } }, on(k) ? icon("check", "xs") : null, l)));
+  const sel = (value, opts, set, empty) => h("select.input", { on: { change: (e) => { set(e.target.value); draw(); } } }, h("option", { value: "" }, empty), opts.map(([k, l]) => h("option", { value: k, selected: value === k }, l)));
+  const vias = new Map(); for (const r of all) { const x = r.v.f_via; if (x?.raw?.type) vias.set(`${x.raw.type}:${x.raw.id}`, x.d); }
+  const origins = new Map(); for (const r of all) if (!r.is_self) origins.set(r.origin || "manual", (origins.get(r.origin || "manual") || 0) + 1);
+  if (!origins.has("card")) origins.set("card", 0);
+  const oname = (o) => (o === "manual" ? "Von Hand angelegt" : sourceName(o));
+  const sorts = [["active", "Zuletzt aktiv"], ["name", "Name"], ["created", "Erfasst"], ...(S.settings.use_levels ? [["level", "Ring"]] : []), ["seen", "Zuletzt gesehen"],
+    ...S.fieldList.filter((f) => !["note", "image"].includes(f.type) && f.scope !== "kreis" && !["f_seen", "f_level"].includes(f.id)).map((f) => [f.id, f.name])];
+  const draw = () => clear(box,
+    h("div.lbl", "Zeigen"),
+    chips([["new", "Neue Personen"], ["lose", "Lose (ohne Kreis)"], ...(S.settings.use_levels ? [["no_ring", "Ohne Ring"]] : []), ["uncertain", "Unsichere Angaben"],
+      ...(S.settings.use_ist ? [["long_unseen", "Lange nicht gesehen"]] : [])], (k) => VS.filter === k, (k) => (VS.filter = VS.filter === k ? "" : k)),
+    h("div.lbl", "Art"),
+    chips([["all", "Alle"], ["person", "Menschen"], ["pet", "Haustiere"]], (k) => (VS.kind || "all") === k, (k) => (VS.kind = k)),
+    S.settings.use_levels ? [h("div.lbl", "Ring höchstens"), chips([1, 2, 3, 4].map((n) => [String(n), ringName(n)]), (k) => VS.max_level === k, (k) => (VS.max_level = VS.max_level === k ? "" : k))] : null,
+    h("label.f", "Kreis", sel(VS.circle, Object.values(S.circles).sort((a, b) => a.name.localeCompare(b.name, LOCALE())).map((c) => [c.id, c.name]), (v) => (VS.circle = v), "alle Kreise")),
+    vias.size ? h("label.f", "Kennengelernt über", sel(VS.via, [...vias].sort((a, b) => a[1].localeCompare(b[1], LOCALE())), (v) => (VS.via = v), "egal")) : null,
+    h("div.lbl", "Quelle (abgehakt = wird gezeigt)"),
+    chips([...origins].sort((a, b) => oname(a[0]).localeCompare(oname(b[0]), LOCALE())).map(([o, n]) => [o, `${oname(o)} · ${n}`]),
+      (o) => !(VS.hideSources || []).includes(o), (o) => { const s = new Set(VS.hideSources || []); s.has(o) ? s.delete(o) : s.add(o); VS.hideSources = [...s]; }),
+    h("div.lbl", "Sortieren"),
+    h("div.row", sel(msort.replace(/^-/, ""), sorts, (v) => (msort = v || "active"), "Zuletzt aktiv"),
+      msort !== "active" ? h("button.btn", { on: { click: () => { msort = msort.startsWith("-") ? msort.slice(1) : "-" + msort; VS.sort = msort; draw(); } } }, msort.startsWith("-") ? "↓ absteigend" : "↑ aufsteigend") : null),
+    h("div.row.wrap", { style: { marginTop: "6px" } },
+      h("button.btn.primary.grow", { on: { click: () => close() } }, "Fertig"),
+      h("button.btn", { on: { click: () => { Object.assign(VS, { filter: "", kind: "all", circle: "", max_level: "", via: "", q: "", hideSources: saved ? [] : DEFAULT_HIDE }); msort = "active"; draw(); } } }, "Zurücksetzen"),
+      h("button.btn", { on: { click: () => saveViewMobile(saved, close) } }, icon("download"), saved ? "Ansicht speichern" : "Als Ansicht speichern")));
+  draw();
+  const close = sheet("Filter & Sortierung", box, { onClose: () => { if (msort !== "active") VS.sort = msort; done(); } });
+}
+async function saveViewMobile(saved, close) {
+  const { VS } = await import("./desktop.js");
+  const cfg = { hideSources: VS.hideSources || [], filter: VS.filter, kind: VS.kind, q: VS.q, sort: msort === "active" ? VS.sort : msort, circle: VS.circle, max_level: VS.max_level, via: VS.via, colFilters: {} };
+  const { PUT, promptDlg } = await import("./core.js");
+  if (saved) { await PUT("/views/" + saved.id, { view: saved.view, config: { ...saved.config, ...cfg } }); toast("Ansicht gespeichert"); close(); return; }
+  const name = await promptDlg("Ansicht speichern", "Name", "");
+  if (!name) return;
+  const r = await POST("/views", { name, view: "list", tab: "people", config: cfg });
+  S.views = await GET("/views"); close(); location.hash = "#/v/" + r.id;
+}
+
+// Gespeicherte Ansicht: Filter übernehmen; „Mögliche Doppelte“ hat eine eigene Seite
+async function savedViewMobile(page, id) {
+  const v = (S.views || []).find((x) => x.id === id);
+  if (!v) return people(page);
+  if (v.view === "duplicates") {
+    page.append(h("div.mtop", h("a.back", { href: "#/me" }, icon("left"), "Ich")));
+    const box = h("div.col.m-embed"); page.append(box);
+    return (await import("./merge.js")).duplicatesPage(box, v);
+  }
+  const { VS } = await import("./desktop.js");
+  Object.assign(VS, { filter: "", kind: "all", q: "", sort: "name", circle: "", max_level: "", via: "", colFilters: {}, hideSources: [], cfg: {} }, v.config, { savedId: v.id, fromSaved: true });
+  msort = v.config?.sort || "name";
+  return people(page, v);
 }
 
 // ---------------------------------------------------------------- Schnell erfassen
@@ -133,23 +226,35 @@ function capture(app) {
 }
 
 // ---------------------------------------------------------------- Profil
+// Gleiche Karten wie am Desktop (Kreise, Bünde, Verlauf, Vorschläge, Notizen …), nur untereinander
 async function profile(page, id) {
   const e = await getOrBack("/entities/" + id, "#/", "Person");
   if (!e) return;
   const reload = () => rebuild(page, (p) => profile(p, id));
+  const { personCards } = await import("./desktop.js");
+  const cards = await personCards(e, reload, { mobile: true });
   const phone = primaryOf(e.fields.f_phone), mail = primaryOf(e.fields.f_email);
   const iz = e.ihr_zwei?.fields || {};
   const ring = e.level;
-  const fieldRows = entityFieldList(e).filter(({ def }) => !["f_note"].includes(def.id));
   const tel = phone ? phone.value : null;
+  const more = (ev) => menu(ev.currentTarget, [
+    { label: "Bearbeiten", icon: "edit", action: async () => { if (await editPerson(e)) reload(); } },
+    { label: "Feld hinzufügen", icon: "plus", action: () => addField(e, { onDone: reload }) },
+    e.is_self ? null : { label: "Zusammenführen mit …", icon: "merge", action: () => pickPerson(ev.target, { exclude: [id], allowNew: false, onPick: (r) => (location.hash = `#/merge/${id}/${r.id}`) }) },
+    e.is_self ? null : { label: e.on_phone ? "Nicht mehr mit Handy synchronisieren" : "Mit Handy synchronisieren", icon: "smartphone", action: async () => { await PATCH("/entities/" + id, { on_phone: !e.on_phone }); invalidate(); reload(); } },
+    e.is_self ? null : { label: "Person löschen", icon: "trash", action: () => deletePerson(e) },
+  ], { align: "right" });
   page.append(
-    h("div.mtop", h("a.back", { href: "#/" }, icon("left"), "Personen"), h("button.btn.ghost.sm", { on: { click: async () => { const r = await editPerson(e); if (r) reload(); } } }, "Bearbeiten")),
+    h("div.mtop", h("a.back", { href: e.is_self ? "#/me" : "#/" }, icon("left"), e.is_self ? "Ich" : "Personen"),
+      h("div.row", h("button.btn.ghost.sm", { on: { click: async () => { const r = await editPerson(e); if (r) reload(); } } }, "Bearbeiten"),
+        h("button.btn.ghost.sm.icon", { "aria-label": "Mehr", on: { click: more } }, icon("more")))),
     h("div.col", { style: { alignItems: "center", gap: "6px", textAlign: "center" } },
       avatar(e, 72),
       h("h1", { style: { fontSize: "24px" } }, e.name || e.description || "Ohne Namen", " ", !e.name ? h("span.qmark", "ohne Namen") : e.name_uncertain ? h("span.qmark", "Name ?") : null),
       e.aliases?.length ? h("div.small.t2", "auch: " + e.aliases.join(", ")) : null,
       h("div.row.wrap", { style: { justifyContent: "center" } }, e.memberships.filter((m) => m.active).map((m) => circleChip(m.circle_id, { star: m.circle_id === e.main_circle_id })),
-        e.kind === "pet" ? h("span.chip.plain", icon("paw"), "Haustier") : null)),
+        e.kind === "pet" ? h("span.chip.plain", icon("paw"), "Haustier") : null,
+        e.on_phone_effective ? h("span.chip.plain", icon("smartphone"), "Handy") : null)),
     dupHint(e, { onChange: reload }),
     e.is_self ? null : h("div.qa",
       h("button.btn.primary.guide-seen", { on: { click: async () => { await postOrQueue(`/seen-today/${e.id}`, {}, e.display); invalidate(); reload(); } } }, icon("eye"), "Heute gesehen"),
@@ -163,32 +268,60 @@ async function profile(page, id) {
         const p = primaryOf(iz[d.id]);
         return h("div.kv", { "data-fid": d.id, on: { click: async () => { if (await editField(d, iz[d.id] || [], `/entities/${e.id}/fields/${d.id}`)) reload(); } } }, h("span.k", d.name), h("span.v", p ? (d.type === "date" ? humanDate(p.value) : valueEl(d, p, e.names)) : h("span.t3", "–")));
       })),
-    (() => { const sec = fieldSections(e, reload, { mobile: true }); return sec.length ? h("div.card.m-fields", sec) : null; })(),
-    h("button.btn.guide-field", { on: { click: () => addField(e, { onDone: reload }) } }, icon("plus"), "Feld hinzufügen"),
-    e.routines?.length ? h("div.small.t2", "Routinen: " + e.routines.map((r) => r.name + (r.next ? ` (${r.next})` : "")).join(", ")) : null);
-  const hist = await GET(`/entities/${e.id}/history?limit=3`);
-  if (hist.length) page.append(h("p.small.t3", { style: { textAlign: "center" } }, "Verlauf: " + hist.map((x) => `${historyText(x)} (${rel(x.at.slice(0, 10))})`).join(" · ")));
+    h("div.m-cards", cards.self, cards.suggBox, cards.fields, cards.circles, cards.bunds, cards.notes, cards.verlauf, cards.knowsCard, cards.routines));
   guideAttach(e, { mobile: true });
 }
 
 // ---------------------------------------------------------------- Kreise
 async function circles(page) {
   const { reloadCircles } = await import("./core.js"); await reloadCircles();
-  const cs = Object.values(S.circles).sort((a, b) => a.name.localeCompare(b.name));
+  const D = await import("./desktop.js");
+  const cs = Object.values(S.circles).sort((a, b) => a.name.localeCompare(b.name, LOCALE()));
   const tops = cs.filter((c) => !c.parent_id);
-  page.append(h("div.mtop", h("h1", "Kreise"), h("span.t2.small", `${cs.length} Kreise`)),
-    h("div.list", tops.length ? tops.flatMap((c) => [c, ...cs.filter((x) => x.parent_id === c.id)]).map((c) =>
-      h("a.prow", { href: "#/c/" + c.id, style: c.parent_id ? { paddingLeft: "34px" } : null }, circleChip(c.id), h("span.grow"), h("span.t2.small", c.count), icon("right"))) : h("div.empty", "Noch keine Kreise.")));
+  const order = [...tops.flatMap((c) => [c, ...cs.filter((x) => x.parent_id === c.id)]), ...cs.filter((c) => c.parent_id && !S.circles[c.parent_id])];
+  page.append(h("div.mtop", h("h1", "Kreise"), h("button.btn.sm.primary", { on: { click: () => D.newCircle() } }, icon("plus"), "Kreis")),
+    h("div.list", order.length ? order.map((c) =>
+      h("a.prow", { href: "#/c/" + c.id, style: c.parent_id ? { paddingLeft: "34px" } : null }, circleChip(c.id), h("span.grow"), h("span.t2.small", c.count), icon("right"))) : h("div.empty", "Noch keine Kreise. Kreise sind Gruppen: Familie, Klasse, Firma, Verein …")),
+    h("a.prow.m-link", { href: "#/settings/circle-kinds" }, icon("circles"), h("span.grow", "Kreis-Arten"), icon("right")));
 }
 
+let showPast = false;
 async function circle(page, id) {
   const c = await getOrBack("/circles/" + id, "#/circles", "Kreis");
   if (!c) return;
+  const D = await import("./desktop.js");
+  const { fieldRow } = await import("./fields.js");
+  const reload = () => rebuild(page, (p) => circle(p, id));
   const all = await rows();
-  const members = all.filter((r) => r.circles_all.includes(id));
-  page.append(h("div.mtop", h("a.back", { href: "#/circles" }, icon("left"), "Kreise")),
-    h("div.row", circleChip(id), h("span.t2.small", `${members.length} Mitglieder`)),
-    h("div.list", members.length ? members.map((r) => personRow(r)) : h("div.empty", "Noch niemand in diesem Kreis.")));
+  const byId = Object.fromEntries(all.map((r) => [r.id, r]));
+  const mem = c.members.filter((m) => showPast || m.active);
+  const editMembership = async (m) => {
+    const { dateInput } = await import("./date.js");
+    const role = h("input.input", { value: m.role || "" }), vf = dateInput(m.valid_from || ""), vt = dateInput(m.valid_to || "");
+    if (await modal("Mitgliedschaft", h("div.col", h("label.f", "Rolle", role), h("label.f", "Von (leer = Erfasst-Datum, ungefähr)", vf), h("label.f", "Bis", vt)),
+      [{ label: "Abbrechen" }, { label: "Speichern", primary: true, action: () => PATCH("/memberships/" + m.id, { role: role.value || null, valid_from: vf.value || null, valid_to: vt.value || null }) }])) { invalidate(); reload(); }
+  };
+  const row = (m) => {
+    const r = byId[m.entity_id] || { display: m.name, name: m.name };
+    const when = m.active ? (m.valid_from ? "seit " + m.valid_from : "seit ≈ " + (m.created_at || "").slice(0, 10)) : "bis " + m.valid_to;
+    return h("div.prow" + (m.active ? "" : ".past"), h("a.row.grow", { href: "#/p/" + m.entity_id, style: { minWidth: 0, textDecoration: "none" } }, avatar(r, 36),
+      h("div.grow", { style: { minWidth: 0 } }, h("div.nm", nameEl(r)), h("div.sub", [m.role, when].filter(Boolean).join(" · "), m.inherited ? circleChip(m.circle_id) : null))),
+      m.inherited ? null : h("button.btn.sm.ghost.icon", { "aria-label": "Mehr", on: { click: (ev) => menu(ev.currentTarget, [
+        { label: "Rolle, von, bis …", icon: "edit", action: () => editMembership(m) },
+        m.active ? { label: "Austragen (bis heute)", icon: "x", action: async () => { await POST(`/memberships/${m.id}/end`); invalidate(); reload(); } } : null,
+        { label: "Mitgliedschaft löschen", icon: "trash", action: async () => { await DEL("/memberships/" + m.id); invalidate(); reload(); } }], { align: "right" }) } }, icon("more")));
+  };
+  const kreisFelder = S.fieldList.filter((f) => f.scope === "kreis");
+  page.append(
+    h("div.mtop", h("a.back", { href: "#/circles" }, icon("left"), "Kreise"),
+      h("button.btn.ghost.sm.icon", { "aria-label": "Mehr", on: { click: (ev) => D.circleMenu(ev.currentTarget, c, () => { location.hash = "#/circles"; }) } }, icon("more"))),
+    h("div.col", { style: { gap: "6px" } }, h("h1", c.name),
+      h("div.row.wrap", circleChip(id), c.parent_id ? h("span.small.t2", "in ", h("a", { href: "#/c/" + c.parent_id }, S.circles[c.parent_id]?.name)) : null, h("span.t2.small", `${c.count} Mitglieder`)),
+      c.children.length ? h("div.row.wrap", h("span.small.t2", "Unterkreise:"), c.children.map((x) => h("a", { href: "#/c/" + x }, circleChip(x)))) : null),
+    h("div.row", h("button.btn.primary.grow", { on: { click: (ev) => pickPerson(ev.currentTarget, { onPick: async (r) => { await POST(`/circles/${id}/members`, { entity_id: r.id }); invalidate(); reload(); } }) } }, icon("plus"), "Mitglied"),
+      h("label.check.small", h("input", { type: "checkbox", checked: showPast, on: { change: (e) => { showPast = e.target.checked; reload(); } } }), "Ehemalige")),
+    h("div.list", mem.length ? mem.map(row) : h("div.empty", "Noch niemand in diesem Kreis.")),
+    kreisFelder.length ? h("div.card", h("div.card-h", h("h3", "Kreis-Felder")), h("div.card-b.fs-rows", kreisFelder.map((d) => fieldRow(d, c.fields[d.id] || [], `/circles/${id}/fields/${d.id}`, { id, names: {}, is_self: true }, reload)))) : null);
 }
 
 // ---------------------------------------------------------------- Suche
@@ -218,7 +351,9 @@ async function mePage(page) {
     h("div.list",
       h("a.prow", { href: "#/today" }, icon("bell"), h("span.grow", "Heute")),
       S.settings.notes_enabled ? h("a.prow", { href: "#/notes" }, icon("note"), h("span.grow", "Notizen")) : null,
-      h("a.prow", { href: "#/", on: { click: () => { filt = "lose"; } } }, icon("layers"), h("span.grow", "Lose aufräumen"))),
+      h("a.prow", { href: "#/", on: { click: async () => { const { VS } = await import("./desktop.js"); VS.filter = "lose"; } } }, icon("layers"), h("span.grow", "Lose aufräumen"))),
+    (S.views || []).length ? h("div.list", h("div.kv", h("span.small.t2", "Gespeicherte Ansichten")),
+      S.views.map((v) => h("a.prow", { href: "#/v/" + v.id }, icon(v.view === "duplicates" ? "merge" : "list"), h("span.grow", v.name), icon("right")))) : null,
     sugg.length ? h("div.list", h("div.kv", h("span.small.t2", "Vorschläge")), sugg.map((s) => h("div.prow",
       h("div.grow", h("div.nm", s.entity_name || ""), h("div.sub", `${s.field_name || (s.kind === "name" ? "Name" : s.kind)}: ${typeof s.payload.value === "object" ? JSON.stringify(s.payload.value) : s.payload.value} · ${s.payload.why || s.source}`)),
       h("button.btn.sm", { on: { click: async () => { await POST(`/suggestions/${s.id}/accept`); invalidate(); rebuild(page, mePage); } } }, "Übernehmen"),
@@ -231,6 +366,7 @@ async function mePage(page) {
       h("div.kv", h("span.k", "Darstellung"), h("div.seg", [["system", "System"], ["light", "Hell"], ["dark", "Dunkel"]].map(([k, l]) =>
         h("button" + (themePref() === k ? ".on" : ""), { on: { click: () => { setTheme(k); rebuild(page, mePage); } } }, l)))),
       h("button.prow", { style: { width: "100%", border: 0, textAlign: "left", font: "inherit", color: "inherit" }, on: { click: () => dispatchEvent(new CustomEvent("syn-undo", { detail: "undo" })) } }, icon("undo"), h("span.grow", "Letzte Änderung rückgängig")),
+      h("button.prow", { style: { width: "100%", border: 0, textAlign: "left", font: "inherit", color: "inherit" }, on: { click: () => dispatchEvent(new CustomEvent("syn-undo", { detail: "redo" })) } }, icon("redo"), h("span.grow", "Wiederholen")),
       h("a.prow", { href: "#/settings" }, icon("settings"), h("span.grow", "Einstellungen"), icon("right")),
       h("a.prow", { href: "#/settings/routines" }, icon("zap"), h("span.grow", "Routinen"), icon("right")),
       h("a.prow", { href: "#/settings/importers" }, icon("download"), h("span.grow", "Importe"), icon("right")),
@@ -268,10 +404,16 @@ export async function todayPage(page) {
 // ---------------------------------------------------------------- Notizen (Modul)
 async function notesPage(page) {
   const { noteEditor } = await import("./notes.js");
-  const notes = await GET("/notes");
-  page.append(h("div.mtop", h("a.back", { href: "#/me" }, icon("left"), "Ich"), h("button.btn.sm.primary", { on: { click: async () => { if (await noteEditor()) rebuild(page, notesPage); } } }, icon("plus"), "Notiz")),
-    h("h1", "Notizen"),
-    ...notes.map((n) => h("div.card.pad.col", { on: { click: async () => { if (await noteEditor(n)) rebuild(page, notesPage); } } },
-      h("div.row.small.t2", h("span.mono", n.day), n.links.filter((l) => l.role === "dabei").map((l) => h("span.chip.sel", l.display))),
-      h("div", { style: { whiteSpace: "pre-wrap" } }, n.text.replace(/@\[([^\]]+)\]\([^)]+\)/g, "$1")))));
+  const q = h("input.input", { type: "search", placeholder: "Notizen durchsuchen" });
+  const list = h("div.col");
+  const draw = async () => {
+    const notes = await GET("/notes" + qs({ q: q.value }));
+    clear(list, notes.length ? notes.map((n) => h("div.card.pad.col", { on: { click: async () => { if (await noteEditor(n)) draw(); } } },
+      h("div.row.wrap.small.t2", h("span.mono", n.day), n.links.filter((l) => l.role === "dabei").map((l) => h("a.chip.sel", { href: "#/p/" + l.entity_id, on: { click: (e) => e.stopPropagation() } }, l.display))),
+      h("div", { style: { whiteSpace: "pre-wrap" } }, n.text.replace(/@\[([^\]]+)\]\([^)]+\)/g, "$1")))) : h("div.card.pad.empty", q.value ? "Nichts gefunden." : "Noch keine Notizen."));
+  };
+  q.addEventListener("input", debounce(draw, 200));
+  page.append(h("div.mtop", h("a.back", { href: "#/me" }, icon("left"), "Ich"), h("button.btn.sm.primary", { on: { click: async () => { if (await noteEditor()) draw(); } } }, icon("plus"), "Notiz")),
+    h("h1", "Notizen"), q, list);
+  await draw();
 }

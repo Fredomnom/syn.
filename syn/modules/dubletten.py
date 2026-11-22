@@ -1,4 +1,5 @@
 """Doppelte erkennen (Hinweise mit Gründen statt Prozentzahl) und Zusammenführen."""
+import json
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -258,6 +259,16 @@ def mark_later(body: Pair, ctx: Ctx = Depends(current)):
 ENTITY_ATTRS = ("name", "kind", "avatar", "main_circle_id")  # Beschreibung wird Alias, „unsicher“ folgt dem Namen
 
 
+def _same_key(v):
+    """Vergleichsschlüssel für „derselbe Wert“: Profile über Dienst + ID/Name, sonst sortiertes JSON."""
+    if isinstance(v, dict) and v.get("service"):
+        who = v.get("id") or v.get("handle") or v.get("url") or ""
+        return ("svc", str(v["service"]).lower(), str(who).strip().lower())
+    if isinstance(v, str):
+        return ("s", v.strip().lower())
+    return ("j", json.dumps(v, sort_keys=True, ensure_ascii=False))
+
+
 def plan_merge(ctx, a_id, b_id):
     """Pro Feld: Werte beider Einträge und was syn selbst entscheidet."""
     uid = ctx.uid
@@ -278,10 +289,11 @@ def plan_merge(ctx, a_id, b_id):
             auto, why = "a", "nur in einem Eintrag"
         elif xb and not xa:
             auto, why = "b", "nur in einem Eintrag"
+        elif d["multi"]:
+            # Mehrfachfelder (Profile, Nummern, E-Mails …): immer alle Werte behalten, doppelte nur einmal
+            auto, why = "both", "Mehrfachfeld: alle Werte bleiben"
         elif pa and pb and pa["value"] == pb["value"]:
             auto, why = "a", "gleich"
-        elif d["multi"]:
-            auto, why = "both", "Mehrfachfeld: beide Werte bleiben"
         elif d["type"] == "date" and pa and pb:
             da, db_ = approx_date(pa["value"]), approx_date(pb["value"])
             if fid in ("f_seen",) or d["options"].get("newer_wins", fid != "f_bday"):
@@ -290,7 +302,7 @@ def plan_merge(ctx, a_id, b_id):
         elif d["type"] == "number" and fid == "f_meet" and pa and pb:
             auto, why = "sum", "Zähler werden addiert"
         return {"field": fid, "name": d["name"], "type": d["type"], "a": xa, "b": xb, "auto": auto, "why": why,
-                "owner": "bund" if d["scope"] == "bund" else "entity"}
+                "owner": "bund" if d["scope"] == "bund" else "entity", "multi": bool(d["multi"])}
 
     for fid, d in defs.items():
         if d["scope"] == "kreis":
@@ -360,6 +372,8 @@ def merge(body: MergeIn, ctx: Ctx = Depends(current)):
         for f in plan["fields"]:
             d = defs[f["field"]]
             ch = body.choices.get(f["field"], f["auto"] or "a")
+            if d["multi"] and f["a"] and f["b"]:
+                ch = "both"  # Mehrfachfelder verlieren beim Zusammenführen nie Werte
             ot, oid = ("bund", sk["id"]) if f["owner"] == "bund" else ("entity", keep)
             if ch == "a":
                 vals = f["a"]
@@ -368,10 +382,14 @@ def merge(body: MergeIn, ctx: Ctx = Depends(current)):
             elif ch == "sum":
                 pa, pb = model.primary(f["a"]), model.primary(f["b"])
                 vals = [{**(pa or {}), "value": (pa["value"] if pa else 0) + (pb["value"] if pb else 0)}]
-            else:  # both
-                seen = {db.jd(x["value"]) for x in f["a"]}
-                vals = f["a"] + [{**{k: v for k, v in x.items() if k != "id"}, "primary": False}
-                                 for x in f["b"] if db.jd(x["value"]) not in seen]
+            else:  # both: alle Werte, derselbe Wert nur einmal
+                seen = {_same_key(x["value"]) for x in f["a"]}
+                vals = list(f["a"])
+                for x in f["b"]:
+                    k = _same_key(x["value"])
+                    if k not in seen:
+                        seen.add(k)
+                        vals.append({**{kk: v for kk, v in x.items() if kk != "id"}, "primary": False})
             if not d["multi"]:
                 vals = vals[:1]
             model.set_values(uid, ot, oid, d, vals, "Zusammenführen")

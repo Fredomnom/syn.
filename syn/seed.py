@@ -24,6 +24,7 @@ SERVICES = [
     {"id": "anilist", "name": "AniList", "link": "https://anilist.co/user/{handle}"},
     {"id": "lastfm", "name": "Last.fm", "link": "https://last.fm/user/{handle}"},
     {"id": "prate", "name": "prate", "link": "{url}"},
+    {"id": "vrchat", "name": "VRChat", "link": "https://vrchat.com/home/user/{id}"},
     {"id": "google", "name": "Google", "link": ""},
 ]
 
@@ -80,6 +81,24 @@ def seed_circles(uid):
     for name, kind in DEFAULT_CIRCLES:
         db.insert("circles", {"id": new_id("c"), "user_id": uid, "name": name, "kind_id": kind, "parent_id": None,
                               "description": None, "created_at": t, "updated_at": t})
+
+
+def backfill_new_services():
+    """Neue mitgelieferte Dienste (z.B. VRChat) auch in schon gespeicherte Dienstlisten aufnehmen – jeden nur einmal,
+    damit ein gelöschter Dienst nicht wiederkommt."""
+    known = set(db.jl(db.val("SELECT value FROM instance WHERE key='services_known'"), None) or [])
+    if not known:  # erster Lauf: alles bis auf neue Dienste gilt als bekannt
+        known = {s["id"] for s in SERVICES} - {"vrchat"}
+    new = [s for s in SERVICES if s["id"] not in known]
+    if new:
+        for u in db.q("SELECT id, settings FROM users"):
+            st = db.jl(u["settings"], {}) or {}
+            if "services" not in st:
+                continue
+            have = {s.get("id") for s in st["services"]}
+            st["services"] += [dict(s) for s in new if s["id"] not in have]
+            db.ex("UPDATE users SET settings=? WHERE id=?", db.jd(st), u["id"])
+    db.ex("INSERT OR REPLACE INTO instance(key,value) VALUES('services_known', ?)", db.jd(sorted(known | {s["id"] for s in new})))
 
 
 def backfill_services():

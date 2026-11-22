@@ -1257,3 +1257,30 @@ a.so-stat:hover { border-color: var(--ink); transform: translateY(-1px); }
 .so-ic { width: 56px; height: 56px; border-radius: 16px; background: var(--yellow); color: var(--on-yellow); display: inline-flex; align-items: center; justify-content: center; flex: none; }
 .so-ic svg.i { width: 26px; height: 26px; }
 @media (max-width: 700px) { .so-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } .so-card { flex-direction: column; align-items: flex-start; } }
+.pick.fixed { cursor: default; }
+/* Handy: Karten der Personenseite untereinander */
+.mob .m-cards { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.mob .m-cards:empty { display: none; }
+.mob .m-cards .card { min-width: 0; }
+.mob .m-cards .card-h { flex-wrap: wrap; gap: 8px; }
+.mob .bw-graph { min-height: 220px; }
+.mob .so-seen { grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); }
+/* Handy: eingebettete Desktop-Seiten (Zusammenführen, Mögliche Doppelte) */
+.mob .m-embed .page { padding: 0; }
+.mob .m-embed .page-h { flex-wrap: wrap; gap: 8px; }
+.mob .m-embed .page-h h1 { width: 100%; font-size: 24px; }
+@media (max-width: 700px) {
+  .merge-t thead { display: none; }
+  .merge-t, .merge-t tbody, .merge-t tr, .merge-t td { display: block; width: 100%; }
+  .merge-t tr { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+  .merge-t td { padding: 0 !important; border: 0 !important; min-width: 0; }
+  .merge-t td:first-child, .merge-t td:last-child { grid-column: 1 / -1; }
+  .merge-t td:last-child:empty { display: none; }
+  .merge-t .pick { overflow-wrap: anywhere; }
+}
+.mob .prow.past { opacity: .6; }
+.mob .m-link { border: 1px solid var(--line); border-radius: 14px; }
+.mob .m-fsheet .lbl { font-size: 12px; font-weight: 600; color: var(--text2); margin-top: 6px; }
+.mob .m-fbtn { gap: 4px; display: inline-flex; align-items: center; }
+.merge-legend { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; color: var(--text2); }
+@media (max-width: 700px) { .merge-t .pick { display: block; } .merge-t .pick > * { display: inline; } }

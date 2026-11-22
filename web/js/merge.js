@@ -1,5 +1,5 @@
 // Zusammenführen und „Mögliche Doppelte“.
-import { S, h, icon, GET, POST, PATCH, clear, invalidate, avatar, circleChip, nameEl, rel, ringName, toast } from "./core.js";
+import { S, h, icon, GET, POST, PATCH, clear, invalidate, avatar, circleChip, nameEl, rel, ringName, toast, isMobile } from "./core.js";
 import { plain, SOURCE } from "./fields.js";
 
 const ATTR = { name: "Name", description: "Beschreibung", kind: "Art", avatar: "Profilbild", main_circle_id: "Hauptkreis", name_uncertain: "Name unsicher" };
@@ -21,21 +21,24 @@ export async function mergePage(main, a, b) {
         h("td.small.t2", at.auto && !choices[at.attr] ? "syn: " + (at.attr === "name" ? "sicherer Name gewinnt" : "nur einer hat einen Wert") : "")));
     }
     for (const f of plan.fields) {
-      const ch = choices[f.field] || f.auto || "a";
       const def = S.fields[f.field];
+      const keepAll = (f.multi ?? def?.multi) && f.a.length && f.b.length; // Mehrfachfeld: alle Werte bleiben, keine Wahl
+      const ch = keepAll ? "both" : choices[f.field] || f.auto || "a";
+      const pick = (side) => keepAll ? {} : { on: { click: () => { choices[f.field] = side; draw(); } } };
       tbody.append(h("tr", h("td", h("b", f.name), h("div.tiny.t3.mono", f.field), f.owner === "bund" ? h("div.tiny.t3", "Ihr zwei") : null),
-        h("td", h("div.pick" + (ch === "a" || ch === "both" || ch === "sum" ? ".on" : ""), { on: { click: () => { choices[f.field] = "a"; draw(); } } }, showVals(f, f.a))),
-        h("td", h("div.pick" + (ch === "b" || ch === "both" || ch === "sum" ? ".on" : ""), { on: { click: () => { choices[f.field] = "b"; draw(); } } }, showVals(f, f.b))),
-        h("td.small.t2", h("div", ch === "both" ? "beide Werte" : ch === "sum" ? "Summe" : ""), f.auto && !choices[f.field] ? h("div", "syn: " + f.why) : null,
-          def?.multi && f.a.length && f.b.length ? h("button.btn.sm", { on: { click: () => { choices[f.field] = "both"; draw(); } } }, "Beide behalten") : null)));
+        h("td", h("div.pick" + (ch === "a" || ch === "both" || ch === "sum" ? ".on" : "") + (keepAll ? ".fixed" : ""), pick("a"), showVals(f, f.a))),
+        h("td", h("div.pick" + (ch === "b" || ch === "both" || ch === "sum" ? ".on" : "") + (keepAll ? ".fixed" : ""), pick("b"), showVals(f, f.b))),
+        h("td.small.t2", keepAll ? h("div", "Alle Werte bleiben") : h("div", ch === "both" ? "beide Werte" : ch === "sum" ? "Summe" : ""),
+          !keepAll && f.auto && !choices[f.field] ? h("div", "syn: " + f.why) : null)));
     }
   };
   draw();
-  page.append(h("a.crumb", { href: "#/people/table" }, icon("left"), "Tabelle"),
+  page.append(isMobile() ? null : h("a.crumb", { href: "#/people/table" }, icon("left"), "Tabelle"),
     h("div.page-h", h("h1", "Zusammenführen"), h("a.btn", { href: `#/merge/${b}/${a}` }, icon("refresh"), "Seiten tauschen"),
       h("button.btn.primary", { on: { click: async () => { const e = await POST("/merge", { keep: a, other: b, choices }); invalidate(); toast("Zusammengeführt"); location.hash = "#/p/" + e.id; } } }, icon("merge"), "Zusammenführen")),
     h("div.hint", h("div.grow", "Pro Feld wählst du den Wert. Manches entscheidet syn selbst: das neuere Datum gewinnt, Felder, die nur ein Eintrag hat, werden übernommen. ", h("b", "Kreise bleiben beide"), ", der Verlauf beider Einträge bleibt erhalten. Bleibt erhalten: ", h("b", plan.a.display), ".")),
-    h("div.card", h("table.mtable", h("thead", h("tr", h("th", "Feld"), h("th", h("a", { href: "#/p/" + a }, plan.a.display), " (bleibt)"), h("th", h("a", { href: "#/p/" + b }, plan.b.display)), h("th", ""))), tbody)),
+    isMobile() ? h("div.merge-legend.small", h("span", "Links: ", h("b", plan.a.display), " (bleibt)"), h("span", "Rechts: ", h("b", plan.b.display))) : null,
+    h("div.card", h("table.mtable.merge-t", h("thead", h("tr", h("th", "Feld"), h("th", h("a", { href: "#/p/" + a }, plan.a.display), " (bleibt)"), h("th", h("a", { href: "#/p/" + b }, plan.b.display)), h("th", ""))), tbody)),
     h("div.row", h("span.small.t2", "Kreise nach dem Zusammenführen:"), plan.circles.map((c) => circleChip(c))));
 }
 
@@ -56,5 +59,5 @@ export async function duplicatesPage(main, view) {
     h("span.small.t2", "Wie mutig syn vorschlägt:"),
     h("div.seg", [["strong", "nur starke"], ["medium", "stark und mittel"], ["all", "alle Hinweise"]].map(([k, l]) => h("button" + (sens === k ? ".on" : ""), { on: { click: async () => { S.settings = await PATCH("/me/settings", { dup_sensitivity: k }); clear(main); duplicatesPage(main, view); } } }, l)))),
     h("p.small.t2", "syn sammelt Hinweise und zeigt die Gründe – keine Prozentzahl. Gegenhinweise (verschiedene Nummern, gleichzeitig im selben Kreis, bestehender Bund) unterdrücken Vorschläge."),
-    pairs.length ? h("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(420px,1fr))", gap: "12px" } }, pairs.map(card)) : h("div.card.empty", "Keine möglichen Doppelten."));
+    pairs.length ? h("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(min(420px,100%),1fr))", gap: "12px" } }, pairs.map(card)) : h("div.card.empty", "Keine möglichen Doppelten."));
 }

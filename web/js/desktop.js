@@ -16,7 +16,7 @@ const SAVE = (k, v) => { try { localStorage.setItem("syn." + k, JSON.stringify(v
 export const VIEWS = [["grid", "Grid", "grid"], ["list", "Liste", "list"], ["table", "Tabelle", "table"], ["rings", "Ringe", "rings"], ["axes", "Achsen", "axes"], ["net", "Netz", "net"]];
 // Zustand der Personen-Ansicht (Filter, Sortierung, Spalten) – lässt sich als Ansicht speichern
 // Standard-Personenansicht: Antworten über die Visitenkarte erst mal ausblenden (sie stehen unter „Heute“ und „Neue Personen“)
-const DEFAULT_HIDE = ["card"];
+export const DEFAULT_HIDE = ["card"];
 export const VS = { hideSources: DEFAULT_HIDE, view: LS("view", "table"), filter: "", kind: "all", q: "", sort: "name", circle: "", max_level: "", columns: null, savedId: null, cfg: {} };
 
 let lastPath = null, lastPlace = null;
@@ -306,7 +306,6 @@ async function personPage(main, id) {
   onPage("add_field", () => addField(e, { onDone: reload }));
   const iz = e.ihr_zwei?.fields || {};
   const phone = primaryOf(e.fields.f_phone), mail = primaryOf(e.fields.f_email);
-  const sugg = await GET("/suggestions" + qs({ entity_id: id }));
   const head = h("div.phead", avatar(e, 72),
     h("div.names.grow", h("h1", e.name || e.description || "Ohne Namen", !e.name ? h("span.qmark", "ohne Namen") : e.name_uncertain ? h("span.qmark", "Name ?") : null,
       e.kind === "pet" ? h("span.chip.plain", icon("paw"), "Haustier") : null),
@@ -331,14 +330,26 @@ async function personPage(main, id) {
       e.long_unseen ? h("span.tag.yellow", "lange nicht gesehen") : null),
     h("div.card-b.iz-body" + (S.settings.use_levels ? "" : ".no-ring"),
       S.settings.use_levels ? h("div.iz-ring.guide-ring",
-        ringBig(ring, async (l) => { await setRing(id, l); reload(); }),
-        h("button.btn.sm.ghost", { on: { click: (ev) => ringPopup(ev.currentTarget, ring, async (l) => { await setRing(id, l); reload(); }) } }, h("b", ringName(ring)), icon("down"))) : null,
+        ringBig(ring, async (l) => { await setRing(id, l); reload(); })) : null,
       h("div.iz-tiles",
         bundFields().filter((d) => d.id !== "f_level").map((d) => h("div.iz-tile", fieldRow(d, iz[d.id] || [], `/entities/${id}/fields/${d.id}`, e, reload))),
         e.ist ? h("div.iz-tile.static", h("div.iz-k", "Ist (berechnet)"), h("div.iz-v", `Ring ${e.ist.ring}`), h("div.iz-sub", `letzter Kontakt ${rel(e.ist.last)}`, e.long_unseen ? " · lange nicht gesehen" : "")) : null)));
 
+  const { fields, circles, bunds, notes, suggBox, verlauf, knowsCard, routines, self } = await personCards(e, reload);
+  page.append(h("a.crumb", { href: "#/people" }, icon("left"), "Personen"), head, dupHint(e, { desktop: true, onChange: reload }),
+    h("div.pgrid3",
+      h("div.pcol.wide", ihr, bunds, self),
+      h("div.pcol.narrow", fields, circles, notes),
+      h("div.pcol.narrow", suggBox, verlauf, knowsCard, routines)));
+  guideAttach(e);
+}
+
+// Karten der Personenseite – Desktop und Handy nutzen dieselben (Felder, Kreise, Bünde, Verlauf, …)
+export async function personCards(e, reload, { mobile = false } = {}) {
+  const id = e.id;
+  const sugg = await GET("/suggestions" + qs({ entity_id: id }));
   // Felder
-  const sections = fieldSections(e, reload);
+  const sections = fieldSections(e, reload, mobile ? { mobile: true } : undefined);
   const fields = h("div.card", h("div.card-h", h("h3", "Felder"), h("button.btn.sm.guide-field", { on: { click: () => addField(e, { onDone: reload }) } }, icon("plus"), "Feld")),
     h("div.card-b", sections.length ? sections : h("div.empty", "Noch keine Felder. Ein Eintrag beginnt mit Kontext und wird nach und nach zur Person.")));
 
@@ -389,12 +400,8 @@ async function personPage(main, id) {
     h("div.grow.small", h("b", s.field_name || (s.kind === "name" ? "Name" : s.kind)), ": ", typeof s.payload.value === "object" ? JSON.stringify(s.payload.value) : s.payload.value, h("div.t3.tiny", (s.payload.why || "") + " · " + SOURCE(s.source))),
     h("button.btn.sm", { on: { click: async () => { await POST(`/suggestions/${s.id}/accept`); invalidate(); reload(); } } }, "Übernehmen"),
     h("button.btn.sm.ghost.icon", { on: { click: async () => { await POST(`/suggestions/${s.id}/reject`); reload(); } } }, icon("x")))))) : null;
-  page.append(h("a.crumb", { href: "#/people" }, icon("left"), "Personen"), head, dupHint(e, { desktop: true, onChange: reload }),
-    h("div.pgrid3",
-      h("div.pcol.wide", ihr, bunds, e.is_self ? await selfOverview(allRows) : null),
-      h("div.pcol.narrow", fields, circles, notes),
-      h("div.pcol.narrow", suggBox, verlauf, knowsCard, routines)));
-  guideAttach(e);
+  const self = e.is_self ? await selfOverview(allRows) : null;
+  return { fields, circles, bunds, notes, suggBox, verlauf, knowsCard, routines, self };
 }
 
 // Mein Profil: statt „Ihr zwei“ ein Überblick über dein Umfeld und deine Visitenkarte
@@ -469,8 +476,10 @@ async function circlesPage(main, sub) {
   zone.append(h("div.card", cs.length ? t : h("div.empty", "Noch keine Kreise. Kreise sind Gruppen ohne Beziehungsbedeutung: Familie, Klasse, Firma, Verein …")));
 }
 
-function circleMenu(anchor, c, done) {
+export function circleMenu(anchor, c, done) {
   menu(anchor, [
+    { label: "Kreis-Art ändern …", icon: "circles", action: () => menu(anchor, [{ label: "Kreis-Art" }, ...Object.values(S.kinds).map((k) => ({ label: k.name, on: k.id === c.kind_id,
+      action: async () => { await PATCH("/circles/" + c.id, { kind_id: k.id }); await reloadCircles(); invalidate(); done(); } }))], { align: "right" }) },
     { label: "Umbenennen", icon: "edit", action: async () => { const n = await promptDlg("Umbenennen", "Name", c.name); if (n) { await PATCH("/circles/" + c.id, { name: n }); await reloadCircles(); done(); } } },
     { label: "In anderen Kreis legen …", icon: "layers", action: () => pickCircle(anchor, { exclude: [c.id], allowNew: false, onPick: async (p) => { await PATCH("/circles/" + c.id, { parent_id: p.id }); await reloadCircles(); done(); } }) },
     c.parent_id ? { label: "Aus Oberkreis lösen", action: async () => { await PATCH("/circles/" + c.id, { parent_id: null }); await reloadCircles(); done(); } } : null,

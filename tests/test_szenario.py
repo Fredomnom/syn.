@@ -340,3 +340,24 @@ def test_neue_personen_und_kennlernort(client):
     row = c.get("/api/v1/entities", params={"q": "Ina"}).json()[0]
     assert row["v"]["f_via"]["d"] == "Kletterhalle Nord"
     assert any(v["name"] == "Neue Personen" for v in c.get("/api/v1/views").json())
+
+
+def test_merge_behaelt_alle_mehrfachwerte(client):
+    """Mehrfachfelder (Profile, Nummern) verlieren beim Zusammenführen nie Werte – auch bei gleichem Hauptwert
+    und auch dann nicht, wenn die Oberfläche eine Seite wählt."""
+    c = client
+    tg = {"service": "telegram", "handle": "lena", "id": "42"}
+    a = c.post("/api/v1/entities", json={"name": "Lena Berg"}).json()
+    c.put(f"/api/v1/entities/{a['id']}/fields/f_profile", json={"values": [{"value": tg, "primary": True}]})
+    b = c.post("/api/v1/entities", json={"name": "Lena B."}).json()
+    c.put(f"/api/v1/entities/{b['id']}/fields/f_profile", json={"values": [
+        {"value": {"id": "42", "service": "Telegram"}, "primary": True},          # dasselbe Profil, andere Schreibweise
+        {"value": {"service": "github", "handle": "lenab"}}]})
+    c.put(f"/api/v1/entities/{b['id']}/fields/f_phone", json={"values": [{"value": "+49 151 5555555"}]})
+    plan = c.get("/api/v1/merge/preview", params={"a": a["id"], "b": b["id"]}).json()
+    prof = next(f for f in plan["fields"] if f["field"] == "f_profile")
+    assert prof["auto"] == "both" and prof["multi"]
+    m = c.post("/api/v1/merge", json={"keep": a["id"], "other": b["id"], "choices": {"f_profile": "a"}}).json()
+    services = sorted(str(v["value"]["service"]).lower() for v in m["fields"]["f_profile"])
+    assert services == ["github", "telegram"]  # GitHub bleibt, Telegram nur einmal
+    assert m["fields"]["f_phone"][0]["value"].endswith("5555555")
