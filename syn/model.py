@@ -254,7 +254,31 @@ def set_values(uid, owner_type, owner_id, d: dict, values: list, source="manual"
             if vid not in keep:
                 db.ex("DELETE FROM field_values WHERE id=?", vid)
                 record(uid, owner_type, owner_id, fid, db.jl(old["value"]), None, source, vid)
+        if fid == "f_via":
+            _via_circles(uid, owner_type, owner_id, existing.values(), values, source)
         _touch(owner_type, owner_id)
+
+
+def _via_circles(uid, owner_type, owner_id, old_rows, values, source):
+    """„Kennengelernt über“ einen Kreis → die Person kommt in diesen Kreis (nur bei neu gesetztem Kreis,
+    damit eine später beendete Mitgliedschaft nicht wieder auflebt)."""
+    def circ(v):
+        return v.get("id") if isinstance(v, dict) and v.get("type") == "circle" else None
+    before = {circ(db.jl(r["value"])) for r in old_rows} - {None}
+    new = [c for c in (circ(v.get("value")) for v in values if not v.get("deprecated")) if c and c not in before]
+    if not new:
+        return
+    if owner_type == "bund":
+        b = db.q1("SELECT a_id, b_id FROM bunds WHERE id=? AND user_id=?", owner_id, uid)
+        me = self_id(uid)
+        eid = (b["b_id"] if b["a_id"] == me else b["a_id"]) if b else None
+    else:
+        eid = owner_id
+    if not eid or eid == self_id(uid):
+        return
+    for cid in new:
+        if db.val("SELECT 1 FROM circles WHERE id=? AND user_id=?", cid, uid):
+            add_member(uid, cid, eid, source=source)
 
 
 def set_single(uid, owner_type, owner_id, d: dict, value, source="manual", uncertain=None, label=None):

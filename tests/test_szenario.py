@@ -361,3 +361,19 @@ def test_merge_behaelt_alle_mehrfachwerte(client):
     services = sorted(str(v["value"]["service"]).lower() for v in m["fields"]["f_profile"])
     assert services == ["github", "telegram"]  # GitHub bleibt, Telegram nur einmal
     assert m["fields"]["f_phone"][0]["value"].endswith("5555555")
+
+
+def test_kennengelernt_ueber_kreis_fuegt_kreis_hinzu(client):
+    c = client
+    k = c.post("/api/v1/circles", json={"name": "Kletterhalle", "kind_id": c.get("/api/v1/circle-kinds").json()["kinds"][0]["id"]}).json()
+    e = c.post("/api/v1/entities", json={"name": "Mara Klee"}).json()
+    r = c.put(f"/api/v1/entities/{e['id']}/fields/f_via", json={"values": [{"value": {"type": "circle", "id": k["id"]}}]})
+    assert r.status_code == 200, r.text
+    e2 = c.get(f"/api/v1/entities/{e['id']}").json()
+    assert any(m["circle_id"] == k["id"] and m["active"] for m in e2["memberships"])
+    # ausgetreten bleibt ausgetreten, solange „Kennengelernt über“ sich nicht ändert
+    m = next(m for m in e2["memberships"] if m["circle_id"] == k["id"])
+    c.post(f"/api/v1/memberships/{m['id']}/end")
+    c.put(f"/api/v1/entities/{e['id']}/fields/f_via", json={"values": [{"value": {"type": "circle", "id": k["id"]}}]})
+    ms = [x for x in c.get(f"/api/v1/entities/{e['id']}").json()["memberships"] if x["circle_id"] == k["id"]]
+    assert len(ms) == 1 and ms[0]["valid_to"]  # keine neue Mitgliedschaft, die alte bleibt beendet

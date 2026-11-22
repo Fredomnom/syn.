@@ -302,9 +302,22 @@ export async function net(body, list0) {
         A.x += dx * f; A.y += dy * f; B.x -= dx * f; B.y -= dy * f;
       }
       for (const l of links) { const A = P[l.a], B = P[l.b]; const dx = B.x - A.x, dy = B.y - A.y; const d = Math.hypot(dx, dy) || 1; const f = (d - 110) * 0.03 * k; A.x += (dx / d) * f; A.y += (dy / d) * f; B.x -= (dx / d) * f; B.y -= (dy / d) * f; }
+      // Mitte jedes Kreises (alle Mitglieder, auch über Unterkreise)
       const cent = {};
-      for (const n of nodes) if (n.main_circle_id) { const c = (cent[n.main_circle_id] ||= { x: 0, y: 0, n: 0 }); c.x += P[n.id].x; c.y += P[n.id].y; c.n++; }
-      for (const n of nodes) { const c = cent[n.main_circle_id]; const p = P[n.id]; if (c) { p.x += (c.x / c.n - p.x) * 0.05 * k; p.y += (c.y / c.n - p.y) * 0.05 * k; } p.x += (W / 2 - p.x) * 0.002; p.y += (H / 2 - p.y) * 0.002; }
+      for (const n of nodes) for (const cid of n.circles_all || []) { const c = (cent[cid] ||= { x: 0, y: 0, n: 0 }); c.x += P[n.id].x; c.y += P[n.id].y; c.n++; }
+      for (const n of nodes) {
+        const p = P[n.id];
+        // jeder Kreis zieht: Hauptkreis stark, weitere direkte Kreise mittel, Oberkreise (über Unterkreise) schwach.
+        // Wer in mehreren Kreisen ist, landet so zwischen ihnen – als Brücke sichtbar.
+        let fx = 0, fy = 0, wsum = 0;
+        for (const cid of n.circles_all || []) {
+          const c = cent[cid]; if (!c || c.n < 2) continue;
+          const w = cid === n.main_circle_id ? 1 : (n.circles || []).includes(cid) ? 0.6 : 0.25;
+          fx += (c.x / c.n - p.x) * w; fy += (c.y / c.n - p.y) * w; wsum += w;
+        }
+        if (wsum) { const s = 0.05 * k / Math.max(1, wsum * 0.6); p.x += fx * s; p.y += fy * s; }
+        p.x += (W / 2 - p.x) * 0.002; p.y += (H / 2 - p.y) * 0.002;
+      }
     }
     if (fresh) {
       // auf die Fläche einpassen
