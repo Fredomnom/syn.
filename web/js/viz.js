@@ -324,7 +324,7 @@ export async function net(body, list0) {
   const layout = () => {
     nodes = data.filter((r) => opt.self || !r.is_self);
     const ids = new Set(nodes.map((n) => n.id));
-    links = bunds.filter((b) => ids.has(b.a_id) && ids.has(b.b_id)).map((b) => ({ a: b.a_id, b: b.b_id, kind: b.kind_id }));
+    links = bunds.filter((b) => ids.has(b.a_id) && ids.has(b.b_id)).map((b) => ({ a: b.a_id, b: b.b_id, kind: b.kind_id, label: b.kind_id ? bundKindName(b.kind_id) : [b.role_a, b.role_b].filter(Boolean).join(" – ") }));
     const P = {};
     nodes.forEach((n, i) => { P[n.id] = pos[n.id] ? { ...pos[n.id] } : { x: W / 2 + Math.cos(i * 2.4) * (60 + i * 3), y: H / 2 + Math.sin(i * 2.4) * (60 + i * 3) }; });
     // Kreis-Anziehung: Mitglieder desselben Hauptkreises zueinander
@@ -377,7 +377,9 @@ export async function net(body, list0) {
   // Kamera: Verschieben und Zoomen (Trackpad: scrollen = verschieben, Pinch = zoomen; Mausrad = zoomen; Linksklick ziehen = verschieben)
   const cam = Object.assign({ x: 0, y: 0, k: 1 }, LS("netcam", {}));
   let camG = null, zoomLabel = null;
-  const applyCam = () => { camG?.setAttribute("transform", `translate(${cam.x},${cam.y}) scale(${cam.k})`); if (zoomLabel) zoomLabel.textContent = Math.round(cam.k * 100) + " %"; SAVE("netcam", cam); };
+  // Bund-Beschriftungen erst ab 160 % Zoom (vorher wäre es nur Gewimmel)
+  const LABEL_ZOOM = 1.6;
+  const applyCam = () => { camG?.setAttribute("transform", `translate(${cam.x},${cam.y}) scale(${cam.k})`); camG?.classList.toggle("show-blabels", cam.k >= LABEL_ZOOM); if (zoomLabel) zoomLabel.textContent = Math.round(cam.k * 100) + " %"; SAVE("netcam", cam); };
   const zoomAt = (factor, px, py) => {
     const k = Math.min(4, Math.max(0.3, cam.k * factor));
     cam.x = px - (px - cam.x) * (k / cam.k); cam.y = py - (py - cam.y) * (k / cam.k); cam.k = k; applyCam();
@@ -418,7 +420,12 @@ export async function net(body, list0) {
     }
     for (const l of links) gL.append(s("line", { x1: pos[l.a].x, y1: pos[l.a].y, x2: pos[l.b].x, y2: pos[l.b].y, stroke: V("--text3"), "stroke-width": 1.2, "data-a": l.a, "data-b": l.b }));
     for (const n of nodes) gN.append(node(n, pos[n.id].x, pos[n.id].y, 20, { approx: at && n.approx_created }));
-    camG = s("g", {}, gA, gL, gN);
+    const gB = s("g", { class: "blabels" });
+    for (const l of links) if (l.label) {
+      const x = (pos[l.a].x + pos[l.b].x) / 2, y = (pos[l.a].y + pos[l.b].y) / 2, w = l.label.length * 4.6 + 10;
+      gB.append(s("g", { transform: `translate(${x},${y})`, "data-a": l.a, "data-b": l.b }, s("rect", { x: -w / 2, y: -7, width: w, height: 14, rx: 7 }), s("text", { y: 3.2, "text-anchor": "middle" }, l.label)));
+    }
+    camG = s("g", {}, gA, gL, gN, gB); // Beschriftungen über den Personen, sonst verdeckt
     svg.append(camG);
     applyCam();
     zoomLabel = h("span.mono.small", Math.round(cam.k * 100) + " %");
@@ -450,6 +457,8 @@ export async function net(body, list0) {
       if (!drag) return;
       const p = worldPoint(svg, e); drag.moved = true; pos[drag.id] = { x: p.x, y: p.y }; drag.g.setAttribute("transform", `translate(${p.x},${p.y})`);
       for (const ln of gL.children) { if (ln.dataset.a === drag.id) { ln.setAttribute("x1", p.x); ln.setAttribute("y1", p.y); } if (ln.dataset.b === drag.id) { ln.setAttribute("x2", p.x); ln.setAttribute("y2", p.y); } }
+      for (const bl of camG.querySelector(".blabels").children) if (bl.dataset.a === drag.id || bl.dataset.b === drag.id) {
+        const A = pos[bl.dataset.a], B = pos[bl.dataset.b]; bl.setAttribute("transform", `translate(${(A.x + B.x) / 2},${(A.y + B.y) / 2})`); }
     });
     gN.addEventListener("pointerup", async (e) => {
       if (!drag) return; const d = drag; drag = null; SAVE("netpos", pos);

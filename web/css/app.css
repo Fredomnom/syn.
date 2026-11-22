@@ -1289,3 +1289,8 @@ a.so-stat:hover { border-color: var(--ink); transform: translateY(-1px); }
 .viz-zoom .timebar { flex: 1; min-width: 0; padding: 0 10px; gap: 10px; border: 0; background: none; height: 34px; }
 .viz-zoom .timebar .tb-end { display: none; }
 .viz-zoom .vz-sep { width: 1px; align-self: stretch; margin: 4px 4px; background: var(--line); }
+/* Netz: Bund-Beschriftungen erst beim Hineinzoomen */
+.blabels { opacity: 0; transition: opacity .2s; pointer-events: none; }
+.show-blabels .blabels { opacity: 1; }
+.blabels rect { fill: var(--white); stroke: var(--line-strong); stroke-width: .6; }
+.blabels text { font: 500 7.5px var(--f-ui); fill: var(--text2); }
