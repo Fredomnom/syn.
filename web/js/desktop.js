@@ -363,10 +363,16 @@ export async function personCards(e, reload, { mobile = false } = {}) {
   const bunds = e.is_self ? null : bundWidget(e, allRowsB, reload); // du hast zu jedem einen Bund – hier nicht nötig
   const allRows = await rows();
   const myC = new Set(e.memberships.filter((m) => m.active).map((m) => m.circle_id));
-  const knows = e.is_self ? [] : allRows.filter((r) => r.id !== id && !r.is_self && r.circles.some((c) => myC.has(c)));
+  // „Kennt vermutlich“: gemeinsame Kreise, aber noch kein Bund – mit einem Klick als Bund festhalten
+  const bonded = new Set((e.bunds || []).map((b) => b.other_id));
+  const knows = e.is_self ? [] : allRows.filter((r) => r.id !== id && !r.is_self && !bonded.has(r.id) && r.circles.some((c) => myC.has(c)));
+  const knowsMenu = (ev, r) => { ev.preventDefault(); menu(ev.currentTarget, [
+    { label: r.display },
+    { label: "Bund anlegen …", icon: "bund", action: async () => { if (await addBund(e, r)) { invalidate(); reload(); } } },
+    { label: "Profil öffnen", icon: "user", action: () => (location.hash = "#/p/" + r.id) }]); };
   const knowsCard = knows.length ? h("div.card", h("div.card-h", h("h3", "Kennt vermutlich"), h("span.small.t2", knows.length)),
-    h("div.card-b.col", h("p.tiny.t3", "Abgeleitet aus gemeinsamen Kreisen – nicht gespeichert."),
-      h("div.row.wrap", { style: { gap: "4px" } }, knows.slice(0, 40).map((r) => h("a", { href: "#/p/" + r.id, title: r.display + " · " + r.circles.filter((c) => myC.has(c)).map((c) => S.circles[c]?.name).join(", ") }, avatar(r, 28)))))) : null;
+    h("div.card-b.col", h("p.tiny.t3", "Gemeinsame Kreise, aber noch kein Bund. Antippen, um einen Bund anzulegen."),
+      h("div.row.wrap", { style: { gap: "4px" } }, knows.slice(0, 40).map((r) => h("button.knows-av", { type: "button", "data-pid": r.id, title: r.display + " · " + r.circles.filter((c) => myC.has(c)).map((c) => S.circles[c]?.name).join(", "), on: { click: (ev) => knowsMenu(ev, r) } }, avatar(r, 28)))))) : null;
   const circles = h("div.card", h("div.card-h", h("h3", "Kreise"), h("button.btn.sm.guide-circle", { on: { click: (ev) => addToCircle(ev.currentTarget, e, () => { reloadCircles(); reload(); }) } }, icon("plus"), "Kreis")),
     h("div.card-b.col", e.memberships.length ? e.memberships.map((m) => h("div.clabel" + (m.active ? "" : ".past"), { style: { "--cb": circleColors(m.circle_id).bg, "--cf": circleColors(m.circle_id).fg } },
       h("a.clabel-main", { href: "#/c/" + m.circle_id },

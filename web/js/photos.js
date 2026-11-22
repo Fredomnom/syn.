@@ -130,7 +130,10 @@ export function slideshow(box, items, { every = 5000, data } = {}) {
     aimAtFace(im, data, it);
     box.append(im);
     requestAnimationFrame(() => requestAnimationFrame(() => im.classList.add("in")));
-    [...box.querySelectorAll(".ss-img")].slice(0, -2).forEach((o) => o.remove());
+    // erst wenn das neue Bild ganz da ist, verschwinden die alten darunter (sonst flackert die Deckkraft)
+    const clean = () => { for (const o of box.querySelectorAll(".ss-img")) if (o !== im && o.isConnected) o.remove(); };
+    im.addEventListener("transitionend", clean, { once: true });
+    setTimeout(clean, 2600); // falls kein Übergang läuft (z.B. „Bewegung reduzieren“)
     if (items.length > 1) preload(items[(items.indexOf(it) + 1) % items.length].id); // nächstes schon holen
   };
   layer(items[0]);

@@ -40,6 +40,7 @@ function tipWorthy(el) {
 // ---------------------------------------------------------------- <syn-personcard>
 class SynPersonCard extends HTMLElement {
   render(r) {
+    this.classList.remove("with-banner"); // Reste vom Foto-Banner der vorigen Person entfernen
     const v = r.v || {};
     const fact = (label, value, mono = false) => value ? h("div.pc-fact", h("span.pc-k", label), h("span.pc-v" + (mono ? ".mono" : ""), value)) : null;
     const others = (r.circles || []).filter((c) => c !== r.main_circle_id).slice(0, 3);
