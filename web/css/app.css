@@ -1387,3 +1387,17 @@ syn-personcard.with-banner .pc-head .av { box-shadow: 0 0 0 4px var(--white); }
   border-radius: 50%; background: var(--white); color: var(--ink); display: grid; place-items: center; box-shadow: 0 0 0 2px var(--white); border: 1px solid var(--line-strong); }
 .cal-badge svg.i { width: 70%; height: 70%; stroke-width: 2.2; }
 .cal-avb.bday .cal-badge { background: var(--yellow); color: var(--on-yellow); border-color: var(--yellow-line); }
+/* Editor für mehrere Daten (z.B. Treffen) */
+.dl-add { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.dl-add syn-date { flex: 1 1 180px; min-width: 0; }
+.dl-list { gap: 12px; max-height: 46vh; overflow: auto; padding-right: 2px; }
+.dl-year { display: flex; flex-direction: column; gap: 6px; }
+.dl-y { font: 600 13px var(--f-head); }
+.dl-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.dl-chip { display: inline-flex; align-items: center; gap: 4px; height: 30px; padding: 0 4px 0 11px; border-radius: 999px; background: var(--bg2); border: 1px solid var(--line); font-size: 13px; white-space: nowrap; }
+.dl-chip.today { background: var(--yellow-light); border-color: var(--yellow-line); }
+.dl-chip button { width: 22px; height: 22px; border: 0; border-radius: 50%; background: none; color: var(--text3); display: grid; place-items: center; cursor: pointer; padding: 0; }
+.dl-chip button:hover { background: var(--hover); color: var(--danger); }
+.dl-chip button svg.i { width: 13px; height: 13px; }
+.dl-prevrow { display: flex; align-items: center; gap: 10px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 13px; color: var(--text2); }
+.dl-prev { width: 90px; }

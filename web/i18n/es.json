@@ -1371,5 +1371,14 @@
 "vor {} Jahr gesehen": "visto hace {} año",
 "Gemeinsame Kreise, aber noch kein Bund. Antippen, um einen Bund anzulegen.": "Círculos en común pero aún sin vínculo. Toca para crear un vínculo.",
 "Bund anlegen …": "Crear vínculo …",
-"Profil öffnen": "Abrir perfil"
+"Profil öffnen": "Abrir perfil",
+"Hinzufügen": "Añadir",
+"Noch keine Daten.": "Aún no hay fechas.",
+"1 Datum": "1 fecha",
+"{} Daten": "{} fechas",
+"ohne Jahr": "sin año",
+"Dazu ohne Datum (frühere Treffen)": "Además sin fecha (encuentros anteriores)",
+"Bitte ein Datum wählen": "Elige una fecha",
+"Dieses Datum steht schon drin": "Esa fecha ya está",
+"Werte aus Importen und Daten, die syn nicht ungefragt übernimmt.": "Valores de importaciones y datos que syn no adopta sin preguntar."
 }

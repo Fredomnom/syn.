@@ -1371,5 +1371,14 @@
 "vor {} Jahr gesehen": "seen {} year ago",
 "Gemeinsame Kreise, aber noch kein Bund. Antippen, um einen Bund anzulegen.": "Shared circles but no bond yet. Tap to create a bond.",
 "Bund anlegen …": "Create bond …",
-"Profil öffnen": "Open profile"
+"Profil öffnen": "Open profile",
+"Hinzufügen": "Add",
+"Noch keine Daten.": "No dates yet.",
+"1 Datum": "1 date",
+"{} Daten": "{} dates",
+"ohne Jahr": "without year",
+"Dazu ohne Datum (frühere Treffen)": "Plus without date (earlier meetings)",
+"Bitte ein Datum wählen": "Please pick a date",
+"Dieses Datum steht schon drin": "That date is already in the list",
+"Werte aus Importen und Daten, die syn nicht ungefragt übernimmt.": "Values from imports and data that syn doesn't take over without asking."
 }

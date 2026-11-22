@@ -15,7 +15,7 @@ export async function render(app, route) {
   const path = route.parts.join("/");
   const same = path === lastPath; lastPath = path;
   const page = h("div.mpage");
-  const tab = !p0 || p0 === "v" ? (p0 === "v" ? "me" : "people") : ["settings", "notes", "today"].includes(p0) ? "me" : p0 === "c" ? "circles" : p0 === "p" ? "people" : p0;
+  const tab = !p0 || p0 === "v" ? (p0 === "v" ? "me" : "people") : ["settings", "notes", "today", "suggestions"].includes(p0) ? "me" : p0 === "c" ? "circles" : p0 === "p" ? "people" : p0;
   if (!p0 || p0 === "people" || p0 === "new") await people(page);
   else if (p0 === "p") await profile(page, p1);
   else if (p0 === "circles") await circles(page);
@@ -23,6 +23,7 @@ export async function render(app, route) {
   else if (p0 === "search") await searchPage(page);
   else if (p0 === "me") await mePage(page);
   else if (p0 === "today") await todayPage(page);
+  else if (p0 === "suggestions") await suggestionsPage(page);
   else if (p0 === "notes") await notesPage(page);
   else if (p0 === "settings") await settingsMobile(page, p1, route);
   else if (p0 === "v") await savedViewMobile(page, p1);
@@ -355,10 +356,7 @@ async function mePage(page) {
       h("a.prow", { href: "#/", on: { click: async () => { const { VS } = await import("./desktop.js"); VS.filter = "lose"; } } }, icon("layers"), h("span.grow", "Lose aufräumen"))),
     (S.views || []).length ? h("div.list", h("div.kv", h("span.small.t2", "Gespeicherte Ansichten")),
       S.views.map((v) => h("a.prow", { href: "#/v/" + v.id }, icon(v.view === "duplicates" ? "merge" : "list"), h("span.grow", v.name), icon("right")))) : null,
-    sugg.length ? h("div.list", h("div.kv", h("span.small.t2", "Vorschläge")), sugg.map((s) => h("div.prow",
-      h("div.grow", h("div.nm", s.entity_name || ""), h("div.sub", `${s.field_name || (s.kind === "name" ? "Name" : s.kind)}: ${typeof s.payload.value === "object" ? JSON.stringify(s.payload.value) : s.payload.value} · ${s.payload.why || s.source}`)),
-      h("button.btn.sm", { on: { click: async () => { await POST(`/suggestions/${s.id}/accept`); invalidate(); rebuild(page, mePage); } } }, "Übernehmen"),
-      h("button.btn.sm.ghost.icon", { on: { click: async () => { await POST(`/suggestions/${s.id}/reject`); rebuild(page, mePage); } } }, icon("x"))))) : null,
+    sugg.length ? h("div.list", h("a.prow", { href: "#/suggestions" }, icon("merge"), h("span.grow", "Vorschläge"), h("span.tag.yellow", String(sugg.length)), icon("right"))) : null,
     h("div.list",
       h("div.kv", h("span.k", "Angemeldet als"), h("span.v", S.me.username)),
       h("div.kv", h("span.k", "Mit Handy synchronisiert"), h("span.v", ({ all: "Jeder", rule: "Nach Regel", none: "Niemand" })[S.settings.sync?.mode])),
@@ -374,6 +372,19 @@ async function mePage(page) {
       h("a.prow", { href: "#/settings/sync" }, icon("smartphone"), h("span.grow", "Sync aufs Handy"), icon("right"))),
     h("p.small.t3", "Ringe, Achsen, Netz und die Tabelle gibt es am Desktop."),
     h("button.btn", { on: { click: async () => { await POST("/auth/logout"); location.hash = "#/login"; } } }, icon("logout"), "Abmelden"));
+}
+
+// ---------------------------------------------------------------- Vorschläge (eigene Seite statt im Ich-Tab)
+async function suggestionsPage(page) {
+  const sugg = await GET("/suggestions");
+  const reload = () => rebuild(page, suggestionsPage);
+  page.append(h("div.mtop", h("a.back", { href: "#/me" }, icon("left"), "Ich")), h("h1", "Vorschläge"),
+    h("p.small.t2", "Werte aus Importen und Daten, die syn nicht ungefragt übernimmt."),
+    sugg.length ? h("div.list", sugg.map((s) => h("div.prow",
+      h("a.grow", { href: s.entity_id ? "#/p/" + s.entity_id : "#/suggestions", style: { textDecoration: "none", color: "inherit", minWidth: 0 } },
+        h("div.nm", s.entity_name || ""), h("div.sub", { style: { whiteSpace: "normal" } }, `${s.field_name || (s.kind === "name" ? "Name" : s.kind)}: ${typeof s.payload.value === "object" ? JSON.stringify(s.payload.value) : s.payload.value} · ${s.payload.why || s.source}`)),
+      h("button.btn.sm", { on: { click: async () => { await POST(`/suggestions/${s.id}/accept`); invalidate(); reload(); } } }, "Übernehmen"),
+      h("button.btn.sm.ghost.icon", { "aria-label": "Ablehnen", on: { click: async () => { await POST(`/suggestions/${s.id}/reject`); reload(); } } }, icon("x"))))) : h("div.card.pad.empty", "Keine offenen Vorschläge."));
 }
 
 // ---------------------------------------------------------------- Heute

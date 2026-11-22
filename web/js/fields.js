@@ -3,7 +3,7 @@
 import { dateInput } from "./date.js";
 import { LOCALE } from "./i18n.js";
 import { pickAndCrop } from "./crop.js";
-import { S, h, icon, api, PUT, POST, clear, modal, rows, invalidate, avatar, circleChip, pickPerson, pickCircle, toast, menu, popover, closePop } from "./core.js";
+import { S, h, icon, api, GET, PUT, POST, clear, modal, rows, invalidate, avatar, circleChip, pickPerson, pickCircle, toast, menu, popover, closePop } from "./core.js";
 
 export const TYPE_NAMES = { text: "Text", note: "Notiz", number: "Zahl", date: "Datum", choice: "Auswahl", checkbox: "Checkbox",
   person: "Person", ref: "Verweis", phone: "Telefon", email: "E-Mail", address: "Adresse", profile: "Profil", image: "Bild" };
@@ -154,7 +154,54 @@ export function inputFor(def, value, { onEnter } = {}) {
 
 // ---------------------------------------------------------------- Bearbeiten-Dialog für ein Feld
 // path: z.B. /entities/p_x/fields/f_phone  (Bund-Felder einer Person landen automatisch bei „Ihr zwei“)
+// Datumsfelder mit mehreren Daten (z.B. Treffen): kompakter Editor – hinzufügen oben, Daten als Chips nach Jahren
+async function editDateList(def, values, path, { title } = {}) {
+  const { dateInput } = await import("./date.js");
+  const { LOCALE } = await import("./i18n.js");
+  const todayIso = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+  const shift = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+  let items = (values || []).filter((v) => v.value).map((v) => ({ ...v }));
+  // „Frühere Treffen (ohne Datum)“ gleich mit pflegen
+  const prevPath = def.id === "f_meet" && /^\/entities\/[^/]+\/fields\/f_meet$/.test(path) ? path.replace(/f_meet$/, "f_meet_prev") : null;
+  let prevVal = 0;
+  if (prevPath) { try { const e = await GET(path.replace(/\/fields\/f_meet$/, "")); prevVal = Number(primaryOf(e.fields.f_meet_prev)?.value || 0); } catch (_) {} }
+  const prevIn = prevPath ? h("input.input.dl-prev", { type: "number", min: 0, value: prevVal || "" , placeholder: "0" }) : null;
+  const pick = dateInput(todayIso());
+  const listBox = h("div.col.dl-list");
+  const count = h("span.small.t2");
+  const fmt = (v) => { const [y, m, d] = String(v).split("-"); if (!m || m === "??") return v; try { return new Date(+y, +m - 1, d && d !== "??" ? +d : 1).toLocaleDateString(LOCALE(), d && d !== "??" ? { weekday: "short", day: "numeric", month: "short" } : { month: "long" }); } catch (_) { return v; } };
+  const draw = () => {
+    items.sort((a, b) => String(b.value).localeCompare(String(a.value)));
+    const byYear = new Map();
+    for (const it of items) { const y = String(it.value).slice(0, 4); (byYear.get(y) || byYear.set(y, []).get(y)).push(it); }
+    count.textContent = items.length === 1 ? "1 Datum" : `${items.length} Daten`;
+    clear(listBox, items.length ? [...byYear].map(([y, its]) => h("div.dl-year", h("div.dl-y", y === "????" ? "ohne Jahr" : y, h("span.t3", ` · ${its.length}`)),
+      h("div.dl-chips", its.map((it) => h("span.dl-chip" + (it.value === todayIso() ? ".today" : ""), { title: it.source && it.source !== "manual" ? SOURCE(it.source) : null }, fmt(it.value),
+        h("button", { type: "button", "aria-label": "Entfernen", on: { click: () => { items = items.filter((x) => x !== it); draw(); } } }, icon("x"))))))) : h("p.small.t3", "Noch keine Daten."));
+  };
+  const add = (v) => {
+    if (!v || !/^\d{4}-/.test(v) && !v.startsWith("????")) return toast("Bitte ein Datum wählen", { err: true });
+    if (items.some((x) => x.value === v)) return toast("Dieses Datum steht schon drin");
+    items.push({ value: v, label: null }); draw();
+  };
+  draw();
+  const body = h("div.col", { style: { gap: "14px" } },
+    h("div.dl-add", pick, h("button.btn.primary", { type: "button", on: { click: () => add(pick.value) } }, icon("plus"), "Hinzufügen"),
+      h("button.btn", { type: "button", on: { click: () => add(todayIso()) } }, "Heute"), h("button.btn", { type: "button", on: { click: () => add(shift(-1)) } }, "Gestern")),
+    h("div.row.between", h("b", def.name), count), listBox,
+    prevIn ? h("label.dl-prevrow", h("span.grow", "Dazu ohne Datum (frühere Treffen)"), prevIn) : null);
+  return modal(title || def.name, body, [{ label: "Abbrechen" }, { label: "Speichern", primary: true, action: async () => {
+    const vals = items.map((it, i) => ({ ...(it.id ? { id: it.id } : {}), value: it.value, label: it.label || null, primary: i === 0, uncertain: !!it.uncertain }));
+    try {
+      const r = await PUT(path, { values: vals });
+      if (prevIn && Number(prevIn.value || 0) !== prevVal) await PUT(prevPath, { values: Number(prevIn.value) > 0 ? [{ value: Number(prevIn.value) }] : [] });
+      return r;
+    } catch (_) { return false; }
+  } }]);
+}
+
 export async function editField(def, values, path, { title, addNew = false } = {}) {
+  if (def.type === "date" && def.multi) return editDateList(def, values, path, { title });
   const list = h("div.col.fv-list");
   const items = (values || []).map((v) => ({ ...v }));
   if (!items.length) items.push({ value: null, primary: true, label: null });
