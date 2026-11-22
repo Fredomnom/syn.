@@ -176,7 +176,7 @@ async function people(main, view, route, saved = null) {
       h("span.small.t2", "Personen"), h("select.input", { on: { change: (e) => { VS.kind = e.target.value; redraw(); } } },
         [["all", "Alle Menschen & Tiere"], ["person", "Menschen"], ["pet", "Haustiere"]].map(([k, l]) => h("option", { value: k, selected: VS.kind === k }, l))),
       h("div.seg", { "data-seg": "views" }, views.map(([id, label, ic], i) => h("button" + (VS.view === id ? ".on" : ""), { title: `${label} (${pretty(binding("view_" + id))})`, on: { click: () => { location.hash = `#/people/${id}`; } } }, icon(ic), label))),
-      h("div.tb-slot"), filterBtn, groupBtn, sortBtn,
+      h("span.grow"), filterBtn, groupBtn, sortBtn,
       h("button.btn.sm", { title: "Ansicht speichern", on: { click: () => saveView(saved) } }, icon("download"), saved ? "Speichern" : "Ansicht speichern")),
     body);
   await redraw(); // erst fertig zeichnen, dann einblenden
@@ -247,9 +247,6 @@ async function drawView(body, all) {
     if (VS.view === "net") await viz.net(box, list, all);
   }
   body.replaceChildren(box);
-  // Zeitregler (Ringe, Netz) gehört in die obere Leiste zu den anderen Optionen
-  const tb = body.querySelector(".timebar"), slot = body.closest(".page")?.querySelector(".tb-slot");
-  if (slot) slot.replaceChildren(...(tb ? [tb] : []));
 }
 
 function grid(body, list) {

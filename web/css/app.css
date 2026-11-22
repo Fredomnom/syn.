@@ -1284,8 +1284,8 @@ a.so-stat:hover { border-color: var(--ink); transform: translateY(-1px); }
 .mob .m-fbtn { gap: 4px; display: inline-flex; align-items: center; }
 .merge-legend { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; color: var(--text2); }
 @media (max-width: 700px) { .merge-t .pick { display: block; } .merge-t .pick > * { display: inline; } }
-/* Zeitregler in der Werkzeugleiste */
-.toolbar .tb-slot { flex: 1 1 380px; min-width: 0; display: flex; justify-content: flex-end; }
-.toolbar .tb-slot:empty { flex: 1 1 0; }
-.toolbar .tb-slot .timebar { flex: 1; max-width: 560px; min-width: 0; padding: 0 12px; height: 34px; gap: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--white); }
-.toolbar .tb-slot .tb-end { display: none; }
+/* Zeitregler in der Zoom-Leiste unten im Diagramm */
+.viz-zoom.with-time { left: 12px; }
+.viz-zoom .timebar { flex: 1; min-width: 0; padding: 0 10px; gap: 10px; border: 0; background: none; height: 34px; }
+.viz-zoom .timebar .tb-end { display: none; }
+.viz-zoom .vz-sep { width: 1px; align-self: stretch; margin: 4px 4px; background: var(--line); }

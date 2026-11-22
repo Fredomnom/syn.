@@ -83,7 +83,8 @@ export async function rings(body, list0, all) {
   };
   const vizBox = h("div.viz", { style: { height: "calc(100vh - 230px)", minHeight: "460px" } });
   const side = h("div.col.rs-side", { style: { gap: "16px" } });
-  const wrap = h("div.col", { style: { gap: 0 } }, vizBox, await timeSlider(async (d) => { at = d; data = d ? filterRows(await GET("/entities" + qs({ at: d }))) : list0; draw(); }));
+  const tbarR = await timeSlider(async (d) => { at = d; data = d ? filterRows(await GET("/entities" + qs({ at: d }))) : list0; draw(); });
+  const wrap = h("div.col", { style: { gap: 0 } }, vizBox);
   body.append(h("div.split", wrap, side));
   const draw = () => {
     const cid = centerRow?.id;
@@ -144,7 +145,7 @@ export async function rings(body, list0, all) {
     const nodes = s("g");
     for (const r of placed) nodes.append(node(r, r._x, r._y, 21, { approx: at && r.approx_created }));
     svg.append(nodes, cid ? node(centerRow, cx, cy, 26) : node({ is_self: true, display: "Du" }, cx, cy, 26));
-    clear(vizBox, svg);
+    clear(vizBox, svg, h("div.viz-zoom.with-time", tbarR)); // Zeitregler unten im Diagramm
     // Ziehen: Abstand = Ring, Sektor = Kreis-Art des Hauptkreises
     let drag = null;
     nodes.addEventListener("pointerdown", (e) => {
@@ -316,7 +317,8 @@ export async function net(body, list0) {
   const box = h("div.viz", { style: { height: "calc(100vh - 230px)", minHeight: "460px" } });
   const side = h("div.col", { style: { gap: "16px" } });
   let at = null, data = list0;
-  body.append(h("div.split", h("div.col", { style: { gap: 0 } }, box, await timeSlider(async (d) => { at = d; data = d ? filterRows(await GET("/entities" + qs({ at: d }))) : list0; layout(); draw(); })), side));
+  const tbarN = await timeSlider(async (d) => { at = d; data = d ? filterRows(await GET("/entities" + qs({ at: d }))) : list0; layout(); draw(); });
+  body.append(h("div.split", h("div.col", { style: { gap: 0 } }, box), side));
   const W = 1000, H = 700;
   let nodes = [], links = [], pos = LS("netpos", {});
   const layout = () => {
@@ -421,7 +423,7 @@ export async function net(body, list0) {
     applyCam();
     zoomLabel = h("span.mono.small", Math.round(cam.k * 100) + " %");
     const cc = (x, y) => [W / 2, H / 2];
-    const zoomUi = h("div.viz-zoom",
+    const zoomUi = h("div.viz-zoom.with-time", tbarN, h("span.vz-sep"),
       h("button.btn.sm.icon", { title: "Herauszoomen", on: { click: () => zoomAt(1 / 1.25, ...cc()) } }, icon("minus")), zoomLabel,
       h("button.btn.sm.icon", { title: "Hineinzoomen", on: { click: () => zoomAt(1.25, ...cc()) } }, icon("plus")),
       h("button.btn.sm", { title: "Alle Personen zeigen", on: { click: fit } }, "Alles zeigen"));
