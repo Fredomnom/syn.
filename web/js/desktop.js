@@ -339,10 +339,11 @@ async function personPage(main, id) {
         bundFields().filter((d) => d.id !== "f_level").map((d) => h("div.iz-tile", fieldRow(d, iz[d.id] || [], `/entities/${id}/fields/${d.id}`, e, reload))),
         e.ist ? h("div.iz-tile.static", h("div.iz-k", "Ist (berechnet)"), h("div.iz-v", `Ring ${e.ist.ring}`), h("div.iz-sub", `letzter Kontakt ${rel(e.ist.last)}`, e.long_unseen ? " · lange nicht gesehen" : "")) : null)));
 
-  const { fields, circles, bunds, notes, suggBox, verlauf, knowsCard, routines, self } = await personCards(e, reload);
-  page.append(h("a.crumb", { href: "#/people" }, icon("left"), "Personen"), head, dupHint(e, { desktop: true, onChange: reload }),
+  const { fields, circles, bunds, notes, suggBox, verlauf, knowsCard, routines, self, banner, photos } = await personCards(e, reload);
+  if (banner) page.classList.add("has-banner");
+  page.append(h("a.crumb", { href: "#/people" }, icon("left"), "Personen"), banner, head, dupHint(e, { desktop: true, onChange: reload }),
     h("div.pgrid3",
-      h("div.pcol.wide", ihr, bunds, self),
+      h("div.pcol.wide", ihr, photos, bunds, self),
       h("div.pcol.narrow", fields, circles, notes),
       h("div.pcol.narrow", suggBox, verlauf, knowsCard, routines)));
   guideAttach(e);
@@ -405,7 +406,13 @@ export async function personCards(e, reload, { mobile = false } = {}) {
     h("button.btn.sm", { on: { click: async () => { await POST(`/suggestions/${s.id}/accept`); invalidate(); reload(); } } }, "Übernehmen"),
     h("button.btn.sm.ghost.icon", { on: { click: async () => { await POST(`/suggestions/${s.id}/reject`); reload(); } } }, icon("x")))))) : null;
   const self = e.is_self ? await selfOverview(allRows) : null;
-  return { fields, circles, bunds, notes, suggBox, verlauf, knowsCard, routines, self };
+  // Fotos aus Immich: Banner oben und Galerie
+  const P = await import("./photos.js");
+  const pd = await P.loadPhotos(id);
+  const immichProfile = (e.fields.f_profile || []).find((v) => v.value?.service === "immich")?.value?.url;
+  const banner = P.photoBanner(pd);
+  const photos = P.photoGallery(pd, { profileUrl: immichProfile });
+  return { fields, circles, bunds, notes, suggBox, verlauf, knowsCard, routines, self, banner, photos };
 }
 
 // Mein Profil: statt „Ihr zwei“ ein Überblick über dein Umfeld und deine Visitenkarte

@@ -61,6 +61,7 @@ class Importer:
     rate = 0.0  # Sekunden Pause zwischen Anfragen (inoffizielle Wege: niedrige Rate)
     requires = []  # optionale Python-Pakete
     steps = []  # Schritt-für-Schritt-Anleitung zum Einrichten
+    match_by_name = False  # Namen kommen von dir selbst (z.B. Immich) → eindeutiger Name ordnet zu
 
     def fetch(self, cfg: dict, run: "Run"):
         raise NotImplementedError
@@ -251,6 +252,15 @@ def apply_contacts(ctx, imp: Importer, contacts, run: Run):
     stats["bots"] = 0
     contacts = list(contacts)
     run.progress(0, len(contacts), "Zuordnen")
+    _names = {}
+
+    def name_idx():
+        """Name → Einträge (einmal gebaut, nur für Importer mit match_by_name)."""
+        if not _names:
+            for r in db.q("SELECT id, name FROM entities WHERE user_id=? AND is_self=0 AND name IS NOT NULL", uid):
+                _names.setdefault(" ".join(r["name"].lower().split()), []).append(r["id"])
+            _names.setdefault("", [])
+        return _names
     group_members = {}
     for c in contacts:
         stats["seen"] += 1
@@ -282,6 +292,10 @@ def apply_contacts(ctx, imp: Importer, contacts, run: Run):
                 eid = em_idx.get(normalize_email(e))
                 if eid:
                     break
+        if not eid and imp.match_by_name and c.name:
+            hits = name_idx().get(" ".join(c.name.lower().split()), [])
+            if len(hits) == 1:
+                eid = hits[0]
         if eid == me:
             continue
         with db.tx():

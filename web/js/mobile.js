@@ -248,7 +248,8 @@ async function profile(page, id) {
     h("div.mtop", h("a.back", { href: e.is_self ? "#/me" : "#/" }, icon("left"), e.is_self ? "Ich" : "Personen"),
       h("div.row", h("button.btn.ghost.sm", { on: { click: async () => { const r = await editPerson(e); if (r) reload(); } } }, "Bearbeiten"),
         h("button.btn.ghost.sm.icon", { "aria-label": "Mehr", on: { click: more } }, icon("more")))),
-    h("div.col", { style: { alignItems: "center", gap: "6px", textAlign: "center" } },
+    cards.banner ? h("div.m-banner", cards.banner) : null,
+    h("div.col" + (cards.banner ? ".m-hero-over" : ""), { style: { alignItems: "center", gap: "6px", textAlign: "center" } },
       avatar(e, 72),
       h("h1", { style: { fontSize: "24px" } }, e.name || e.description || "Ohne Namen", " ", !e.name ? h("span.qmark", "ohne Namen") : e.name_uncertain ? h("span.qmark", "Name ?") : null),
       e.aliases?.length ? h("div.small.t2", "auch: " + e.aliases.join(", ")) : null,
@@ -268,7 +269,7 @@ async function profile(page, id) {
         const p = primaryOf(iz[d.id]);
         return h("div.kv", { "data-fid": d.id, on: { click: async () => { if (await editField(d, iz[d.id] || [], `/entities/${e.id}/fields/${d.id}`)) reload(); } } }, h("span.k", d.name), h("span.v", p ? (d.type === "date" ? humanDate(p.value) : valueEl(d, p, e.names)) : h("span.t3", "–")));
       })),
-    h("div.m-cards", cards.self, cards.suggBox, cards.fields, cards.circles, cards.bunds, cards.notes, cards.verlauf, cards.knowsCard, cards.routines));
+    h("div.m-cards", cards.self, cards.suggBox, cards.photos, cards.fields, cards.circles, cards.bunds, cards.notes, cards.verlauf, cards.knowsCard, cards.routines));
   guideAttach(e, { mobile: true });
 }
 

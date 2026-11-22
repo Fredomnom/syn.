@@ -25,6 +25,7 @@ SERVICES = [
     {"id": "lastfm", "name": "Last.fm", "link": "https://last.fm/user/{handle}"},
     {"id": "prate", "name": "prate", "link": "{url}"},
     {"id": "vrchat", "name": "VRChat", "link": "https://vrchat.com/home/user/{id}"},
+    {"id": "immich", "name": "Immich", "link": "{url}"},
     {"id": "google", "name": "Google", "link": ""},
 ]
 
@@ -88,7 +89,7 @@ def backfill_new_services():
     damit ein gelöschter Dienst nicht wiederkommt."""
     known = set(db.jl(db.val("SELECT value FROM instance WHERE key='services_known'"), None) or [])
     if not known:  # erster Lauf: alles bis auf neue Dienste gilt als bekannt
-        known = {s["id"] for s in SERVICES} - {"vrchat"}
+        known = {s["id"] for s in SERVICES} - {"vrchat", "immich"}
     new = [s for s in SERVICES if s["id"] not in known]
     if new:
         for u in db.q("SELECT id, settings FROM users"):

@@ -94,7 +94,9 @@ function personId(el) {
   if (n) return [n, n.dataset.id];
   return [null, null];
 }
-function hideCard() { clearTimeout(cardT); cardFor = null; cardEl.classList.remove("on"); }
+let stopShow = () => {};
+function hideCard() { clearTimeout(cardT); cardFor = null; cardEl.classList.remove("on"); stopShow(); stopShow = () => {};
+  setTimeout(() => { if (!cardFor) { cardEl.querySelector(".pc-banner")?.remove(); cardEl.classList.remove("with-banner"); } }, 200); }
 function hideTip() { clearTimeout(tipT); tipFor = null; tipEl.hide(); }
 
 document.addEventListener("mouseover", (e) => {
@@ -110,6 +112,14 @@ document.addEventListener("mouseover", (e) => {
         if (!r || cardFor !== pEl || !pEl.isConnected) return;
         cardEl.render(r); cardEl.place(pEl, x, y);
         requestAnimationFrame(() => cardEl.classList.add("on"));
+        // Fotos aus Immich: zufällige Auswahl läuft als Diashow durch ein Banner oben in der Karte
+        const P = await import("./photos.js");
+        const pd = await P.loadPhotos(pid, { random: 8 });
+        if (!pd.total || cardFor !== pEl) return;
+        const ban = h("div.pc-banner");
+        cardEl.prepend(ban); cardEl.classList.add("with-banner");
+        stopShow = P.slideshow(ban, pd.items);
+        cardEl.place(pEl, x, y);
       }, 420);
     }
     return;

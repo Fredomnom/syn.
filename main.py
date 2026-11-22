@@ -18,7 +18,7 @@ from syn import config, db
 
 # Je ein Modul für Lebewesen, Kreise, Bünde, Felder, Verlauf, Routinen und Importe – plus Konten, Sync & Co.
 MODULES = ["konten", "lebewesen", "kreise", "buende", "felder", "verlauf", "routinen", "importe_api", "dubletten",
-           "vorschlaege", "notizen", "dateien", "carddav", "google_sync", "undo", "visitenkarte"]
+           "vorschlaege", "notizen", "dateien", "carddav", "google_sync", "undo", "visitenkarte", "immich_api"]
 
 
 def create_app() -> FastAPI:

@@ -98,6 +98,12 @@ CREATE TABLE IF NOT EXISTS contact_signals(
   user_id TEXT NOT NULL, entity_id TEXT NOT NULL, source TEXT NOT NULL, kind TEXT NOT NULL, at TEXT,
   PRIMARY KEY(entity_id, source, kind)
 );
+-- Fotos aus Immich: nur Verweise (Person in Immich → Foto), die Bilder bleiben in Immich
+CREATE TABLE IF NOT EXISTS immich_assets(
+  user_id TEXT NOT NULL, person_id TEXT NOT NULL, asset_id TEXT NOT NULL, taken_at TEXT,
+  PRIMARY KEY(user_id, person_id, asset_id)
+);
+CREATE INDEX IF NOT EXISTS immich_assets_asset ON immich_assets(user_id, asset_id);
 CREATE TABLE IF NOT EXISTS importer_configs(
   user_id TEXT NOT NULL, importer_id TEXT NOT NULL, enabled INTEGER DEFAULT 0, config_enc TEXT,
   state TEXT DEFAULT '{}', last_run_at TEXT, last_status TEXT, last_log TEXT, risk_ack INTEGER DEFAULT 0,

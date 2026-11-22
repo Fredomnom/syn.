@@ -26,7 +26,7 @@ export const sourceName = (id) => sources()[id] || id;
 
 // Logos der Dienste (Simple Icons, CC0) – einfarbig in der Textfarbe; Import-Quellen mit eigenen Symbolen
 const LOGOS = new Set(["instagram", "discord", "steam", "telegram", "whatsapp", "signal", "matrix", "github", "mastodon", "bluesky", "twitch",
-  "psn", "linkedin", "facebook", "snapchat", "anilist", "lastfm", "google", "prate", "xbox", "vrchat"]);
+  "psn", "linkedin", "facebook", "snapchat", "anilist", "lastfm", "google", "prate", "xbox", "vrchat", "immich"]);
 const SOURCE_ICONS = { card: "idcard", imap: "mail", kalender: "calendar", vcard: "smartphone", android: "phone", carddav: "users" };
 export function serviceIcon(id, size = 16) {
   if (LOGOS.has(id)) return h("span.svc-ic", { style: { "--src": `url(/static/icons/services/${id}.svg)`, width: size + "px", height: size + "px" } });
