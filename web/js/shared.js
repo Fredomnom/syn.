@@ -1,12 +1,12 @@
 // Bausteine, die Handy und Desktop teilen: Person bearbeiten, Feld hinzufügen, Ring wählen, Doppelte-Hinweis.
-import { S, h, icon, iconButton, rows, api, GET, POST, PUT, PATCH, DEL, clear, modal, confirmDlg, invalidate, avatar, circleChip, toast,
+import { optimistic, S, h, icon, iconButton, rows, api, GET, POST, PUT, PATCH, DEL, clear, modal, confirmDlg, invalidate, avatar, circleChip, toast,
   RING, ringMini, pickCircle, reloadFields, popover, closePop } from "./core.js";
 import { fieldsFor, editField, TYPE_NAMES, inputFor, sourceName } from "./fields.js";
 import { dateInput } from "./date.js";
 import { pickAndCrop } from "./crop.js";
 import { switchInput, segInput, tagInput } from "./controls.js";
 
-export async function editPerson(e) {
+export async function editPerson(e, bg = null) {
   let avatarUrl = e.avatar;
   const photo = h("div.pd-photo", { title: "Profilbild ändern" });
   const file = h("input", { type: "file", accept: "image/*", style: { display: "none" }, "data-ctl": "1" });
@@ -55,6 +55,13 @@ export async function editPerson(e) {
     { label: "Speichern", primary: true, action: async () => {
       const body = { first_name: first.value, middle_names: middle.value, last_name: last.value, aliases: aliases.get(), avatar: avatarUrl };
       if (!e.is_self) Object.assign(body, { name_uncertain: unsure.get(), description: desc.value, kind: kind.get(), on_phone: phone.get(), valid_from: vf.value || null });
+      if (bg) { // sofort übernehmen, Server im Hintergrund
+        Object.assign(e, body);
+        const nm = [body.first_name, body.middle_names, body.last_name].map((x) => (x || "").trim()).filter(Boolean).join(" ");
+        if (nm) e.name = nm;
+        e.display = e.name || e.description || e.display;
+        bg.local(); optimistic(() => PATCH("/entities/" + e.id, body), { onFail: bg.onFail, onDone: bg.onDone }); return true;
+      }
       try { return await PATCH("/entities/" + e.id, body); } catch (_) { return false; }
     } }].filter(Boolean));
   if (r) invalidate();
@@ -235,7 +242,7 @@ async function selfRow() {
   return all.find((r) => r.is_self) || { is_self: true, display: "Du" };
 }
 
-export async function editIhrZwei(e) {
+export async function editIhrZwei(e, bg = null) {
   const me = await selfRow();
   const iz = e.ihr_zwei || {};
   const selfIsA = !iz.a_id || iz.a_id === me.id;
@@ -243,25 +250,29 @@ export async function editIhrZwei(e) {
   const r = await modal("Ihr zwei", h("div.col", ed.el, h("p.small.t3", "Die Bund-Art setzt die Rollen beider Seiten. Rollen lassen sich auch frei benennen.")),
     [{ label: "Abbrechen" }, { label: "Speichern", primary: true, action: () => {
       const v = ed.get();
-      return PUT(`/entities/${e.id}/ihr-zwei`, { kind_id: v.kind_id, role_a: selfIsA ? v.roleLeft : v.roleRight, role_b: selfIsA ? v.roleRight : v.roleLeft }).catch(() => false);
+      const body = { kind_id: v.kind_id, role_a: selfIsA ? v.roleLeft : v.roleRight, role_b: selfIsA ? v.roleRight : v.roleLeft };
+      if (bg) { e.ihr_zwei = { ...(e.ihr_zwei || {}), ...body, a_id: e.ihr_zwei?.a_id || me.id }; bg.local(); optimistic(() => PUT(`/entities/${e.id}/ihr-zwei`, body), { onFail: bg.onFail, onDone: bg.onDone }); return true; }
+      return PUT(`/entities/${e.id}/ihr-zwei`, body).catch(() => false);
     } }]);
   if (r) invalidate();
   return r;
 }
 
-export async function editBund(e, b) {
+export async function editBund(e, b, bg = null) {
   const all = await rows();
   const other = all.find((r) => r.id === b.other_id) || { display: b.other_name, name: b.other_name };
   const ed = bundEditor(e, other, { kind_id: b.kind_id, roleLeft: b.role_self, roleRight: b.role_other });
   const r = await modal("Bund", h("div.col", ed.el), [{ label: "Abbrechen" }, { label: "Speichern", primary: true, action: () => {
     const v = ed.get();
-    return PATCH("/bunds/" + b.id, { kind_id: v.kind_id, role_a: b.self_is_a ? v.roleLeft : v.roleRight, role_b: b.self_is_a ? v.roleRight : v.roleLeft }).catch(() => false);
+    const body = { kind_id: v.kind_id, role_a: b.self_is_a ? v.roleLeft : v.roleRight, role_b: b.self_is_a ? v.roleRight : v.roleLeft };
+    if (bg) { Object.assign(b, { kind_id: v.kind_id, role_self: v.roleLeft, role_other: v.roleRight }); bg.local(); optimistic(() => PATCH("/bunds/" + b.id, body), { onFail: bg.onFail, onDone: bg.onDone }); return true; }
+    return PATCH("/bunds/" + b.id, body).catch(() => false);
   } }]);
   if (r) invalidate();
   return r;
 }
 
-export async function addBund(e, otherRow) {
+export async function addBund(e, otherRow, bg = null) {
   const first = S.bundKinds[0];
   const ed = bundEditor(e, otherRow, { kind_id: first?.id });
   const since = dateInput("", { placeholder: "seit (optional)" });
@@ -269,7 +280,12 @@ export async function addBund(e, otherRow) {
     h("p.small.t3", "Ein Bund ist eine Beziehung zwischen genau zwei Lebewesen. Enter wählt die Art, nochmal Enter legt an.")),
     [{ label: "Abbrechen" }, { label: "Anlegen", primary: true, action: () => {
       const v = ed.get();
-      return POST("/bunds", { a_id: e.id, b_id: otherRow.id, kind_id: v.kind_id, role_a: v.roleLeft, role_b: v.roleRight, valid_from: since.value || null }).catch(() => false);
+      const body = { a_id: e.id, b_id: otherRow.id, kind_id: v.kind_id, role_a: v.roleLeft, role_b: v.roleRight, valid_from: since.value || null };
+      if (bg) { // sofort als Bund zeigen (vorläufige ID), Server legt ihn im Hintergrund an
+        (e.bunds ||= []).push({ id: "tmp_" + Date.now(), other_id: otherRow.id, other_name: otherRow.display, kind_id: v.kind_id, role_self: v.roleLeft, role_other: v.roleRight, self_is_a: true, fields: {}, pending: true });
+        bg.local(); optimistic(() => POST("/bunds", body), { onFail: bg.onFail, onDone: bg.onDone }); return true;
+      }
+      return POST("/bunds", body).catch(() => false);
     } }]);
   if (r) invalidate();
   return r;

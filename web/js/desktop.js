@@ -301,7 +301,8 @@ export async function newPersonDialog(prefill = {}) {
 // ---------------------------------------------------------------- Personenseite
 // Antworten merken, solange dieselben Daten lokal neu gezeichnet werden (frische Daten = neuer Merker)
 const memo = (e, k, fn) => ((e.__c ||= {})[k] ??= fn());
-let quietT = null;
+const bgOf = (reload) => (reload?.local ? { local: reload.local, onFail: reload, onDone: reload.quiet } : null);
+let quietT = null, liveMain = null, localVer = 0;
 // Eintrag aus einer gemerkten Liste nehmen, sofort neu zeichnen, Server im Hintergrund (Personenseite)
 function dropLocal(e, key, pred, reload, server) {
   if (!reload.local) return Promise.resolve(server()).then(() => { invalidate(); reload(); });
@@ -316,21 +317,35 @@ async function personPage(main, id, local = null) {
   const page = h("div.page"); main.append(page);
   // reload = echter Stand vom Server; reload.local = sofort aus den lokalen Daten neu zeichnen
   const reload = () => rebuild(main, (m) => personPage(m, id));
-  reload.local = () => rebuild(main, (m) => personPage(m, id, e));
-  // still nachholen, was der Server berechnet (Ist, Verlauf …) – nicht, während jemand tippt
-  reload.quiet = () => { clearTimeout(quietT); const go = () => { if (location.hash !== "#/p/" + id) return; if (interacting()) { quietT = setTimeout(go, 800); return; } reload(); }; quietT = setTimeout(go, 600); };
+  liveMain = main;
+  reload.local = () => { localVer++; return rebuild(liveMain, (m) => personPage(m, id, e)); };
+  // still nachholen, was der Server berechnet (Ist, Verlauf …): erst holen, dann nur einsetzen, wenn inzwischen
+  // niemand tippt, nichts offen ist und keine neue lokale Änderung kam – sonst später nochmal
+  reload.quiet = () => {
+    clearTimeout(quietT);
+    const go = async () => {
+      if (location.hash !== "#/p/" + id) return;
+      if (interacting()) { quietT = setTimeout(go, 800); return; }
+      const v = localVer;
+      const fresh = await GET("/entities/" + id).catch(() => null);
+      if (!fresh || location.hash !== "#/p/" + id) return;
+      if (v !== localVer || interacting()) { quietT = setTimeout(go, 800); return; }
+      rebuild(liveMain, (m) => personPage(m, id, fresh));
+    };
+    quietT = setTimeout(go, 600);
+  };
   // erst lokal ändern und zeigen, dann speichern
   const act = (mutate, server) => { mutate(e); reload.local(); optimistic(server, { onFail: reload, onDone: reload.quiet }); };
   const seenNow = () => act((x) => { x.fields.f_seen = [{ value: today(), primary: true, source: "manual" }]; x.long_unseen = false; }, () => POST(`/seen-today/${id}`));
   rememberPerson(id);
   if (!e.is_self) onPage("seen_today", () => { seenNow(); toast(`${e.display}: heute gesehen`); });
-  onPage("edit_person", async () => { if (await editPerson(e)) reload(); });
+  onPage("edit_person", () => editPerson(e, bgOf(reload)));
   onPage("add_field", () => addField(e, { onDone: reload }));
   // weitere Kürzel der Personenseite (Einstellungen → Tastenkürzel)
   if (!e.is_self && S.settings.use_levels) for (const l of [0, 1, 2, 3, 4]) onPage("ring_" + l, () => { act((x) => (x.level = l || null), () => setRing(id, l || null)); toast(`${e.display}: ${l ? ringName(l) : "ohne Ring"}`); });
   onPage("add_bund", () => page.querySelector(".card.bw .card-h .btn")?.click());
   onPage("add_circle", () => page.querySelector(".guide-circle")?.click());
-  if (!e.is_self) onPage("edit_ihr", async () => { if (await editIhrZwei(e)) reload(); });
+  if (!e.is_self) onPage("edit_ihr", () => editIhrZwei(e, bgOf(reload)));
   onPage("new_note", async () => { const { noteEditor } = await import("./notes.js"); if (await noteEditor({ links: [{ role: "dabei", entity_id: id }] })) reload(); });
   onPage("call", () => { const p = primaryOf(e.fields.f_phone); p ? (location.href = "tel:" + p.value.replace(/[^\d+]/g, "")) : toast("Keine Telefonnummer"); });
   onPage("mail", () => { const m = primaryOf(e.fields.f_email); m ? (location.href = "mailto:" + m.value) : toast("Keine E-Mail-Adresse"); });
@@ -358,7 +373,7 @@ async function personPage(main, id, local = null) {
     phone ? h("a.btn", { href: "tel:" + phone.value.replace(/[^\d+]/g, "") }, icon("phone"), "Anrufen") : null,
     mail ? h("a.btn", { href: "mailto:" + mail.value }, icon("message"), "Schreiben") : null,
     h("button.btn.icon", { on: { click: (ev) => menu(ev.currentTarget, [
-      { label: "Bearbeiten", icon: "edit", action: async () => { if (await editPerson(e)) reload(); }, hint: pretty(binding("edit_person")) },
+      { label: "Bearbeiten", icon: "edit", action: () => editPerson(e, bgOf(reload)), hint: pretty(binding("edit_person")) },
       { label: "Feld hinzufügen", icon: "plus", action: () => addField(e, { onDone: reload }), hint: pretty(binding("add_field")) },
       e.is_self || !S.settings.use_levels ? null : { label: "In den Ringen in die Mitte", icon: "rings", hint: pretty(binding("ring_center")), action: () => { const o = LS("ringopt", {}); SAVE("ringopt", { ...o, center: id }); location.hash = "#/people/rings"; } },
       e.is_self ? null : { label: "Angaben prüfen lassen …", icon: "link", hint: pretty(binding("update_link")), action: async () => { await (await import("./shared.js")).updateLinkDialog(e); reload(); } },
@@ -371,7 +386,7 @@ async function personPage(main, id, local = null) {
   // Ihr zwei
   const ring = e.level;
   const ihr = e.is_self ? null : h("div.card",
-    h("div.card-h", h("div.row", h("span.small.t2", "Ihr zwei"), h("button.chip.sel.iz-kind", { style: { cursor: "pointer" }, on: { click: async () => { if (await editIhrZwei(e)) reload(); } } }, bundKindIcon(e.ihr_zwei?.kind_id), bundKindName(e.ihr_zwei?.kind_id), " ▾")),
+    h("div.card-h", h("div.row", h("span.small.t2", "Ihr zwei"), h("button.chip.sel.iz-kind", { style: { cursor: "pointer" }, on: { click: () => editIhrZwei(e, bgOf(reload)) } }, bundKindIcon(e.ihr_zwei?.kind_id), bundKindName(e.ihr_zwei?.kind_id), " ▾")),
       e.long_unseen ? h("span.tag.yellow", "lange nicht gesehen") : null),
     h("div.card-b.iz-body" + (S.settings.use_levels ? "" : ".no-ring"),
       S.settings.use_levels ? h("div.iz-ring.guide-ring",
@@ -694,11 +709,11 @@ function bundWidget(e, all, reload, kin = []) {
   const list = real.length || kinList.length ? h("div.bw-list", kinList.length ? h("div.bw-kin-h.tiny.t3", "Folgt aus der Familie – noch nicht bestätigt") : null, kinList, real.map((b) => h("div.bw-row", avatar(byId[b.other_id], 28, { exact: true }),
     h("a.grow", { href: "#/p/" + b.other_id }, byId[b.other_id].display), h("span.small.t2.row", { style: { gap: "4px" } }, bundKindIcon(b.kind_id), [b.role_other, bundKindName(b.kind_id)].filter(Boolean)[0] || ""),
     h("button.btn.sm.ghost.icon", { on: { click: (ev) => menu(ev.currentTarget, [
-      { label: "Bund bearbeiten", icon: "edit", action: async () => { if (await editBund(e, b)) reload(); } },
+      { label: "Bund bearbeiten", icon: "edit", action: () => editBund(e, b, bgOf(reload)) },
       { label: "Bund-Felder (z.B. Jahrestag)", action: async () => { const d = S.fields.f_anniv; if (d && await editField(d, b.fields.f_anniv || [], `/bunds/${b.id}/fields/f_anniv`)) reload(); } },
-      { label: "Bund löschen", icon: "trash", action: async () => { if (await confirmDlg("Bund löschen?", `Bund mit ${b.other_name} löschen.`, "Löschen", true)) { await DEL("/bunds/" + b.id); invalidate(); reload(); } } }], { align: "right" }) } }, icon("more"))))) : null;
+      { label: "Bund löschen", icon: "trash", action: async () => { if (await confirmDlg("Bund löschen?", `Bund mit ${b.other_name} löschen.`, "Löschen", true)) { const bg = bgOf(reload); if (!bg) { await DEL("/bunds/" + b.id); invalidate(); reload(); return; } e.bunds = e.bunds.filter((x) => x !== b); bg.local(); optimistic(() => DEL("/bunds/" + b.id), { onFail: bg.onFail, onDone: bg.onDone }); } } }], { align: "right" }) } }, icon("more"))))) : null;
   const height = Math.max(240, Math.min(380, 160 + n * 34));
   graph.style.height = height + "px";
-  return h("div.card.bw", h("div.card-h", h("h3", "Bünde"), h("button.btn.sm", { on: { click: (ev) => pickPerson(ev.currentTarget, { exclude: [e.id, S.me.self_id], onPick: async (r) => { if (await addBund(e, r)) reload(); } }) } }, icon("plus"), "Bund")),
+  return h("div.card.bw", h("div.card-h", h("h3", "Bünde"), h("button.btn.sm", { on: { click: (ev) => pickPerson(ev.currentTarget, { exclude: [e.id, S.me.self_id], onPick: (r) => addBund(e, r, bgOf(reload)) }) } }, icon("plus"), "Bund")),
     h("div.card-b", graph, list || h("p.small.t3", { style: { margin: 0 } }, "Noch keine Bünde zu anderen. Mit „+ Bund“ verbindest du diese Person mit jemandem.")));
 }
