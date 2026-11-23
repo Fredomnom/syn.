@@ -58,7 +58,7 @@ async function fields(body) {
   const scopes = [["both", "Mensch & Haustier"], ["person", "Mensch"], ["pet", "Haustier"], ["bund", "Bund (z.B. Ihr zwei)"], ["kreis", "Kreis"]];
   const table = h("table.mtable", h("tr", h("th", "Name"), h("th", "ID"), h("th", "Typ"), h("th", "Abschnitt"), h("th", "Gilt für"), h("th", "Mehrere Werte"), h("th", "Schnellaktion"), h("th")),
     S.fieldList.map((f, i) => h("tr",
-      h("td", h("input.input.fname-in", { value: f.name, style: { height: "28px" }, on: { change: async (e) => { await PATCH("/fields/" + f.id, { name: e.target.value }); await reloadFields(); toast("Umbenannt – Regeln nutzen die ID, nichts bricht"); } } })),
+      h("td", h("input.input.fname-in", { value: f.name, on: { change: async (e) => { await PATCH("/fields/" + f.id, { name: e.target.value }); await reloadFields(); toast("Umbenannt – Regeln nutzen die ID, nichts bricht"); } } })),
       h("td", f.is_base ? [h("span.tag", { title: "syn erkennt mitgelieferte Felder an ihrer ID – sie bleibt fest" }, f.id), h("span.tiny.t3", " Basis")]
         : h("input.input.mono.fid-in", { value: f.id, spellcheck: false, title: "ID – Werte, Routinen und Links ziehen mit", on: { change: async (e) => {
             try { await POST(`/fields/${f.id}/rename`, { id: e.target.value.trim() }); toast("ID geändert"); await reloadFields(); reloadTab(body, fields); }
