@@ -1411,3 +1411,37 @@ syn-personcard.with-banner .pc-head .av { box-shadow: 0 0 0 4px var(--white); }
 /* Freundebuch-Bilder auf der Personenseite: Unterschrift (dunkle Tinte) auf Papier, Foto als Polaroid */
 .fr[data-fid="f_fb_sign"] img { background: #fffaf0; border-radius: 8px; padding: 4px 8px; max-width: 220px !important; }
 .fr[data-fid="f_fb_photo"] img { background: #fff; padding: 6px 6px 18px; border-radius: 3px; max-width: 150px !important; transform: rotate(-2deg); box-shadow: 0 6px 16px -8px rgba(0,0,0,.5); }
+/* Kreise als Blasen (Personenseite) */
+.cb-cardb { padding-top: 10px; }
+.cb-wrap { position: relative; width: 100%; overflow: hidden; }
+.cb-stage { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+/* Butterweich: Lage, Größe, Farbe und Rand gleiten (ein Element je Kreis bleibt bestehen) */
+.cb-bubble { position: absolute; border-radius: 50%; box-sizing: border-box; padding: 0; overflow: hidden;
+  font: inherit; color: var(--ink); cursor: pointer; will-change: left, top, width, height;
+  transition: left .6s cubic-bezier(.22,1,.36,1), top .6s cubic-bezier(.22,1,.36,1), width .6s cubic-bezier(.22,1,.36,1), height .6s cubic-bezier(.22,1,.36,1),
+    background-color .45s ease, border-color .45s ease, border-width .3s ease, opacity .45s ease, transform .35s cubic-bezier(.22,1,.36,1); }
+.cb-bubble.enter { opacity: 0; transform: scale(.6); }
+.cb-bubble.leave { opacity: 0; transform: scale(.6); pointer-events: none; }
+.cb-bubble.on { background-color: color-mix(in srgb, var(--c) 18%, transparent); border: 2px solid var(--c); }
+.cb-bubble.on.main { border-width: 3px; }
+.cb-bubble.sugg { background-color: color-mix(in srgb, var(--ink) 2%, transparent); border: 2px dashed var(--line-strong); opacity: .8; }
+.cb-bubble:hover:not(.leave) { transform: scale(1.02); opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .cb-bubble, .cb-label, .cb-me { transition: none !important; } }
+.cb-bubble.hover { background-color: color-mix(in srgb, var(--c) 28%, transparent); border-style: solid; border-color: var(--c); opacity: 1; }
+.cb-label { position: absolute; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; text-align: center; pointer-events: none;
+  transition: left .6s cubic-bezier(.22,1,.36,1), top .6s cubic-bezier(.22,1,.36,1); }
+.cb-label.center { left: 50%; top: 50%; }
+.cb-name { font: 600 14px/1.15 var(--f-head); color: var(--c); overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.cb-bubble.sugg .cb-name { color: var(--text2); font-size: 12px; }
+.mob .cb-name { font-size: 12px; } .mob .cb-bubble.sugg .cb-name { font-size: 10.5px; } .mob .cb-sub { font-size: 9.5px; }
+.cb-sub { font-size: 10.5px; color: var(--text2); margin-top: 2px; }
+.cb-people { display: flex; gap: 2px; margin-top: 4px; }
+.cb-plus { position: absolute; right: 10px; bottom: 10px; width: 46px; height: 46px; border-radius: 50%; border: 2px dashed var(--line-strong); background: transparent; color: var(--text2); display: grid; place-items: center; cursor: pointer; z-index: 2; }
+.cb-plus:hover { border-color: var(--ink); color: var(--ink); }
+.cb-me { position: absolute; transform: translate(-50%, -50%); z-index: 3; cursor: grab; border-radius: 50%; box-shadow: 0 0 0 4px var(--white), 0 10px 22px -8px rgba(0,0,0,.5);
+  transition: left .6s cubic-bezier(.34,1.3,.64,1), top .6s cubic-bezier(.34,1.3,.64,1), box-shadow .2s; touch-action: none; }
+.cb-me.drag { cursor: grabbing; transition: none; box-shadow: 0 0 0 4px var(--yellow), 0 16px 30px -8px rgba(0,0,0,.6); }
+.mob .cb-me { cursor: default; pointer-events: none; }
+.cb-lose { position: absolute; left: 110px; bottom: 26px; right: 70px; font-size: 12.5px; color: var(--text2); }
+.cb-hint { margin: 0; }
+.cb-seg { margin-left: auto; margin-right: 6px; }

@@ -529,7 +529,12 @@ def add_member(uid, circle_id, eid, role=None, valid_from=None, source="manual")
     cur = [m for m in db.q("SELECT * FROM memberships WHERE circle_id=? AND entity_id=?", circle_id, eid)
            if active(m)]
     if cur:
-        return cur[0]["id"]
+        m = cur[0]
+        if m["valid_to"]:  # heute ausgetragen und gleich wieder eingetragen → Ende wieder weg
+            db.ex("UPDATE memberships SET valid_to=NULL WHERE id=?", m["id"])
+            record(uid, "entity", eid, "membership", {"circle": circle_id, "valid_to": m["valid_to"]}, {"circle": circle_id, "name": c["name"]}, source)
+            _touch("entity", eid)
+        return m["id"]
     mid = new_id("m")
     db.insert("memberships", {"id": mid, "user_id": uid, "circle_id": circle_id, "entity_id": eid, "role": role,
                               "valid_from": parse_date(valid_from) if valid_from else None, "valid_to": None,

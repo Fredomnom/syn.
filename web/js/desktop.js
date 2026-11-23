@@ -391,6 +391,14 @@ export async function personCards(e, reload, { mobile = false } = {}) {
         { label: "Mitgliedschaft löschen", icon: "trash", action: async () => { await DEL("/memberships/" + m.id); invalidate(); reload(); } }], { align: "right" }) } }, icon("more"))))
       : h("div.t3.small", "In keinem Kreis – steht unter „Lose“.")));
   circles.querySelector(".card-b")?.classList.add("clabels");
+  // Kreise als Blasen zum Hineinziehen; die Liste oben bleibt als Umschalter und für viele Kreise
+  {
+    const listEl = circles.querySelector(".card-b"); listEl.remove();
+    const { circleBoard } = await import("./circleboard.js");
+    const cb = circleBoard(e, allRows, reload, { list: () => listEl });
+    circles.append(h("div.card-b.cb-cardb", cb.body));
+    if (cb.seg) circles.querySelector(".card-h").insertBefore(cb.seg, circles.querySelector(".card-h .btn"));
+  }
   const hist = (await GET(`/entities/${id}/history?limit=60`)).filter((x) => !["role_a", "role_b"].includes(x.attr));
   const histBox = h("div.timeline");
   const drawHist = (n) => clear(histBox, hist.slice(0, n).map((x) => h("div.ev", h("span.dot"), h("div", h("div.mono.t3", x.at.slice(0, 10)), h("div", historyText(x)), x.source && x.source !== "manual" ? h("div.tiny.t3", SOURCE(x.source)) : null))),

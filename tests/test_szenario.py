@@ -434,3 +434,15 @@ def test_treffen_als_liste_und_umstellung(client):
     # Treffen erscheint im Kalender, und „vor 1 Jahr getroffen“ im Rückblick
     day = c.get("/api/v1/calendar/day/2026-04-01").json()
     assert any(it["field"] == "f_meet" and it["years"] == 1 for it in day["items"])
+
+
+def test_austragen_und_gleich_wieder_eintragen(client):
+    c = client
+    k = c.post("/api/v1/circles", json={"name": "Chor", "kind_id": c.get("/api/v1/circle-kinds").json()["kinds"][0]["id"]}).json()
+    e = c.post("/api/v1/entities", json={"name": "Eva Hin"}).json()
+    mid = c.post(f"/api/v1/circles/{k['id']}/members", json={"entity_id": e["id"]}).json()["id"]
+    c.post(f"/api/v1/memberships/{mid}/end")
+    assert c.get(f"/api/v1/entities/{e['id']}").json()["memberships"][0]["valid_to"]
+    again = c.post(f"/api/v1/circles/{k['id']}/members", json={"entity_id": e["id"]}).json()["id"]
+    ms = c.get(f"/api/v1/entities/{e['id']}").json()["memberships"]
+    assert again == mid and len(ms) == 1 and not ms[0]["valid_to"]
