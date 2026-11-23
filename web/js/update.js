@@ -94,14 +94,18 @@ async function main() {
     let photo = null;
     if (book.photo) {
       const st = $("span", { class: "fb-ph-t" }, book.has_photo ? "Foto ist schon da – tippen für ein neues" : "Klebe hier dein Bild ein");
-      const file = $("input", { type: "file", accept: "image/*", class: "fb-file", onchange: () => {
-        const f = file.files[0]; if (!f) return;
+      // data-ctl: nicht von syns Bedienelementen umbauen lassen – das Polaroid ist selbst die Fläche (auch zum Hineinziehen)
+      const pick = (f) => {
+        if (!f || !f.type.startsWith("image/")) return;
         photoFile = f;
         photo.querySelector(".fb-ph-img")?.remove();
         photo.prepend($("img", { class: "fb-ph-img", src: URL.createObjectURL(f), alt: "" }));
         st.textContent = "Wird beim Absenden eingeklebt"; photo.classList.add("done"); avRow.hidden = false;
-      } });
-      photo = $("label", { class: "fb-photo" + (book.has_photo ? " done" : "") }, st, file);
+      };
+      const file = $("input", { type: "file", accept: "image/*", class: "fb-file", "data-ctl": "aus", "aria-label": "Foto einkleben", onchange: () => pick(file.files[0]) });
+      photo = $("label", { class: "fb-photo" + (book.has_photo ? " done" : ""),
+        ondragover: (e) => { e.preventDefault(); photo.classList.add("over"); }, ondragleave: () => photo.classList.remove("over"),
+        ondrop: (e) => { e.preventDefault(); photo.classList.remove("over"); pick(e.dataTransfer?.files?.[0]); } }, st, file);
       avatarBox = $("input", { type: "checkbox" });
       avRow = $("label", { class: "fb-av", hidden: true }, avatarBox, " Auch als mein Profilbild vorschlagen");
     }
@@ -157,11 +161,12 @@ async function main() {
   } },
     $("h1", {}, `Hallo ${d.first_name || ""}!`.replace(" !", "!")),
     $("p", { class: "vk-sub" }, `${d.owner} hat diese Angaben von dir. Stimmt noch alles? Ändere, was nicht passt, oder streich, was nicht mehr gilt – ${d.owner_first} bekommt es als Vorschlag und übernimmt es selbst.`),
-    $("label", { class: "f" }, "Dein Name", name),
-    d.fields.map(fieldBox),
-    bookBox,
+    $("div", { class: "up-cols" },
+      $("div", { class: "up-col" }, $("label", { class: "f" }, "Dein Name", name), d.fields.map(fieldBox)),
+      bookBox ? $("div", { class: "up-col up-col-book" }, bookBox) : null),
     $("label", { class: "f" }, "Nachricht (optional)", msg), trap, err, send,
     $("p", { class: "up-note" }, `Du siehst nur deine Kontaktdaten. Der Link gilt bis ${until}.`));
+  root.classList.toggle("has-book", !!bookBox);
   root.replaceChildren($("div", { class: "vk-card" }, form),
     $("a", { class: "vk-foot", href: SYN_SITE, target: "_blank", rel: "noopener" }, "Kontaktbuch ", $("span", { class: "logo" }, "syn", $("b", {}, "."))));
 }
