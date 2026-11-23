@@ -1443,5 +1443,11 @@
 "alle Werte bleiben": "all values stay",
 "Pro Feld wählst du, wessen Wert bleibt. Mehrfachfelder (Nummern, Profile …) behalten alle Werte. ": "For each field, pick whose value stays. Multi-value fields (numbers, profiles …) keep all values. ",
 "Kreise und Bünde bleiben alle": "all circles and bonds stay",
-", der Verlauf aller Einträge bleibt erhalten, die übrigen Namen werden Aliasse.": ", the history of all entries is kept, the other names become aliases."
+", der Verlauf aller Einträge bleibt erhalten, die übrigen Namen werden Aliasse.": ", the history of all entries is kept, the other names become aliases.",
+"Folgt aus der Familie – noch nicht bestätigt": "Follows from the family – not confirmed yet",
+"Stimmt": "Correct",
+"Bund gespeichert": "Bond saved",
+"Ausgeblendet": "Hidden",
+"Stimmt – als echten Bund speichern": "Correct – save as a real bond",
+"Stimmt nicht – nicht mehr vorschlagen": "Not right – don't suggest again"
 }

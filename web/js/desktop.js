@@ -361,7 +361,8 @@ export async function personCards(e, reload, { mobile = false } = {}) {
 
   // rechte Spalte: Bünde, Kreise, Verlauf, Routinen
   const allRowsB = await rows();
-  const bunds = e.is_self ? null : bundWidget(e, allRowsB, reload); // du hast zu jedem einen Bund – hier nicht nötig
+  const kin = e.is_self ? [] : await GET("/kin?entity_id=" + e.id).catch(() => []); // abgeleitete Verwandtschaft
+  const bunds = e.is_self ? null : bundWidget(e, allRowsB, reload, kin); // du hast zu jedem einen Bund – hier nicht nötig
   const allRows = await rows();
   const myC = new Set(e.memberships.filter((m) => m.active).map((m) => m.circle_id));
   // „Kennt vermutlich“: gemeinsame Kreise, aber noch kein Bund – mit einem Klick als Bund festhalten
@@ -610,10 +611,14 @@ function ringDrag(level, onSet) {
 
 // Großes Ringdiagramm: Überfahren hebt den Ring hervor, Klick oder Ziehen setzt ihn
 // Bünde als großes Widget: du – die Person – ihre Verbindungen
-function bundWidget(e, all, reload) {
+function bundWidget(e, all, reload, kin = []) {
   const byId = Object.fromEntries(all.map((r) => [r.id, r]));
   const me = all.find((r) => r.is_self) || { is_self: true, display: "Du" };
-  const others = e.bunds.filter((b) => byId[b.other_id]);
+  // Abgeleitete Verwandtschaft (berechnet, gestrichelt): mit dir → an der „Ihr zwei“-Linie, sonst als weitere Bünde
+  const myKin = kin.find((k) => k.b_id === S.me.self_id);
+  const dein = (w) => (/^(Mutter|Oma|Uroma|Tochter|Schwester|Tante|Großtante|Nichte|Großnichte|Cousine|Enkelin|Urenkelin|Partnerin|Schwägerin|Schwiegermutter|Schwiegertochter|Schwieger-Oma)$/.test(w) ? "deine " : "dein ") + w;
+  const derived = kin.filter((k) => k.b_id !== S.me.self_id && byId[k.b_id]).map((k) => ({ other_id: k.b_id, role_other: k.role_b, derived: k }));
+  const others = [...e.bunds.filter((b) => byId[b.other_id]), ...derived];
   const graph = h("div.bw-graph");
   const lines = h("svg.bw-lines", { viewBox: "0 0 100 100", preserveAspectRatio: "none" });
   graph.append(lines);
@@ -626,7 +631,7 @@ function bundWidget(e, all, reload) {
   const cx = others.length ? 46 : 62, cy = 50;
   if (!e.is_self) {
     const meX = others.length ? 11 : 22;
-    link(meX, cy, cx, cy, e.ihr_zwei?.kind_id ? bundKindName(e.ihr_zwei.kind_id) : "Ihr zwei", !e.ihr_zwei?.kind_id);
+    link(meX, cy, cx, cy, e.ihr_zwei?.kind_id ? bundKindName(e.ihr_zwei.kind_id) : myKin ? dein(myKin.role_a) : "Ihr zwei", !e.ihr_zwei?.kind_id);
     graph.append(node(me, meX, cy, ".me", "Du", null, "#/p/" + S.me.self_id));
   }
   const n = others.length;
@@ -634,11 +639,19 @@ function bundWidget(e, all, reload) {
     const ang = n === 1 ? 0 : -70 + (140 * i) / (n - 1);
     const rad = (ang * Math.PI) / 180;
     const x = cx + Math.cos(rad) * 38, y = cy + Math.sin(rad) * 38;
-    link(cx, cy, x, y, b.role_other || bundKindName(b.kind_id));
+    link(cx, cy, x, y, b.role_other || bundKindName(b.kind_id), !!b.derived);
     graph.append(node(byId[b.other_id], Math.min(90, x), y, "", byId[b.other_id].display.split(" ")[0], null, "#/p/" + b.other_id));
   });
   graph.append(node(e, cx, cy, ".center", e.is_self ? "Du" : (e.name || e.description || "").split(" ")[0], null, "#/p/" + e.id));
-  const list = others.length ? h("div.bw-list", others.map((b) => h("div.bw-row", avatar(byId[b.other_id], 28, { exact: true }),
+  const via = (k) => "über " + k.via_names.join(" und ");
+  const kinRow = (k, other, label) => h("div.bw-row.kin", avatar(other, 28, { exact: true, self: other.is_self }),
+    h("a.grow", { href: "#/p/" + other.id }, other.is_self ? "Du" : other.display, h("span.tiny.t3", " · " + via(k))),
+    h("span.small.t2", label),
+    h("button.btn.sm", { title: "Stimmt – als echten Bund speichern", on: { click: async () => { await POST("/kin/confirm", { a_id: k.a_id, b_id: k.b_id }); invalidate(); toast("Bund gespeichert"); reload(); } } }, icon("check"), "Stimmt"),
+    h("button.btn.sm.ghost.icon", { title: "Stimmt nicht – nicht mehr vorschlagen", on: { click: async () => { await POST("/kin/hide", { a_id: k.a_id, b_id: k.b_id }); toast("Ausgeblendet"); reload(); } } }, icon("x")));
+  const kinList = [myKin ? kinRow(myKin, me, `${e.display || e.name} ist ${dein(myKin.role_a)}`) : null, ...derived.map((d) => kinRow(d.derived, byId[d.other_id], d.role_other))].filter(Boolean);
+  const real = others.filter((b) => !b.derived);
+  const list = real.length || kinList.length ? h("div.bw-list", kinList.length ? h("div.bw-kin-h.tiny.t3", "Folgt aus der Familie – noch nicht bestätigt") : null, kinList, real.map((b) => h("div.bw-row", avatar(byId[b.other_id], 28, { exact: true }),
     h("a.grow", { href: "#/p/" + b.other_id }, byId[b.other_id].display), h("span.small.t2.row", { style: { gap: "4px" } }, bundKindIcon(b.kind_id), [b.role_other, bundKindName(b.kind_id)].filter(Boolean)[0] || ""),
     h("button.btn.sm.ghost.icon", { on: { click: (ev) => menu(ev.currentTarget, [
       { label: "Bund bearbeiten", icon: "edit", action: async () => { if (await editBund(e, b)) reload(); } },

@@ -1443,5 +1443,11 @@
 "alle Werte bleiben": "se conservan todos",
 "Pro Feld wählst du, wessen Wert bleibt. Mehrfachfelder (Nummern, Profile …) behalten alle Werte. ": "Por campo eliges qué valor se queda. Los campos múltiples (números, perfiles …) conservan todos. ",
 "Kreise und Bünde bleiben alle": "se conservan todos los círculos y vínculos",
-", der Verlauf aller Einträge bleibt erhalten, die übrigen Namen werden Aliasse.": ", se conserva el historial de todas las entradas, los demás nombres pasan a ser alias."
+", der Verlauf aller Einträge bleibt erhalten, die übrigen Namen werden Aliasse.": ", se conserva el historial de todas las entradas, los demás nombres pasan a ser alias.",
+"Folgt aus der Familie – noch nicht bestätigt": "Se deduce de la familia – aún sin confirmar",
+"Stimmt": "Correcto",
+"Bund gespeichert": "Vínculo guardado",
+"Ausgeblendet": "Oculto",
+"Stimmt – als echten Bund speichern": "Correcto – guardar como vínculo real",
+"Stimmt nicht – nicht mehr vorschlagen": "No es así – no volver a sugerir"
 }

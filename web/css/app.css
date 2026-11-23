@@ -1482,3 +1482,7 @@ syn-personcard.with-banner .pc-head .av { box-shadow: 0 0 0 4px var(--white); }
 .mm-person { text-align: left; }
 .mm-person .check { margin-top: 6px; font-weight: 400; }
 .mm-person.keep { box-shadow: inset 0 -3px 0 var(--yellow); }
+/* abgeleitete Verwandtschaft */
+.bw-row.kin { opacity: .85; border-left: 2px dashed var(--line-strong); padding-left: 8px; }
+.bw-row.kin .btn.sm { height: 28px; }
+.bw-kin-h { margin: 2px 0 2px; }
