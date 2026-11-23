@@ -208,6 +208,8 @@ function bundEditor(left, right, { kind_id = "", roleLeft = "", roleRight = "" }
   const swap = h("button.btn.sm.icon.bd-swap", { type: "button", title: "Rollen tauschen", on: { click: () => { [rl.value, rr.value] = [rr.value, rl.value]; swap.classList.toggle("flip"); } } }, icon("swap"));
   const side = (row, role) => h("div.bd-side", avatar(row, 76, { exact: true, self: row.is_self }), h("div.bd-name", row.is_self ? "Du" : row.display || row.name), role);
   const el = h("div.bd", side(left, rl), h("div.bd-mid", h("div.bd-line"), sel, h("div.bd-line"), swap), side(right, rr));
+  // Auswahl in der Mitte gleich offen: Enter wählt die Art, nochmal Enter speichert
+  setTimeout(() => { if (!el.isConnected) return; const b = el.querySelector(".ctl-btn"); if (b) { b.focus(); b.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })); } else sel.focus(); }, 60);
   return { el, get: () => ({ kind_id: kind || null, roleLeft: rl.value.trim() || null, roleRight: rr.value.trim() || null }) };
 }
 // Neue Bund-Art direkt aus dem Bund-Dialog anlegen
@@ -264,7 +266,7 @@ export async function addBund(e, otherRow) {
   const ed = bundEditor(e, otherRow, { kind_id: first?.id });
   const since = dateInput("", { placeholder: "seit (optional)" });
   const r = await modal("Neuer Bund", h("div.col", ed.el, h("label.f", "Gültig von", since),
-    h("p.small.t3", "Ein Bund ist eine Beziehung zwischen genau zwei Lebewesen.")),
+    h("p.small.t3", "Ein Bund ist eine Beziehung zwischen genau zwei Lebewesen. Enter wählt die Art, nochmal Enter legt an.")),
     [{ label: "Abbrechen" }, { label: "Anlegen", primary: true, action: () => {
       const v = ed.get();
       return POST("/bunds", { a_id: e.id, b_id: otherRow.id, kind_id: v.kind_id, role_a: v.roleLeft, role_b: v.roleRight, valid_from: since.value || null }).catch(() => false);

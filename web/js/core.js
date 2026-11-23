@@ -370,7 +370,8 @@ export function modal(title, body, buttons = [], { wide = false, onClose } = {})
       if (e.key === "Escape") { close(null); return; }
       if (e.key !== "Enter" || e.shiftKey || e.isComposing || e.defaultPrevented || !primaryBtn || primaryBtn.disabled) return;
       const t = e.target;
-      if (t.closest?.("textarea, button, a, [contenteditable]")) return; // dort hat Enter eine eigene Bedeutung
+      // dort hat Enter eine eigene Bedeutung – außer bei einer geschlossenen Auswahl (Enter = bestätigen)
+      if (t.closest?.("textarea, button, a, [contenteditable]") && !t.closest?.(".ctl-btn")) return;
       if (document.querySelector(".ctl-pop, .date-pop, .hue-pop, .pop")) return; // offenes Menü/Kalender
       e.preventDefault(); primaryBtn.click();
     };
