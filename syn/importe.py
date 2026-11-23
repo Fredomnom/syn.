@@ -158,6 +158,12 @@ def all_importers() -> dict:
     return _registry
 
 
+def importers_for(uid) -> dict:
+    """Eingebaute plus eigene (Push-)Importer dieses Nutzers – für Quellen, Sperren und Namen."""
+    from .modules.eigene_importer import PushImporter, custom_rows
+    return {**all_importers(), **{r["id"]: PushImporter(r) for r in custom_rows(uid)}}
+
+
 def globally_disabled() -> set:
     off = set(config.DISABLED_IMPORTERS)
     off |= set(db.jl(db.val("SELECT value FROM instance WHERE key='disabled_importers'"), []) or [])

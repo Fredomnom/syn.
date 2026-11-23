@@ -272,9 +272,9 @@ def delete(eid: str, block: bool = True, ctx: Ctx = Depends(current)):
 @router.get("/entities/{eid}/import-sources")
 def import_sources(eid: str, ctx: Ctx = Depends(current)):
     """Aus welchen Importen eine Person stammt (für die Rückfrage beim Löschen)."""
-    from ..importe import all_importers
+    from ..importe import importers_for
     get_entity(ctx.uid, eid)
-    imps = all_importers()
+    imps = importers_for(ctx.uid)
     srcs = {r["source"] for r in db.q("SELECT source FROM field_values WHERE owner_type='entity' AND owner_id=?", eid)}
     srcs.add(db.val("SELECT source FROM history WHERE owner_type='entity' AND owner_id=? AND attr='created'", eid))
     return [{"id": s, "name": imps[s].name} for s in sorted(x for x in srcs if x in imps)]
@@ -283,8 +283,8 @@ def import_sources(eid: str, ctx: Ctx = Depends(current)):
 @router.get("/import-blocks")
 def list_blocks(ctx: Ctx = Depends(current)):
     """Gesperrte Personen – je Löschung eine Gruppe."""
-    from ..importe import all_importers
-    imps = all_importers()
+    from ..importe import importers_for
+    imps = importers_for(ctx.uid)
     groups = {}
     for b in db.q("SELECT * FROM import_blocks WHERE user_id=? ORDER BY created_at DESC", ctx.uid):
         g = groups.setdefault(b["grp"], {"id": b["grp"], "label": b["label"], "created_at": b["created_at"],
@@ -301,9 +301,9 @@ def unblock(grp: str, ctx: Ctx = Depends(current)):
 
 def block_imports(uid, eid):
     """Merkt sich die Import-Merkmale einer gelöschten Person, damit Importer sie nicht wieder anlegen."""
-    from ..importe import all_importers
+    from ..importe import importers_for
     from ..util import normalize_email, normalize_phone
-    imps = all_importers()
+    imps = importers_for(uid)
     e = db.q1("SELECT * FROM entities WHERE id=?", eid)
     created_src = db.val("SELECT source FROM history WHERE owner_type='entity' AND owner_id=? AND attr='created'", eid)
     types = {d["id"]: d["type"] for d in db.q("SELECT id, type FROM field_defs WHERE user_id=?", uid)}

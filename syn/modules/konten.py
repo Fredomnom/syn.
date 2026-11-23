@@ -95,7 +95,8 @@ def me(ctx: Ctx = Depends(current)):
     from ..model import self_id
     from ..importe import registry
     return {**public_user(ctx.user, ctx.settings), "self_id": self_id(ctx.uid), "read_only": ctx.read_only,
-            "via": ctx.via, "importers_available": sorted(registry().keys())}
+            "via": ctx.via, "importers_available": sorted(registry().keys()),
+            "custom_importers": {r["id"]: r["name"] for r in db.q("SELECT id, name FROM custom_importers WHERE user_id=?", ctx.uid)}}
 
 
 class PwChange(BaseModel):

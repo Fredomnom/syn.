@@ -302,8 +302,48 @@ async function importers(body) {
   body.append(h("p.small.t2", "Neue Leute landen unter „Lose“. Ein Importer schreibt nur Werte aus seiner eigenen Quelle und überschreibt nie, was du von Hand gesetzt hast."),
     on.length ? panel("Eingerichtet", ...on.map(row)) : null,
     panel(on.length ? "Weitere Dienste" : "Dienste", ...off.map(row)),
+    await customImportersPanel(reload),
     blocks.length ? panel("Blockiert", ...blocks.map((b) => srow(b.label, `Gelöscht ${rel((b.created_at || "").slice(0, 10))} · wird aus ${b.sources.join(", ")} nicht wieder importiert`,
       h("button.btn.sm", { on: { click: async () => { await DEL("/import-blocks/" + b.id); toast(`${b.label} wird wieder importiert`); reload(); } } }, "Freigeben")))) : null);
+}
+
+// Eigene Importer: Kontakte kommen per Push über die API, sonst wie eingebaute Importer
+async function customImportersPanel(reload) {
+  const list = await GET("/importers/custom");
+  const origin = location.origin;
+  const example = (imp) => `curl -X POST ${origin}${imp.push_url} \\
+  -H "Authorization: Bearer DEIN_API_TOKEN" -H "Content-Type: application/json" \\
+  -d '{"contacts":[{"service_id":"42","name":"Erika Muster","phones":["+49 170 1234567"],"emails":["erika@example.org"],"groups":["Vorstand"]}]}'`;
+  const one = (imp) => {
+    const det = h("div.imp-detail");
+    const status = imp.last_status ? (imp.last_status.startsWith("Fehler") ? h("span.imp-st.err", "Fehler") : h("span.imp-st.ok", "zuletzt " + rel((imp.last_run_at || "").slice(0, 10)))) : h("span.imp-st", "noch nichts erhalten");
+    const item = h("div.imp.on",
+      h("button.imp-head", { type: "button", on: { click: () => { const open = item.classList.toggle("open"); if (open && !det.firstChild) det.append(h("div.col", { style: { gap: "10px", padding: "4px 2px 10px" } },
+        h("div.small", "ID ", h("span.tag.mono", imp.id), imp.service ? [" · Dienst ", h("span.tag.mono", imp.service)] : null, imp.match_by_name ? " · eindeutige Namen ordnen zu" : null),
+        imp.last_status ? h("div.small.t2", imp.last_status) : null,
+        h("div.small", "So schickst du Kontakte (API-Token unter Einstellungen → API-Tokens, Felder wie bei jedem Importer – siehe API-Dokumentation):"),
+        h("pre.code.small", example(imp)),
+        h("div.row", { style: { gap: "6px" } },
+          h("button.btn.sm", { on: { click: async () => { try { await navigator.clipboard.writeText(example(imp)); toast("Kopiert"); } catch (_) {} } } }, icon("copy"), "Beispiel kopieren"),
+          imp.last_log ? h("button.btn.sm", { on: { click: () => modal("Protokoll", h("pre.code.small", imp.last_log), [], { wide: true }) } }, "Protokoll") : null,
+          h("a.btn.sm", { href: "#/api" }, icon("link"), "API-Dokumentation"), h("span.grow"),
+          h("button.btn.sm.ghost", { on: { click: async () => { if (await confirmDlg(`„${imp.name}“ löschen?`, "Importierte Werte bleiben erhalten.", "Löschen", true)) { await DEL("/importers/custom/" + imp.id); reload(); } } } }, icon("trash"), "Löschen")))); } } },
+        h("span.svc-tile", serviceIcon(imp.service || imp.id, 20)),
+        h("span.grow", h("b", imp.name), h("span.imp-sub", imp.description || "Eigener Importer · Push über die API")),
+        h("span.tag", "Push"), status, h("span.imp-chev", icon("down"))),
+      det);
+    return item;
+  };
+  const add = h("button.btn.sm", { on: { click: async () => {
+    const n = h("input.input", { placeholder: "z.B. Vereinsliste" }), sv = h("input.input", { placeholder: "optional, z.B. verein" }), ds = h("input.input", { placeholder: "optional: was reinkommt" });
+    const mb = h("input", { type: "checkbox" });
+    const r = await modal("Eigener Importer", h("div.col", h("label.f", "Name", n), h("label.f", "Dienst fürs Profil-Feld", sv), h("label.f", "Beschreibung", ds),
+      h("label.check", mb, "Eindeutige Namen ordnen zu (nur, wenn die Namen von dir stammen)"),
+      h("p.small.t3", "Dein Skript schickt Kontakte per POST an syn. Sie werden genauso zugeordnet wie bei eingebauten Importern: über ihre ID, Nummer und E-Mail, mit Sperren, Quellen und Vorschlägen.")),
+      [{ label: "Abbrechen" }, { label: "Anlegen", primary: true, action: () => { if (!n.value.trim()) { n.focus(); return false; } return POST("/importers/custom", { name: n.value.trim(), service: sv.value.trim() || null, description: ds.value.trim() || null, match_by_name: mb.checked }).catch(() => false); } }]);
+    if (r) { toast(`${r.name} angelegt – ID ${r.id}`); reload(); }
+  } } }, icon("plus"), "Eigener Importer");
+  return panel("Eigene Importer", h("p.small.t2", { style: { margin: 0, padding: "12px 16px 4px" } }, "Für Quellen, die syn nicht kennt: dein Skript schickt die Kontakte (Push) statt dass syn sie abholt."), ...list.map(one), h("div", { style: { padding: "10px 16px 12px" } }, add));
 }
 
 function importerCard(imp, reload) {

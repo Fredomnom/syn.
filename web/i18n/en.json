@@ -1478,5 +1478,13 @@
 "Kürzel suchen …": "Search shortcuts …",
 "hier": "here",
 "Kurz ": "Tap ",
-" zeigt die Kürzel direkt an den Knöpfen": " shows shortcuts right on the buttons"
+" zeigt die Kürzel direkt an den Knöpfen": " shows shortcuts right on the buttons",
+"Eigene Importer": "Custom importers",
+"Eigener Importer": "Custom importer",
+"Push": "Push",
+"noch nichts erhalten": "nothing received yet",
+"Beispiel kopieren": "Copy example",
+"Protokoll": "Log",
+"Dienst fürs Profil-Feld": "Service for the profile field",
+"Eindeutige Namen ordnen zu (nur, wenn die Namen von dir stammen)": "Unique names match (only if the names come from you)"
 }
