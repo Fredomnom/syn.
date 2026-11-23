@@ -1438,9 +1438,12 @@ syn-personcard.with-banner .pc-head .av { box-shadow: 0 0 0 4px var(--white); }
 .cb-people { display: flex; gap: 2px; margin-top: 4px; }
 .cb-plus { position: absolute; right: 10px; bottom: 10px; width: 46px; height: 46px; border-radius: 50%; border: 2px dashed var(--line-strong); background: transparent; color: var(--text2); display: grid; place-items: center; cursor: pointer; z-index: 2; }
 .cb-plus:hover { border-color: var(--ink); color: var(--ink); }
-.cb-me { position: absolute; transform: translate(-50%, -50%); z-index: 3; cursor: grab; border-radius: 50%; box-shadow: 0 0 0 4px var(--white), 0 10px 22px -8px rgba(0,0,0,.5);
+.cb-me { position: absolute; transform: translate(-50%, -50%); z-index: 3; cursor: grab; border-radius: 50%; display: grid; line-height: 0;
   transition: left .6s cubic-bezier(.34,1.3,.64,1), top .6s cubic-bezier(.34,1.3,.64,1), box-shadow .2s; touch-action: none; }
-.cb-me.drag { cursor: grabbing; transition: none; box-shadow: 0 0 0 4px var(--yellow), 0 16px 30px -8px rgba(0,0,0,.6); }
+.cb-me.drag { cursor: grabbing; transition: none; }
+/* Ring direkt am Profilbild – sonst sitzt er auf dem (durch die Zeilenhöhe größeren) Rahmen und wirkt versetzt */
+.cb-me > .av { box-shadow: 0 0 0 4px var(--white), 0 10px 22px -8px rgba(0,0,0,.5); transition: box-shadow .2s; }
+.cb-me.drag > .av { box-shadow: 0 0 0 4px var(--yellow), 0 16px 30px -8px rgba(0,0,0,.6); }
 .mob .cb-me { cursor: default; pointer-events: none; }
 .cb-lose { position: absolute; left: 110px; bottom: 26px; right: 70px; font-size: 12.5px; color: var(--text2); }
 .cb-hint { margin: 0; }
