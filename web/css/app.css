@@ -1486,3 +1486,4 @@ syn-personcard.with-banner .pc-head .av { box-shadow: 0 0 0 4px var(--white); }
 .bw-row.kin { opacity: .85; border-left: 2px dashed var(--line-strong); padding-left: 8px; }
 .bw-row.kin .btn.sm { height: 28px; }
 .bw-kin-h { margin: 2px 0 2px; }
+.ring-svg { cursor: grab; } .ring-svg.panning { cursor: grabbing; } .ring-svg .node { cursor: pointer; }

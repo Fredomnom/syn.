@@ -12,6 +12,42 @@ const SAVE = (k, v) => { try { localStorage.setItem("syn." + k, JSON.stringify(v
 
 function svgPoint(svg, e) { const p = svg.createSVGPoint(); p.x = e.clientX; p.y = e.clientY; return p.matrixTransform(svg.getScreenCTM().inverse()); }
 
+// Kamera für ein SVG: Mausrad/Strg+Rad/Pinch zoomt, Trackpad-Scrollen und Ziehen auf freier Fläche verschieben,
+// zwei Finger am Handy zoomen und verschieben. G = Gruppe, die bewegt wird; skip(e) = Ziel nicht verschieben (z.B. Personen).
+function panZoom(svg, G, W, cam, save, { skip = () => false, min = 0.4, max = 5 } = {}) {
+  const apply = () => { G.setAttribute("transform", `translate(${cam.x},${cam.y}) scale(${cam.k})`); save?.(cam); };
+  const zoomAt = (f, px, py) => { const k = Math.min(max, Math.max(min, cam.k * f)); cam.x = px - (px - cam.x) * (k / cam.k); cam.y = py - (py - cam.y) * (k / cam.k); cam.k = k; apply(); };
+  const wp = (e) => { const p = svgPoint(svg, e); return { x: (p.x - cam.x) / cam.k, y: (p.y - cam.y) / cam.k }; };
+  const isWheel = (e) => e.deltaMode !== 0 || (e.deltaX === 0 && Math.abs(e.deltaY) >= 40 && Number.isInteger(e.deltaY));
+  svg.addEventListener("wheel", (e) => {
+    e.preventDefault(); const p = svgPoint(svg, e);
+    if (e.ctrlKey) zoomAt(Math.exp(-e.deltaY * 0.012), p.x, p.y);
+    else if (isWheel(e)) zoomAt(e.deltaY < 0 ? 1.15 : 1 / 1.15, p.x, p.y);
+    else { const sc = W / svg.getBoundingClientRect().width; cam.x -= e.deltaX * sc; cam.y -= e.deltaY * sc; apply(); }
+  }, { passive: false });
+  const pts = new Map(); let pan = null, pinch = null;
+  svg.style.touchAction = "none";
+  svg.addEventListener("pointerdown", (e) => {
+    if (skip(e) && pts.size === 0) return;
+    pts.set(e.pointerId, svgPoint(svg, e)); svg.setPointerCapture(e.pointerId);
+    if (pts.size === 1) { const p = pts.get(e.pointerId); pan = { x: p.x - cam.x, y: p.y - cam.y }; svg.classList.add("panning"); }
+    if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), k: cam.k, mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2, cx: cam.x, cy: cam.y }; pan = null; }
+  });
+  svg.addEventListener("pointermove", (e) => {
+    if (!pts.has(e.pointerId)) return;
+    pts.set(e.pointerId, svgPoint(svg, e));
+    if (pinch && pts.size >= 2) {
+      const [a, b] = [...pts.values()]; const k = Math.min(max, Math.max(min, pinch.k * Math.hypot(a.x - b.x, a.y - b.y) / (pinch.d || 1)));
+      const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+      cam.k = k; cam.x = mx - (pinch.mx - pinch.cx) * (k / pinch.k); cam.y = my - (pinch.my - pinch.cy) * (k / pinch.k); apply();
+    } else if (pan) { const p = pts.get(e.pointerId); cam.x = p.x - pan.x; cam.y = p.y - pan.y; apply(); }
+  });
+  const up = (e) => { pts.delete(e.pointerId); if (pts.size < 2) pinch = null; if (!pts.size) { pan = null; svg.classList.remove("panning"); } };
+  svg.addEventListener("pointerup", up); svg.addEventListener("pointercancel", up);
+  apply();
+  return { zoomAt, wp, reset: () => { Object.assign(cam, { x: 0, y: 0, k: 1 }); apply(); } };
+}
+
 function node(r, x, y, size = 15, { approx = false, sel = false } = {}) {
   const cc = r.is_self ? { bg: V("--ink"), fg: V("--white") } : circleColors(r.main_circle_id);
   const unsure = !r.is_self && (!r.name || r.name_uncertain);
@@ -62,6 +98,7 @@ async function timeSlider(onChange) {
 // ---------------------------------------------------------------- Ringe
 export async function rings(body, list0, all) {
   const opt = Object.assign({ dist: "level", sector: "kind", pets: true, center: "" }, LS("ringopt", {}));
+  const rcam = Object.assign({ x: 0, y: 0, k: 1 }, LS("ringcam", {}));
   let at = null, data = list0;
   // Mitte: du (Ringe = deine Bünde) oder eine andere Person (Ringe = ihre Bünde zu anderen)
   let centerRow = null, cbunds = {};
@@ -99,7 +136,8 @@ export async function rings(body, list0, all) {
     const placed = list.filter((r) => lvl(r) != null), unplaced = list.filter((r) => lvl(r) == null);
     const W = 760, Hh = 760, cx = W / 2, cy = Hh / 2, R = 330, R0 = 62, band = (R - R0) / 4;
     const rad = (i) => R0 + band * i;
-    const svg = s("svg", { viewBox: `0 0 ${W} ${Hh}` });
+    const svg = s("svg", { viewBox: `0 0 ${W} ${Hh}`, class: "ring-svg" });
+    const G = s("g"); // alles darin bewegt die Kamera (Zoomen, Verschieben)
     // Sektoren
     const keyOf = (r) => {
       if (opt.sector === "via") { const x = r.v.f_via?.raw; return x ? `${x.type}:${x.id}` : "_lose"; }
@@ -113,20 +151,20 @@ export async function rings(body, list0, all) {
     const total = placed.length || 1, minShare = 0.07;
     let shares = keys.map((k) => Math.max(minShare, groups[k].length / total));
     const sum = shares.reduce((a, b) => a + b, 0) || 1; shares = shares.map((x) => x / sum);
-    for (let i = 4; i >= 1; i--) svg.append(s("circle", { cx, cy, r: rad(i), fill: i <= 2 ? (i === 1 ? V("--bg") : V("--bg2")) : V("--white"), stroke: V("--line") }));
-    for (let i = 1; i <= 4; i++) svg.append(s("text", { x: cx + 4, y: cy - rad(i) + 14, class: "label-mono" }, `${i} · ${RING()[i]}`));
+    for (let i = 4; i >= 1; i--) G.append(s("circle", { cx, cy, r: rad(i), fill: i <= 2 ? (i === 1 ? V("--bg") : V("--bg2")) : V("--white"), stroke: V("--line") }));
+    for (let i = 1; i <= 4; i++) G.append(s("text", { x: cx + 4, y: cy - rad(i) + 14, class: "label-mono" }, `${i} · ${RING()[i]}`));
     let a0 = -Math.PI / 2;
     const sectors = [];
     keys.forEach((k, i) => {
       const a1 = a0 + shares[i] * Math.PI * 2;
       sectors.push({ k, a0, a1 });
-      if (keys.length > 1) svg.append(s("line", { x1: cx, y1: cy, x2: cx + Math.cos(a0) * R, y2: cy + Math.sin(a0) * R, stroke: V("--line") }));
+      if (keys.length > 1) G.append(s("line", { x1: cx, y1: cy, x2: cx + Math.cos(a0) * R, y2: cy + Math.sin(a0) * R, stroke: V("--line") }));
       const am = (a0 + a1) / 2;
       const col = k === "_lose" ? loseColors() : opt.sector === "via" ? viaColors(k) : opt.sector === "kind" ? kindColors(k) : circleColors(k);
       const label = (k === "_lose" ? (opt.sector === "via" ? "unbekannt" : "Lose") : opt.sector === "via" ? viaLabel(k) : opt.sector === "kind" ? S.kinds[k]?.name : S.circles[k]?.name) + " · " + groups[k].length;
       const lx = cx + Math.cos(am) * (R + 22), ly = cy + Math.sin(am) * (R + 22);
       const tw = label.length * 6.4 + 16;
-      svg.append(s("g", { transform: `translate(${lx - tw / 2},${ly - 10})` }, s("rect", { width: tw, height: 20, rx: 10, fill: col.bg }), s("text", { x: tw / 2, y: 14, "text-anchor": "middle", "font-size": 11, "font-weight": 500, fill: col.fg }, label)));
+      G.append(s("g", { transform: `translate(${lx - tw / 2},${ly - 10})` }, s("rect", { width: tw, height: 20, rx: 10, fill: col.bg }), s("text", { x: tw / 2, y: 14, "text-anchor": "middle", "font-size": 11, "font-weight": 500, fill: col.fg }, label)));
       // Personen im Sektor verteilen
       for (let l = 1; l <= 4; l++) {
         const ps = groups[k].filter((r) => lvl(r) === l);
@@ -144,8 +182,16 @@ export async function rings(body, list0, all) {
     });
     const nodes = s("g");
     for (const r of placed) nodes.append(node(r, r._x, r._y, 21, { approx: at && r.approx_created }));
-    svg.append(nodes, cid ? node(centerRow, cx, cy, 26) : node({ is_self: true, display: "Du" }, cx, cy, 26));
-    clear(vizBox, svg, h("div.viz-zoom.with-time", tbarR)); // Zeitregler unten im Diagramm
+    G.append(nodes, cid ? node(centerRow, cx, cy, 26) : node({ is_self: true, display: "Du" }, cx, cy, 26));
+    svg.append(G);
+    const pz = panZoom(svg, G, W, rcam, (c) => SAVE("ringcam", c), { skip: (e) => !!e.target.closest(".node") });
+    const zl = h("span.mono.small", Math.round(rcam.k * 100) + " %");
+    const upd = () => (zl.textContent = Math.round(rcam.k * 100) + " %");
+    svg.addEventListener("wheel", upd); svg.addEventListener("pointermove", upd);
+    clear(vizBox, svg, h("div.viz-zoom.with-time", tbarR, h("span.vz-sep"),
+      h("button.btn.sm.icon", { title: "Herauszoomen", on: { click: () => { pz.zoomAt(1 / 1.25, W / 2, Hh / 2); upd(); } } }, icon("minus")), zl,
+      h("button.btn.sm.icon", { title: "Hineinzoomen", on: { click: () => { pz.zoomAt(1.25, W / 2, Hh / 2); upd(); } } }, icon("plus")),
+      h("button.btn.sm", { title: "Zoom zurücksetzen", on: { click: () => { pz.reset(); upd(); } } }, "Alles zeigen"))); // Zeitregler und Zoom unten im Diagramm
     // Ziehen: Abstand = Ring, Sektor = Kreis-Art des Hauptkreises
     let drag = null;
     nodes.addEventListener("pointerdown", (e) => {
@@ -154,7 +200,7 @@ export async function rings(body, list0, all) {
     });
     nodes.addEventListener("pointermove", (e) => {
       if (!drag) return;
-      const p = svgPoint(svg, e); drag.moved = true; drag.g.setAttribute("transform", `translate(${p.x},${p.y})`); drag.p = p;
+      const p = pz.wp(e); drag.moved = true; drag.g.setAttribute("transform", `translate(${p.x},${p.y})`); drag.p = p;
     });
     nodes.addEventListener("pointerup", async (e) => {
       if (!drag) return; const d = drag; drag = null;
@@ -175,7 +221,7 @@ export async function rings(body, list0, all) {
       if (!r.is_self && sec && dist <= R && sec.k !== keyOf(r) && sec.k !== "_lose" && opt.sector !== "via") { await moveSector(r, sec.k); invalidate(); draw(); }
     };
     svg.addEventListener("dragover", (e) => e.preventDefault());
-    svg.addEventListener("drop", async (e) => { e.preventDefault(); const id = e.dataTransfer.getData("text/syn-id"); const r = list.find((x) => x.id === id); if (r) { if (!cid) r.level = null; await dropAt(r, svgPoint(svg, e)); } });
+    svg.addEventListener("drop", async (e) => { e.preventDefault(); const id = e.dataTransfer.getData("text/syn-id"); const r = list.find((x) => x.id === id); if (r) { if (!cid) r.level = null; await dropAt(r, pz.wp(e)); } });
     // Seitenleiste: oben die Ansicht, darunter „Ohne Ring“ – nur diese Liste scrollt
     clear(side,
       h("div.card", h("div.card-h", h("h3", "Ansicht")), h("div.card-b.col",
