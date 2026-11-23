@@ -5,6 +5,7 @@ import { plain, SOURCE } from "./fields.js";
 const ATTR = { name: "Name", description: "Beschreibung", kind: "Art", avatar: "Profilbild", main_circle_id: "Hauptkreis", name_uncertain: "Name unsicher" };
 
 export async function mergePage(main, a, b) {
+  if (a && a.includes(",")) return multiMergePage(main, a.split(",").filter(Boolean)); // mehrere (aus der Suche)
   const page = h("div.page"); main.append(page);
   const plan = await GET(`/merge/preview?a=${a}&b=${b}`);
   const choices = {};
@@ -40,6 +41,51 @@ export async function mergePage(main, a, b) {
     isMobile() ? h("div.merge-legend.small", h("span", "Links: ", h("b", plan.a.display), " (bleibt)"), h("span", "Rechts: ", h("b", plan.b.display))) : null,
     h("div.card", h("table.mtable.merge-t", h("thead", h("tr", h("th", "Feld"), h("th", h("a", { href: "#/p/" + a }, plan.a.display), " (bleibt)"), h("th", h("a", { href: "#/p/" + b }, plan.b.display)), h("th", ""))), tbody)),
     h("div.row", h("span.small.t2", "Kreise nach dem Zusammenführen:"), plan.circles.map((c) => circleChip(c))));
+}
+
+// Mehr als zwei auf einmal: eine Spalte je Person, pro Feld den Wert wählen; eine Spalte „bleibt“
+export async function multiMergePage(main, ids) {
+  const page = h("div.page"); main.append(page);
+  const plan = await GET(`/merge/preview-multi?ids=${ids.join(",")}`);
+  const P = plan.people, n = P.length;
+  const choices = {};
+  let keep = 0;
+  const showAttr = (k, v) => k === "main_circle_id" ? (v ? circleChip(v) : "–") : k === "avatar" ? (v ? h("img", { src: v, style: { width: "32px", height: "32px", borderRadius: "50%" } }) : "–") : k === "kind" ? (v === "pet" ? "Haustier" : "Mensch") : v ?? "–";
+  const showVals = (f, vals) => vals?.length ? h("div.col", { style: { gap: "2px" } }, vals.map((v) => h("div", h("span" + (v.uncertain ? ".unsure-val" : ""), plain(S.fields[f.field] || { type: f.type }, v.value)), v.label ? h("span.t3", ` · ${v.label}`) : null, h("span.tiny.t3", " " + SOURCE(v.source))))) : h("span.t3", "–");
+  const thead = h("thead"), tbody = h("tbody");
+  const draw = () => {
+    clear(thead, h("tr", h("th", "Feld"), P.map((p, k) => h("th.mm-person" + (k === keep ? ".keep" : ""),
+      h("a.row", { href: "#/p/" + p.id, style: { gap: "8px", textDecoration: "none", color: "inherit" } }, avatar(S.rowsById?.[p.id] || { display: p.display, name: p.display, avatar: p.avatar }, 28), h("b", p.display)),
+      h("label.check.small", h("input", { type: "radio", name: "mm-keep", checked: k === keep, on: { change: () => { keep = k; draw(); } } }), k === keep ? "bleibt" : "soll bleiben")))));
+    clear(tbody);
+    for (const at of plan.attrs) {
+      const ch = choices[at.attr] ?? (at.vals[keep] ? keep : at.auto); // ohne eigene Wahl: was der bleibende Eintrag hat
+      tbody.append(h("tr", h("td", h("b", ATTR[at.attr] || at.attr)),
+        at.vals.map((v, k) => h("td", v ? h("div.pick" + (ch === k ? ".on" : ""), { on: { click: () => { choices[at.attr] = k; draw(); } } }, showAttr(at.attr, v)) : h("span.t3", "–")))));
+    }
+    for (const f of plan.fields) {
+      const all = f.auto === "all", sum = f.auto === "sum" && choices[f.field] == null;
+      const ch = all ? "all" : choices[f.field] ?? f.auto ?? keep;
+      tbody.append(h("tr", h("td", h("b", f.name), h("div.tiny.t3", all ? "alle Werte bleiben" : sum ? "Summe" : choices[f.field] == null && f.why ? "syn: " + f.why : ""), f.owner === "bund" ? h("div.tiny.t3", "Ihr zwei") : null),
+        f.vals.map((vals, k) => h("td", vals.length ? h("div.pick" + (all || sum || ch === k ? ".on" : "") + (all ? ".fixed" : ""), all ? {} : { on: { click: () => { choices[f.field] = k; draw(); } } }, showVals(f, vals)) : h("span.t3", "–")))));
+    }
+  };
+  draw();
+  const go = h("button.btn.primary", { on: { click: async () => {
+    // „bleibt“ nach vorn; gewählte Spalten auf die neue Reihenfolge umrechnen
+    const order = [keep, ...P.map((_, k) => k).filter((k) => k !== keep)];
+    const pos = Object.fromEntries(order.map((k, i) => [k, i]));
+    const ch = {};
+    for (const at of plan.attrs) { const c = choices[at.attr] ?? (at.vals[keep] ? keep : at.auto); if (c != null) ch[at.attr] = pos[c]; }
+    for (const f of plan.fields) { const c = choices[f.field] ?? f.auto; if (c != null) ch[f.field] = typeof c === "number" ? pos[c] : c; }
+    go.disabled = true;
+    try { const e = await POST("/merge/multi", { ids: order.map((k) => P[k].id), choices: ch }); invalidate(); toast(`${n} Einträge zusammengeführt`); location.hash = "#/p/" + e.id; }
+    catch (err) { go.disabled = false; toast(err.message || "Ging nicht"); }
+  } } }, icon("merge"), `${n} zusammenführen`);
+  page.append(isMobile() ? null : h("a.crumb", { href: "#/people/table" }, icon("left"), "Tabelle"),
+    h("div.page-h", h("h1", `${n} Personen zusammenführen`), go),
+    h("div.hint", h("div.grow", "Pro Feld wählst du, wessen Wert bleibt. Mehrfachfelder (Nummern, Profile …) behalten alle Werte. ", h("b", "Kreise und Bünde bleiben alle"), ", der Verlauf aller Einträge bleibt erhalten, die übrigen Namen werden Aliasse.")),
+    h("div.card.mm-wrap", h("table.mtable.merge-t.mm-t", thead, tbody)));
 }
 
 export async function duplicatesPage(main, view) {

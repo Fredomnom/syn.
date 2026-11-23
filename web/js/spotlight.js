@@ -42,13 +42,32 @@ export async function openSpotlight() {
   const input = h("input.spot-input", { placeholder: "Personen, Kreise, Ansichten, Bünde suchen …", autocomplete: "off", spellcheck: false });
   const list = h("div.spot-list");
   const panel = h("div.spot", h("div.spot-head", icon("search"), input, keys("Esc")), list,
-    h("div.spot-foot", h("span.row", keys("↑↓"), " auswählen"), h("span.row", keys("Enter"), " öffnen"), h("span.grow"), h("span.row", keys(binding("search")), " öffnet die Suche")));
+    h("div.spot-foot", h("span.row", keys("↑↓"), " auswählen"), h("span.row", keys("Enter"), " öffnen"), h("span.row", keys("Shift"), " + Klick: mehrere wählen"), h("span.grow"), h("span.row", keys(binding("search")), " öffnet die Suche")));
   const bd = h("div.spot-bd", { on: { mousedown: (e) => { if (e.target === bd) close(); } } }, panel);
   document.body.append(bd);
   open = { input };
   setTimeout(() => input.focus(), 10);
 
   const [all, bunds] = await Promise.all([rows(), GET("/bunds").catch(() => [])]);
+  // Mehrfachauswahl (⇧/⌘/Strg + Klick oder ⇧+Enter) zum direkten Zusammenführen – bleibt beim Weitersuchen bestehen
+  const sel = [];
+  const selBar = h("div.spot-sel");
+  panel.insertBefore(selBar, list);
+  const drawSel = () => {
+    selBar.hidden = !sel.length; panel.classList.toggle("selecting", sel.length > 0);
+    clear(selBar, sel.length ? [
+      h("div.spot-sel-list", sel.map((id) => { const r = byId[id]; return h("span.spot-sel-chip", avatar(r, 20, { exact: true }), h("span", r.display || r.name || "Ohne Namen"),
+        h("button", { title: "Abwählen", on: { click: (e) => { e.stopPropagation(); toggle(id); } } }, icon("x", "xs"))); })),
+      h("div.row", { style: { gap: "6px" } },
+        h("button.btn.sm.ghost", { on: { click: () => { sel.length = 0; drawSel(); build(); input.focus(); } } }, "Leeren"),
+        h("button.btn.sm.primary", { disabled: sel.length < 2, on: { click: mergeSel } }, icon("merge"), sel.length < 2 ? "Noch eine Person wählen" : `${sel.length} zusammenführen`)),
+    ] : []);
+  };
+  const toggle = (id) => { const i = sel.indexOf(id); i >= 0 ? sel.splice(i, 1) : sel.push(id); drawSel(); build(); input.focus(); };
+  function mergeSel() {
+    if (sel.length < 2) return;
+    close(); location.hash = sel.length === 2 ? `#/merge/${sel[0]}/${sel[1]}` : `#/merge/${sel.join(",")}`;
+  }
   const byId = Object.fromEntries(all.map((r) => [r.id, r]));
   const kindName = (id) => S.bundKinds.find((k) => k.id === id)?.name || "Bund";
   let items = [], active = 0;
@@ -87,11 +106,13 @@ export async function openSpotlight() {
     items.forEach((it, i) => {
       it.el.classList.toggle("act", i === active);
       it.el.addEventListener("mousemove", () => { if (active !== i) { active = i; mark(); } });
-      it.el.addEventListener("click", () => go(it));
+      it.el.addEventListener("click", (e) => { if (it.pid && (e.shiftKey || e.metaKey || e.ctrlKey)) { e.preventDefault(); toggle(it.pid); } else go(it); });
+      if (it.pid) it.el.addEventListener("mousedown", (e) => { if (e.shiftKey) e.preventDefault(); }); // kein Text markieren
     });
   };
   const person = (r) => ({
-    el: h("div.spot-item", avatar(r, 30, { exact: true }), h("div.grow", h("div", r.name || r.description || "Ohne Namen", r.name_uncertain ? " ?" : ""),
+    pid: r.id,
+    el: h("div.spot-item" + (sel.includes(r.id) ? ".picked" : ""), h("span.spot-check", icon("check", "xs")), avatar(r, 30, { exact: true }), h("div.grow", h("div", r.name || r.description || "Ohne Namen", r.name_uncertain ? " ?" : ""),
       r.aliases?.length ? h("div.tiny.t3", "auch: " + r.aliases.slice(0, 2).join(", ")) : null),
       r.main_circle_id ? circleChip(r.main_circle_id) : h("span.chip", "Lose")),
     go: "#/p/" + r.id,
@@ -107,8 +128,10 @@ export async function openSpotlight() {
   input.addEventListener("keydown", (e) => {
     if (e.key === "ArrowDown") { e.preventDefault(); active = Math.min(items.length - 1, active + 1); mark(); items[active]?.el.scrollIntoView({ block: "nearest" }); }
     else if (e.key === "ArrowUp") { e.preventDefault(); active = Math.max(0, active - 1); mark(); items[active]?.el.scrollIntoView({ block: "nearest" }); }
+    else if (e.key === "Enter" && (e.shiftKey || e.metaKey || e.ctrlKey) && items[active]?.pid) { e.preventDefault(); toggle(items[active].pid); }
     else if (e.key === "Enter") { e.preventDefault(); if (items[active]) go(items[active]); }
     else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); close(); }
   });
+  drawSel();
   build();
 }

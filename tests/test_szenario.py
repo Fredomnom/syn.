@@ -489,3 +489,21 @@ def test_feld_id_umbenennen(client):
     assert c.post(f"/api/v1/fields/{f['id']}/rename", json={"id": "f_city"}).status_code == 400
     assert c.post(f"/api/v1/fields/{f['id']}/rename", json={"id": "f_schuh"}).status_code == 200
     assert c.get(f"/api/v1/entities/{e['id']}").json()["fields"]["f_schuh"][0]["value"] == "44"
+
+
+def test_merge_mehrere(client):
+    c = client
+    a = c.post("/api/v1/entities", json={"name": "Tim A", "fields": {"f_city": "Köln", "f_phone": ["+49 1"]}}).json()
+    b = c.post("/api/v1/entities", json={"name": "Timo B", "fields": {"f_phone": ["+49 2"]}}).json()
+    d = c.post("/api/v1/entities", json={"name": "Timothy C", "fields": {"f_city": "Bonn", "f_phone": ["+49 3"]}}).json()
+    plan = c.get("/api/v1/merge/preview-multi", params={"ids": f"{a['id']},{b['id']},{d['id']}"}).json()
+    assert len(plan["people"]) == 3
+    phone = next(f for f in plan["fields"] if f["field"] == "f_phone")
+    assert phone["auto"] == "all" and len(phone["vals"]) == 3
+    r = c.post("/api/v1/merge/multi", json={"ids": [a["id"], b["id"], d["id"]], "choices": {"f_city": 2, "name": 1}})
+    assert r.status_code == 200, r.text
+    e = r.json()
+    assert e["name"] == "Timo B" and e["fields"]["f_city"][0]["value"] == "Bonn"
+    assert sorted(v["value"] for v in e["fields"]["f_phone"]) == ["+49 1", "+49 2", "+49 3"]
+    assert {"Tim A", "Timothy C"} <= set(e["aliases"])
+    assert c.get(f"/api/v1/entities/{b['id']}").status_code == 404 and c.get(f"/api/v1/entities/{d['id']}").status_code == 404

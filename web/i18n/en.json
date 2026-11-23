@@ -1433,5 +1433,15 @@
 "Mitgelieferte Felder, die du gelöscht hast. Beim Wiederherstellen kommen auch die Werte aus der letzten Löschung zurück.": "Built-in fields you deleted. Restoring also brings back the values from the last deletion.",
 "keine Werte": "no values",
 "Freundebuch gleich mit ausfüllen lassen": "Let them fill in the friendship book too",
-"Fast!": "Almost!"
+"Fast!": "Almost!",
+"Shift": "Shift",
+"+ Klick: mehrere wählen": "+ click: select several",
+"Noch eine Person wählen": "Pick one more person",
+"Abwählen": "Deselect",
+"bleibt": "stays",
+"soll bleiben": "keep this",
+"alle Werte bleiben": "all values stay",
+"Pro Feld wählst du, wessen Wert bleibt. Mehrfachfelder (Nummern, Profile …) behalten alle Werte. ": "For each field, pick whose value stays. Multi-value fields (numbers, profiles …) keep all values. ",
+"Kreise und Bünde bleiben alle": "all circles and bonds stay",
+", der Verlauf aller Einträge bleibt erhalten, die übrigen Namen werden Aliasse.": ", the history of all entries is kept, the other names become aliases."
 }

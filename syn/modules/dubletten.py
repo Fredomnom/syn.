@@ -368,9 +368,18 @@ class MergeIn(BaseModel):
 
 @router.post("/merge")
 def merge(body: MergeIn, ctx: Ctx = Depends(current)):
+    _merge_pair(ctx, body.keep, body.other, body.choices)
+    from .lebewesen import entity_full
+    # Zusammengeführt mit einer (unbenannten) Immich-Person: Name dorthin schreiben
+    from ..importers.immich import push_names
+    push_names(ctx.uid, body.keep)
+    return entity_full(ctx, body.keep)
+
+
+def _merge_pair(ctx, keep, other, choices):
     uid = ctx.uid
-    plan = plan_merge(ctx, body.keep, body.other)
-    keep, other = body.keep, body.other
+    plan = plan_merge(ctx, keep, other)
+    body = MergeIn(keep=keep, other=other, choices=choices or {})
     ek, eo = model.get_entity(uid, keep), model.get_entity(uid, other)
     defs = model.field_defs(uid)
     with db.tx():
@@ -389,7 +398,7 @@ def merge(body: MergeIn, ctx: Ctx = Depends(current)):
         else:
             upd["name_uncertain"] = src["name_uncertain"] if src["name"] else ek["name_uncertain"]
         al = list(dict.fromkeys(ek["aliases"] + eo["aliases"] +
-                                [x for x in (eo["name"], eo["description"], ek["description"]) if x]))
+                                [x for x in (ek["name"], eo["name"], eo["description"], ek["description"]) if x]))
         new_name = upd.get("name", ek["name"])
         al = [x for x in al if x != new_name]
         upd["aliases"] = al
@@ -476,8 +485,96 @@ def merge(body: MergeIn, ctx: Ctx = Depends(current)):
         db.ex("DELETE FROM entities WHERE id=?", other)
         model.record(uid, "entity", keep, "merged", {"id": other, "name": model.display_name(eo)}, {"id": keep},
                      "Zusammenführen")
+
+
+# ---------------------------------------------------------------- mehr als zwei auf einmal
+
+def plan_multi(ctx, ids):
+    """Wie plan_merge, aber für beliebig viele Einträge: pro Feld die Werte jedes Eintrags und syns Vorauswahl
+    (Index des Eintrags, „all“ = alle Werte behalten, „sum“ = Zähler addieren)."""
+    uid = ctx.uid
+    ids = list(dict.fromkeys(ids))
+    if len(ids) < 2:
+        raise Bad("Mindestens zwei Personen")
+    es = [model.get_entity(uid, i) for i in ids]
+    if any(e["is_self"] for e in es):
+        raise Bad("Dein eigener Eintrag kann nicht zusammengeführt werden")
+    defs = model.field_defs(uid)
+    vals = [get_values("entity", i) for i in ids]
+    sbs = [model.self_bund(uid, i) for i in ids]
+    bvals = [get_values("bund", b["id"]) if b else {} for b in sbs]
+    fields = []
+    for fid, d in defs.items():
+        if d["scope"] == "kreis":
+            continue
+        xs = [(bvals[k] if d["scope"] == "bund" else vals[k]).get(fid, []) for k in range(len(ids))]
+        have = [k for k, x in enumerate(xs) if x]
+        if not have:
+            continue
+        prim = {k: model.primary(xs[k]) for k in have}
+        auto, why = None, ""
+        if len(have) == 1:
+            auto, why = have[0], "nur in einem Eintrag"
+        elif d["multi"]:
+            auto, why = "all", "Mehrfachfeld: alle Werte bleiben"
+        elif len({json.dumps(prim[k]["value"], sort_keys=True) for k in have if prim[k]}) <= 1:
+            auto, why = have[0], "gleich"
+        elif d["type"] == "number" and fid == "f_meet_prev":
+            auto, why = "sum", "Zähler werden addiert"
+        else:
+            own = [k for k in have if prim[k] and _own(prim[k])]
+            if own and len(own) < len(have) and (d["type"] != "date" or fid == "f_bday"):
+                auto, why = own[0], "selbst eingetragen"
+            elif d["type"] == "date" and (fid == "f_seen" or d["options"].get("newer_wins", fid != "f_bday")):
+                dated = [(approx_date(prim[k]["value"]), k) for k in have if prim[k]]
+                dated = [x for x in dated if x[0]]
+                if dated:
+                    auto, why = max(dated)[1], "neueres Datum gewinnt"
+        fields.append({"field": fid, "name": d["name"], "type": d["type"], "vals": xs, "auto": auto, "why": why,
+                       "owner": "bund" if d["scope"] == "bund" else "entity", "multi": bool(d["multi"])})
+    attrs = []
+    for a in ENTITY_ATTRS:
+        xs = [e[a] for e in es]
+        if len({json.dumps(x) for x in xs if x}) <= 1:
+            continue
+        have = [k for k, x in enumerate(xs) if x]
+        sure = [k for k in have if a != "name" or not es[k]["name_uncertain"]]
+        attrs.append({"attr": a, "vals": xs, "auto": (sure or have)[0] if have else None})
+    return {"people": [{"id": i, "display": model.display_name(e), "avatar": e.get("avatar"), "created_at": e.get("created_at")} for i, e in zip(ids, es)],
+            "fields": fields, "attrs": attrs}
+
+
+@router.get("/merge/preview-multi")
+def merge_preview_multi(ids: str, ctx: Ctx = Depends(current)):
+    return plan_multi(ctx, [x for x in ids.split(",") if x])
+
+
+class MultiIn(BaseModel):
+    ids: list[str]           # der erste bleibt
+    choices: dict = {}       # field_id|attr -> Index in ids | "all" | "sum"
+
+
+@router.post("/merge/multi")
+def merge_multi(body: MultiIn, ctx: Ctx = Depends(current)):
+    """Alle in den ersten Eintrag – als Folge von Paar-Schritten in einer Transaktion (alles oder nichts).
+    Gewählt „Wert von Eintrag k“: beim Schritt mit k nimmt syn dessen Wert, bei allen anderen bleibt der bisherige."""
+    plan = plan_multi(ctx, body.ids)
+    ids = [p["id"] for p in plan["people"]]
+    keep = ids[0]
+    auto = {f["field"]: f["auto"] for f in plan["fields"]} | {a["attr"]: a["auto"] for a in plan["attrs"]}
+    with db.tx():
+        for j in range(1, len(ids)):
+            ch = {}
+            for key, a in auto.items():
+                c = body.choices.get(key, a)
+                if c in ("all", "sum"):
+                    ch[key] = "both" if c == "all" else "sum"
+                elif isinstance(c, int):
+                    ch[key] = "b" if c == j else "a"
+                else:
+                    ch[key] = "a"
+            _merge_pair(ctx, keep, ids[j], ch)
     from .lebewesen import entity_full
-    # Zusammengeführt mit einer (unbenannten) Immich-Person: Name dorthin schreiben
     from ..importers.immich import push_names
-    push_names(uid, keep)
+    push_names(ctx.uid, keep)
     return entity_full(ctx, keep)
