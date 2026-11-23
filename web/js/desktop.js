@@ -167,6 +167,11 @@ async function people(main, view, route, saved = null) {
   const groupBtn = ["grid", "list", "table"].includes(VS.view) ? h("button.btn.sm", { on: { click: (e) => menu(e.currentTarget, [{ label: "Gruppieren nach" },
     ...GROUPINGS.filter((g) => !g[2] || g[2]()).map(([k, l]) => ({ label: l, on: groupingOf(VS.view, VS.cfg) === k, action: () => { setGrouping(VS.view, VS.cfg, k, !!VS.savedId); groupBtn.lastChild.textContent = "Gruppiert: " + groupLabel(k); redraw(); } }))]) } },
     icon("layers"), h("span", "Gruppiert: " + groupLabel(groupingOf(VS.view, VS.cfg)))) : null;
+  const subBtn = VS.view === "grid" ? h("button.btn.sm", { title: "Was unter dem Namen steht", on: { click: (e) => menu(e.currentTarget, [{ label: "Unter dem Namen" },
+    ...GRID_SUB_SPECIAL.map(([k, l]) => ({ label: l, on: gridSubOf() === k, action: () => { setGridSub(k); subBtn.lastChild.textContent = "Darunter: " + l; redraw(); } })),
+    { label: "Felder" },
+    ...S.fieldList.filter((f) => ["person", "both"].includes(f.scope) && f.id !== "f_seen" && f.type !== "image").map((f) => ({ label: f.name, on: gridSubOf() === f.id, action: () => { setGridSub(f.id); subBtn.lastChild.textContent = "Darunter: " + f.name; redraw(); } }))]) } },
+    icon("list"), h("span", "Darunter: " + gridSubLabel(gridSubOf()))) : null;
   for (const [id] of views) onPage("view_" + id, () => (location.hash = "#/people/" + id));
   onPage("save_view", () => saveView(saved));
   page.append(
@@ -176,7 +181,7 @@ async function people(main, view, route, saved = null) {
       h("span.small.t2", "Personen"), h("select.input", { on: { change: (e) => { VS.kind = e.target.value; redraw(); } } },
         [["all", "Alle Menschen & Tiere"], ["person", "Menschen"], ["pet", "Haustiere"]].map(([k, l]) => h("option", { value: k, selected: VS.kind === k }, l))),
       h("div.seg", { "data-seg": "views" }, views.map(([id, label, ic], i) => h("button" + (VS.view === id ? ".on" : ""), { "data-sc": "view_" + id, title: `${label} (${pretty(binding("view_" + id))})`, on: { click: () => { location.hash = `#/people/${id}`; } } }, icon(ic), label))),
-      h("span.grow"), filterBtn, groupBtn, sortBtn,
+      h("span.grow"), filterBtn, groupBtn, subBtn, sortBtn,
       h("button.btn.sm.sv-btn", { title: "Ansicht speichern", on: { click: () => saveView(saved) } }, icon("download"), saved ? "Speichern" : "Ansicht speichern")),
     body);
   await redraw(); // erst fertig zeichnen, dann einblenden
@@ -250,6 +255,22 @@ async function drawView(body, all) {
   body.replaceChildren(box);
 }
 
+// Was unter dem Namen in der Grid-Ansicht steht (gespeicherte Ansicht merkt es sich, sonst dieses Gerät)
+const gridSubOf = () => (VS.cfg && "gridSub" in VS.cfg ? VS.cfg.gridSub : LS("gridsub", "f_seen"));
+const setGridSub = (k) => { if (VS.savedId) VS.cfg.gridSub = k; else SAVE("gridsub", k); };
+const GRID_SUB_SPECIAL = [["f_seen", "Zuletzt gesehen"], ["", "Nichts"], ["level", "Ring"], ["main_circle", "Hauptkreis"], ["ist", "Ist (berechnet)"], ["created", "Erfasst"], ["aliases", "Auch genannt"]];
+const gridSubLabel = (k) => GRID_SUB_SPECIAL.find((x) => x[0] === k)?.[1] || S.fields[k]?.name || "Zuletzt gesehen";
+function gridSub(r, k) {
+  if (k === "f_seen") return r.v.f_seen?.raw ? rel(r.v.f_seen.raw) : "–";
+  if (!k) return null;
+  if (k === "level") return r.level ? ringName(r.level) : "–";
+  if (k === "main_circle") return r.main_circle_id ? S.circles[r.main_circle_id]?.name || "–" : "Lose";
+  if (k === "ist") return r.ist ? `${r.ist.ring} · ${rel(r.ist.last)}` : "–";
+  if (k === "created") return (r.created_at || "").slice(0, 10) || "–";
+  if (k === "aliases") return (r.aliases || []).join(", ") || "–";
+  const x = r.v[k];
+  return x ? (S.fields[k]?.type === "date" && x.raw && /^\d{4}-\d\d-\d\d$/.test(x.raw) && k !== "f_bday" ? rel(x.raw) : x.d) + (x.n > 1 ? ` +${x.n - 1}` : "") : "–";
+}
 function grid(body, list) {
   if (!list.length) return body.append(h("div.card.empty", "Keine Personen für diese Auswahl."));
   const gs = groupRows(groupingOf("grid", VS.cfg), list);
@@ -262,7 +283,8 @@ function grid(body, list) {
 function gridCell(g, r) {
   {
     const seen = r.v.f_seen?.raw;
-    g.append(h("a.pcell", { href: "#/p/" + r.id }, avatar(r, 56), h("div.nm.ellipsis", nameEl(r)), h("div.small.t2", seen ? rel(seen) : "–"),
+    const sub = gridSub(r, gridSubOf());
+    g.append(h("a.pcell", { href: "#/p/" + r.id }, avatar(r, 56), h("div.nm.ellipsis", nameEl(r)), sub == null ? null : h("div.small.t2.ellipsis.pc-sub", { title: sub }, sub),
       h("button.btn.sm.seen-btn", { title: "Heute gesehen", on: { click: async (e) => { e.preventDefault(); await POST(`/seen-today/${r.id}`); invalidate(); toast(`${r.display}: heute gesehen`); r.v.f_seen = { raw: today(), d: today() }; } } }, icon("eye"))));
   }
 }

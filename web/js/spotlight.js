@@ -52,7 +52,7 @@ export async function openSpotlight() {
   // Mehrfachauswahl (⇧/⌘/Strg + Klick oder ⇧+Enter) zum direkten Zusammenführen – bleibt beim Weitersuchen bestehen
   const sel = [];
   const selBar = h("div.spot-sel");
-  panel.insertBefore(selBar, list);
+  list.after(selBar); // unter den Ergebnissen – sonst rutschen sie beim ersten Auswählen nach unten
   const drawSel = () => {
     selBar.hidden = !sel.length; panel.classList.toggle("selecting", sel.length > 0);
     clear(selBar, sel.length ? [
@@ -63,7 +63,8 @@ export async function openSpotlight() {
         h("button.btn.sm.primary", { disabled: sel.length < 2, on: { click: mergeSel } }, icon("merge"), sel.length < 2 ? "Noch eine Person wählen" : `${sel.length} zusammenführen`)),
     ] : []);
   };
-  const toggle = (id) => { const i = sel.indexOf(id); i >= 0 ? sel.splice(i, 1) : sel.push(id); drawSel(); build(); input.focus(); };
+  // An-/Abwählen: Liste bleibt, wo sie ist (gleiche Scrollposition, gleiche Markierung)
+  const toggle = (id) => { const i = sel.indexOf(id); i >= 0 ? sel.splice(i, 1) : sel.push(id); const top = list.scrollTop, keep = active; drawSel(); build(); active = keep; mark(); list.scrollTop = top; input.focus(); };
   function mergeSel() {
     if (sel.length < 2) return;
     close(); location.hash = sel.length === 2 ? `#/merge/${sel[0]}/${sel[1]}` : `#/merge/${sel.join(",")}`;
