@@ -143,3 +143,21 @@ def test_profilbild_vorschlagen(client, monkeypatch):
     assert c.post(f"/api/v1/suggestions/{s['id']}/accept").status_code == 200
     av = c.get(f"/api/v1/entities/{e['id']}").json()["avatar"]
     assert av.startswith("/api/v1/files/") and c.get(av).content == b"\xff\xd8bild"   # echte Datei in syn
+
+
+def test_visitenkarte_mit_freundebuch(client):
+    from fastapi.testclient import TestClient
+    c = client
+    assert c.patch("/api/v1/card", json={"enabled": True, "slug": "fredi"}).status_code == 200
+    anon = TestClient(c.app)
+    assert anon.get("/api/v1/public/cards/fredi").json()["book"] is None
+    book = anon.get("/api/v1/public/cards/fredi", params={"fb": 1}).json()["book"]
+    q = next(x for x in book["questions"] if x["id"] == "f_fb_like")
+    r = anon.post("/api/v1/public/cards/fredi/reply", json={"name": "Neu Gier", "book": {q["id"]: "Kuchen"}, "photo": True}).json()
+    assert r["photo_key"]
+    assert anon.post(f"/api/v1/public/cards/fredi/photo/{r['photo_key']}", files={"file": ("a.jpg", b"nein", "image/jpeg")}).status_code == 400
+    assert anon.post(f"/api/v1/public/cards/fredi/photo/{r['photo_key']}", files={"file": ("a.jpg", JPG, "image/jpeg")}).status_code == 200
+    assert anon.post(f"/api/v1/public/cards/fredi/photo/{r['photo_key']}", files={"file": ("a.jpg", JPG, "image/jpeg")}).status_code == 404  # Schlüssel nur einmal
+    neu = next(x for x in c.get("/api/v1/entities", params={"q": "Neu Gier"}).json())
+    f = c.get(f"/api/v1/entities/{neu['id']}").json()["fields"]
+    assert f["f_fb_like"][0]["value"] == "Kuchen" and f["f_fb_photo"][0]["value"].startswith("/api/v1/files/")

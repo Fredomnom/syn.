@@ -460,13 +460,13 @@ async function selfOverview(allRows) {
     vk = card.enabled
       ? h("div.card", h("div.card-h", h("h3", "Visitenkarte"), h("a.btn.sm.ghost", { href: "#/settings/card" }, icon("edit"), "Bearbeiten")),
         h("div.card-b.so-card",
-          h("button.so-qr", { title: "Groß zeigen", on: { click: () => qrDialog("Deine Visitenkarte", url, { hint: "Gegenüber scannt den Code mit der Kamera und sieht deine Angaben." }) } }, await qrBox(url)),
+          h("button.so-qr", { title: "Groß zeigen", on: { click: () => qrDialog("Deine Visitenkarte", url, { hint: "Gegenüber scannt den Code mit der Kamera und sieht deine Angaben.", book: true }) } }, await qrBox(url)),
           h("div.col", { style: { gap: "10px", minWidth: 0 } },
             h("div.small.t2", "Dein Link – wer ihn öffnet oder den Code scannt, sieht deine Angaben und kann dir seine eigenen schicken."),
             h("div.mono.so-link", location.host + card.path),
             h("div.row.wrap",
               h("button.btn.sm.primary", { on: { click: async () => { try { await navigator.clipboard.writeText(url); toast("Link kopiert"); } catch (_) { toast(url); } } } }, icon("copy"), "Link kopieren"),
-              h("button.btn.sm", { on: { click: () => qrDialog("Deine Visitenkarte", url, { hint: "Gegenüber scannt den Code mit der Kamera und sieht deine Angaben." }) } }, icon("qr"), "QR-Code groß"),
+              h("button.btn.sm", { on: { click: () => qrDialog("Deine Visitenkarte", url, { hint: "Gegenüber scannt den Code mit der Kamera und sieht deine Angaben.", book: true }) } }, icon("qr"), "QR-Code groß"),
               h("a.btn.sm", { href: card.path, target: "_blank", rel: "noopener" }, icon("ext"), "Öffnen")))))
       : h("div.card", h("div.card-h", h("h3", "Visitenkarte")),
         h("div.card-b.so-card.off", h("span.so-ic", icon("idcard")),

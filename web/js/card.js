@@ -94,7 +94,8 @@ function input(f, services) {
 
 async function main() {
   let c;
-  try { const r = await fetch(`/api/v1/public/cards/${encodeURIComponent(slug)}`); if (!r.ok) throw 0; c = await r.json(); }
+  const wantBook = /^(1|y|ja|true)$/i.test(new URLSearchParams(location.search).get("fb") || "");
+  try { const r = await fetch(`/api/v1/public/cards/${encodeURIComponent(slug)}${wantBook ? "?fb=1" : ""}`); if (!r.ok) throw 0; c = await r.json(); }
   catch (_) { root.replaceChildren($("div", { class: "vk-card vk-404" }, $("a", { class: "logo", href: SYN_SITE, target: "_blank", rel: "noopener" }, "syn", $("b", {}, ".")), $("h1", {}, "Diese Visitenkarte gibt es nicht"), $("p", {}, "Vielleicht hat sich der Link geändert."))); return; }
   document.title = `${c.name} · syn.`;
   const first = c.first_name || c.name.split(" ")[0];
@@ -116,20 +117,32 @@ async function main() {
   const trap = $("input", { name: "website", tabindex: "-1", autocomplete: "off", class: "vk-trap", "aria-hidden": "true" });
   const err = $("p", { class: "vk-err" });
   const send = $("button", { class: "btn primary vk-send", type: "submit" }, ico("send"), `An ${first} schicken`);
+  // Freundebuch (nur mit ?fb=1 – Schalter beim QR-Code)
+  const fbs = c.book ? (await import("./fbook.js")).bookSection($, c.book, first) : null;
   const form = $("form", { class: "vk-form", novalidate: true, onsubmit: async (e) => {
     e.preventDefault(); err.textContent = "";
     if (!name.value.trim()) { err.textContent = "Bitte gib deinen Namen an."; name.focus(); return; }
     const fields = {}; for (const a of asks) { const v = a.get(a.el); if (v) fields[a.f.id] = v; }
     send.disabled = true;
     try {
-      const r = await fetch(`/api/v1/public/cards/${encodeURIComponent(slug)}/reply`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: name.value, fields, message: msg.value, website: trap.value }) });
+      const fb = fbs ? fbs.collect() : {};
+      const r = await fetch(`/api/v1/public/cards/${encodeURIComponent(slug)}/reply`, { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: name.value, fields, message: msg.value, website: trap.value, book: fbs ? fb.book : undefined, signature: fb.signature || null, photo: !!fbs?.photoFile }) });
       if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || "Das hat nicht geklappt.");
-      form.replaceWith($("div", { class: "vk-done" }, $("span", { class: "vk-done-i" }, ico("check")), $("h2", {}, "Angekommen!"), $("p", {}, `${first} hat jetzt deine Angaben.`)));
+      const res = await r.json();
+      if (fbs?.photoFile && res.photo_key) { // Foto direkt hinterher (Einmal-Schlüssel für genau diesen Eintrag)
+        send.textContent = "Foto wird eingeklebt …";
+        const fd = new FormData(); fd.append("file", fbs.photoFile); if (fbs.asAvatar) fd.append("as_avatar", "1");
+        const pr = await fetch(`/api/v1/public/cards/${encodeURIComponent(slug)}/photo/${res.photo_key}`, { method: "POST", body: fd });
+        if (!pr.ok) { form.replaceWith($("div", { class: "vk-done" }, $("h2", {}, "Fast!"), $("p", {}, `${first} hat deine Angaben – nur das Foto ging nicht: ${(await pr.json().catch(() => ({}))).detail || "unbekannter Fehler"}.`))); return; }
+      }
+      form.replaceWith($("div", { class: "vk-done" }, $("span", { class: "vk-done-i" }, ico("check")), $("h2", {}, "Angekommen!"), $("p", {}, fbs ? `${first} hat jetzt deine Angaben und deinen Freundebuch-Eintrag.` : `${first} hat jetzt deine Angaben.`)));
     } catch (ex) { err.textContent = ex.message; send.disabled = false; }
   } },
     $("h2", {}, "Und du?"), $("p", { class: "vk-sub" }, `Lass ${first} deine Kontaktdaten da – alles ist freiwillig außer dem Namen.`),
     $("label", { class: "f" }, "Name", name),
     asks.map((a) => $("label", { class: "f" }, a.f.name, a.el)),
+    fbs ? fbs.el : null,
     $("label", { class: "f" }, "Nachricht", msg), trap, err, send);
 
   root.replaceChildren($("div", { class: "vk-card vk-me" }, head, c.fields.length ? rows : null, save), $("div", { class: "vk-card vk-reply" }, form),

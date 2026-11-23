@@ -6,13 +6,16 @@ Die landen als neue Person mit der Quelle „Visitenkarte“ (ohne Konto, ohne A
 import re
 import time
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+import secrets
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, Response
 
 from .. import config, db, model
 from ..auth import Ctx, current
 from ..model import Bad, display_name
 from ..util import new_id, now
+from .selbstauskunft import book_questions, save_book, store_book_photo
 
 router = APIRouter(prefix="/api/v1", tags=["Visitenkarte"])
 
@@ -78,7 +81,7 @@ def _public(slug):
 
 
 @router.get("/public/cards/{slug}", tags=["Visitenkarte"])
-def public_card(slug: str):
+def public_card(slug: str, fb: bool = False):
     """Öffentlich: was auf der Visitenkarte steht (ohne Anmeldung)."""
     c = _public(slug)
     uid = c["user_id"]
@@ -99,7 +102,9 @@ def public_card(slug: str):
            and defs[fid]["type"] in ("text", "phone", "email", "date", "profile", "address", "url", "choice")]
     return {"slug": c["slug"], "name": display_name(me), "first_name": me.get("first_name"),
             "avatar": f"/api/v1/public/cards/{c['slug']}/avatar" if me.get("avatar") else None,
-            "intro": c["intro"], "fields": shown, "ask": ask, "services": services}
+            "intro": c["intro"], "fields": shown, "ask": ask, "services": services,
+            # ?fb=1 (Schalter beim QR-Code): Freundebuch gleich mit ausfüllen
+            "book": book_questions(uid) if fb else None}
 
 
 @router.get("/public/cards/{slug}/avatar", include_in_schema=False)
@@ -161,10 +166,32 @@ def reply(slug: str, body: dict, request: Request):
             model.set_single(uid, "entity", eid, defs["f_via"], {"type": "service", "id": SOURCE}, source=SOURCE)
         if msg and "f_note" in defs:
             model.set_single(uid, "entity", eid, defs["f_note"], msg, source=SOURCE)
+        fb = save_book(uid, eid, body.get("book"), body.get("signature")) if isinstance(body.get("book"), dict) else 0
         db.insert("today_items", {"id": new_id("t"), "user_id": uid, "routine_id": None, "entity_id": eid,
-                                  "kind": "card", "title": f"{name} hat dir über deine Visitenkarte geschrieben",
+                                  "kind": "card", "title": f"{name} hat dir über deine Visitenkarte geschrieben" + (" – mit Freundebuch" if fb else ""),
                                   "body": msg[:140], "day": now()[:10], "created_at": now(), "data": "{}"})
-    return {"ok": True, "to": display_name(model.get_entity(uid, model.self_id(uid)))}
+    # Einmal-Schlüssel, um direkt danach das Freundebuch-Foto nachzureichen (10 Minuten, nur für diese neue Person)
+    key = secrets.token_urlsafe(18) if fb or body.get("photo") else None
+    if key:
+        _PHOTO[key] = (uid, eid, time.time() + 600)
+    return {"ok": True, "to": display_name(model.get_entity(uid, model.self_id(uid))), "photo_key": key}
+
+
+_PHOTO: dict[str, tuple] = {}
+
+
+@router.post("/public/cards/{slug}/photo/{key}", include_in_schema=False)
+async def reply_photo(slug: str, key: str, file: UploadFile = File(...), as_avatar: str | None = Form(None)):
+    c = _public(slug)
+    hit = _PHOTO.get(key)
+    if not hit or hit[2] < time.time() or hit[0] != c["user_id"]:
+        _PHOTO.pop(key, None)
+        raise HTTPException(404, "Zu spät – bitte das Foto nochmal über einen Link schicken")
+    await store_book_photo(hit[0], hit[1], file, as_avatar)  # kein Bild → Fehler, Schlüssel bleibt für einen zweiten Versuch
+    _PHOTO.pop(key, None)
+    for k in [k for k, v in _PHOTO.items() if v[2] < time.time()]:
+        _PHOTO.pop(k, None)
+    return {"ok": True}
 
 
 def install(app):

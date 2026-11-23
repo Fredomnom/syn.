@@ -321,7 +321,7 @@ export function fieldRow(def, vals, path, e, reload, { extra = null, label = nul
       const s = service(v.value?.service);
       const href = profileLink(v.value);
       const chip = h(href ? "a.pchip" : "span.pchip", href ? { href, target: "_blank", rel: "noopener", on: { click: (ev) => ev.stopPropagation() } } : {},
-        s ? serviceIcon(s.id, 15) : null, h("span", v.value?.handle || v.value?.id || v.value?.url || ""),
+        s ? serviceIcon(s.id, 15) : null, scrollText(v.value?.handle || v.value?.id || v.value?.url || ""),
         svcCount[v.value?.service] > 1 && v.label ? h("span.t3", v.label) : null, href ? icon("ext", "xs") : null, srcDot(v));
       return v.uncertain ? h("span.unsure-val", chip) : chip;
     }
@@ -414,4 +414,15 @@ export function pickPlace(anchor, onPick) {
   inp.addEventListener("keydown", (e) => { if (e.key === "Enter" && !list.querySelector(".kfocus") && inp.value.trim()) { e.preventDefault(); done(inp.value.trim()); } });
   popover(anchor, h("div", { style: { width: "280px" } }, inp, list));
   render(); inp.focus();
+}
+
+// Einzeiliger Text, der bei Überlänge mit Verlauf abgeschnitten wird und beim Darüberfahren durchscrollt
+const cutRO = typeof ResizeObserver !== "undefined" ? new ResizeObserver((es) => es.forEach((e) => {
+  const o = e.target, d = o.firstChild.scrollWidth - o.clientWidth;
+  o.classList.toggle("cut", d > 1); o.style.setProperty("--d", `-${Math.max(0, d + 4)}px`); o.style.setProperty("--t", `${Math.max(1.2, d / 40)}s`);
+})) : null;
+export function scrollText(text) {
+  const o = h("span.st", h("span.st-in", text));
+  o.title = text; cutRO?.observe(o);
+  return o;
 }

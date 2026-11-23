@@ -346,7 +346,7 @@ async function mePage(page) {
   const me = await GET("/entities/" + S.me.self_id);
   const [sugg, card] = await Promise.all([GET("/suggestions"), GET("/card").catch(() => null)]);
   const cardUrl = card?.enabled ? location.origin + card.path : null;
-  const showQr = async () => { const { qrDialog } = await import("./qr.js"); qrDialog("Meine Visitenkarte", cardUrl, { hint: "Gegenüber scannt den Code mit der Kamera und sieht deine Angaben." }); };
+  const showQr = async () => { const { qrDialog } = await import("./qr.js"); qrDialog("Meine Visitenkarte", cardUrl, { hint: "Gegenüber scannt den Code mit der Kamera und sieht deine Angaben.", book: true }); };
   page.append(h("div.mtop", h("h1", "Ich"), logo()),
     h("div.list", h("a.prow", { href: "#/p/" + me.id }, avatar({ ...me, is_self: true }, 42), h("div.grow", h("div.nm", me.display), h("div.sub", "Mein Profil")), icon("right")),
       cardUrl ? h("button.prow.m-qr", { on: { click: showQr } }, h("span.m-qr-ic", icon("qr")), h("div.grow", h("div.nm", "Visitenkarte zeigen"), h("div.sub.mono", location.host + card.path)), icon("right"))

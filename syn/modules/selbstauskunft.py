@@ -112,12 +112,7 @@ def public_get(token: str):
     vals = model.get_values("entity", eid, include_deprecated=False)
     fl = db.jl(l["fields"], [])
     defs = _defs(uid, fl)
-    book = None
-    if BOOK in fl:
-        from ..importers.immich import connected
-        prim = lambda fid: (vals.get(fid) or [{}])[0].get("value")  # noqa: E731
-        book = {"questions": [{"id": d["id"], "name": d["name"], "type": d["type"], "value": prim(d["id"])} for d in _book_defs(uid)],
-                "photo": True, "immich": connected(uid), "has_photo": bool(prim("f_fb_photo")), "has_sign": bool(prim("f_fb_sign"))}
+    book = book_questions(uid, vals) if BOOK in fl else None
     services = [{k: s.get(k) for k in ("id", "name")} for s in user_settings(uid).get("services", [])]
     return {
         "owner": display_name(me), "owner_first": me.get("first_name") or display_name(me).split(" ")[0],
@@ -204,27 +199,7 @@ def public_answer(token: str, body: Answer):
                     p["why"] = f"{p['why']}: „{comment}“"
                 n += bool(add_suggestion(uid, "field", eid, p, SOURCE))
         # Freundebuch: direkt speichern (Quelle „selbst“, steht im Verlauf), nur die freigegebenen Fragen
-        fb = 0
-        if BOOK in db.jl(l["fields"], []):
-            qs = {d["id"]: d for d in _book_defs(uid)}
-            for fid, text in (body.book or {}).items():
-                d = qs.get(fid)
-                if not d or not isinstance(text, str):
-                    continue
-                text = text.strip()[:2000 if d["type"] == "note" else 200]
-                old_v = (cur.get(fid) or [{}])[0].get("value")
-                if text and text != old_v:
-                    model.set_entity_field(uid, eid, fid, text, SOURCE)
-                    fb += 1
-            sig = body.signature or ""
-            if sig.startswith("data:image/png;base64,") and len(sig) < 400_000:
-                try:
-                    from .dateien import store_bytes
-                    fid_ = store_bytes(uid, base64.b64decode(sig.split(",", 1)[1]), "image/png")
-                    model.set_entity_field(uid, eid, "f_fb_sign", f"/api/v1/files/{fid_}", SOURCE)
-                    fb += 1
-                except Exception:
-                    pass
+        fb = save_book(uid, eid, body.book, body.signature, cur) if BOOK in db.jl(l["fields"], []) else 0
         msg = (body.message or "").strip()[:500]
         if n or msg or fb:
             db.insert("today_items", {"id": new_id("t"), "user_id": uid, "routine_id": None, "entity_id": eid, "kind": "card",
@@ -241,8 +216,50 @@ async def public_photo(token: str, file: UploadFile = File(...), as_avatar: str 
     l = _by_token(token)
     if BOOK not in db.jl(l["fields"], []):
         raise HTTPException(404, "Kein Freundebuch")
+    await store_book_photo(l["user_id"], l["entity_id"], file, as_avatar)
+    return {"ok": True}
+
+
+def book_questions(uid, values=None):
+    """Fragen fürs Freundebuch (für den Pflege-Link mit den bisherigen Antworten, für die Visitenkarte leer)."""
+    from ..importers.immich import connected
+    values = values or {}
+    prim = lambda fid: (values.get(fid) or [{}])[0].get("value")
+    return {"questions": [{"id": d["id"], "name": d["name"], "type": d["type"], "value": prim(d["id"])} for d in _book_defs(uid)],
+            "photo": True, "immich": connected(uid), "has_photo": bool(prim("f_fb_photo")), "has_sign": bool(prim("f_fb_sign"))}
+
+
+def save_book(uid, eid, answers, signature, cur=None) -> int:
+    """Freundebuch-Antworten direkt speichern (es sind ihre eigenen Worte; Quelle „selbst“, steht im Verlauf)."""
+    cur = cur or {}
+    fb = 0
+    qs = {d["id"]: d for d in _book_defs(uid)}
+    for fid, text in (answers or {}).items():
+        d = qs.get(fid)
+        if not d or not isinstance(text, str):
+            continue
+        text = text.strip()[:2000 if d["type"] == "note" else 200]
+        old_v = (cur.get(fid) or [{}])[0].get("value")
+        if text and text != old_v:
+            model.set_entity_field(uid, eid, fid, text, SOURCE)
+            fb += 1
+    sig = signature or ""
+    if sig.startswith("data:image/png;base64,") and len(sig) < 400_000:
+        try:
+            from .dateien import store_bytes
+            raw = base64.b64decode(sig.split(",", 1)[1])
+            if _sniff(raw) == "image/png":
+                fid_ = store_bytes(uid, raw, "image/png")
+                model.set_entity_field(uid, eid, "f_fb_sign", f"/api/v1/files/{fid_}", SOURCE)
+                fb += 1
+        except Exception:
+            pass
+    return fb
+
+
+async def store_book_photo(uid, eid, file: UploadFile, as_avatar=None):
+    """Foto fürs Freundebuch: mit Immich direkt dorthin (Album „syn Freundebuch“), sonst in syn wie andere Bild-Felder."""
     from ..importers.immich import connected, upload_photo
-    uid, eid = l["user_id"], l["entity_id"]
     mime = (file.content_type or "").lower()
     if not mime.startswith("image/"):
         raise HTTPException(400, "Bitte ein Bild")
@@ -268,7 +285,6 @@ async def public_photo(token: str, file: UploadFile = File(...), as_avatar: str 
         who = model.get_entity(uid, eid)["name"] or "Die Person"
         add_suggestion(uid, "avatar", eid, {"value": "neues Profilbild", **ref, "img": thumb,
                                             "why": f"{who} schlägt sich selbst ein Profilbild vor"}, SOURCE)
-    return {"ok": True}
 
 
 def _sniff(b: bytes) -> str | None:

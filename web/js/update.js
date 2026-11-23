@@ -81,50 +81,10 @@ async function main() {
     return $("div", { class: "f up-field" }, $("span", { class: "up-label" }, f.name), list,
       f.multi ? $("button", { class: "vk-more", type: "button", onclick: () => addRow(null) }, `+ weitere ${f.type === "phone" ? "Nummer" : f.type === "email" ? "Adresse" : "Angabe"}`) : null);
   };
-  // ---------------- Freundebuch: Foto (nur mit Immich), Fragen, Unterschrift
+  // ---------------- Freundebuch (gemeinsames Modul)
   const book = d.book;
-  const answers = {};
-  let sigDirty = false, sigCanvas = null, photoFile = null, avatarBox = null, avRow = null;
-  const bookBox = book ? (() => {
-    const qs = book.questions.map((q) => {
-      const el = q.type === "note" ? $("textarea", { class: "fb-in", rows: 2, "data-1p-ignore": true }) : $("input", { class: "fb-in", "data-1p-ignore": true });
-      el.value = q.value || ""; answers[q.id] = el;
-      return $("label", { class: "fb-q" + (q.type === "note" ? " long" : "") }, $("span", { class: "fb-k" }, q.name), el);
-    });
-    let photo = null;
-    if (book.photo) {
-      const st = $("span", { class: "fb-ph-t" }, book.has_photo ? "Foto ist schon da – tippen für ein neues" : "Klebe hier dein Bild ein");
-      // data-ctl: nicht von syns Bedienelementen umbauen lassen – das Polaroid ist selbst die Fläche (auch zum Hineinziehen)
-      const pick = (f) => {
-        if (!f || !f.type.startsWith("image/")) return;
-        photoFile = f;
-        photo.querySelector(".fb-ph-img")?.remove();
-        photo.prepend($("img", { class: "fb-ph-img", src: URL.createObjectURL(f), alt: "" }));
-        st.textContent = "Wird beim Absenden eingeklebt"; photo.classList.add("done"); avRow.hidden = false;
-      };
-      const file = $("input", { type: "file", accept: "image/*", class: "fb-file", "data-ctl": "aus", "aria-label": "Foto einkleben", onchange: () => pick(file.files[0]) });
-      photo = $("label", { class: "fb-photo" + (book.has_photo ? " done" : ""),
-        ondragover: (e) => { e.preventDefault(); photo.classList.add("over"); }, ondragleave: () => photo.classList.remove("over"),
-        ondrop: (e) => { e.preventDefault(); photo.classList.remove("over"); pick(e.dataTransfer?.files?.[0]); } }, st, file);
-      avatarBox = $("input", { type: "checkbox" });
-      avRow = $("label", { class: "fb-av", hidden: true }, avatarBox, " Auch als mein Profilbild vorschlagen");
-    }
-    // Unterschrift: mit Finger oder Maus zeichnen
-    sigCanvas = $("canvas", { class: "fb-sign", width: 600, height: 180 });
-    const ctx = sigCanvas.getContext("2d"); ctx.lineWidth = 3.2; ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.strokeStyle = "#1d2a5b";
-    let drawing = false;
-    const pos = (e) => { const r = sigCanvas.getBoundingClientRect(); return [(e.clientX - r.left) * sigCanvas.width / r.width, (e.clientY - r.top) * sigCanvas.height / r.height]; };
-    sigCanvas.addEventListener("pointerdown", (e) => { drawing = true; sigDirty = true; sigCanvas.setPointerCapture(e.pointerId); ctx.beginPath(); ctx.moveTo(...pos(e)); });
-    sigCanvas.addEventListener("pointermove", (e) => { if (!drawing) return; ctx.lineTo(...pos(e)); ctx.stroke(); });
-    sigCanvas.addEventListener("pointerup", () => (drawing = false));
-    const clearSig = $("button", { type: "button", class: "vk-more", onclick: () => { ctx.clearRect(0, 0, sigCanvas.width, sigCanvas.height); sigDirty = false; } }, "Nochmal");
-    return $("section", { class: "fb" },
-      $("h2", { class: "fb-title" }, "Freundebuch"),
-      $("p", { class: "fb-sub" }, `Schreib was für ${d.owner_first} rein – alles freiwillig.`),
-      photo, avRow, $("div", { class: "fb-qs" }, qs),
-      $("div", { class: "fb-signrow" }, $("span", { class: "fb-k" }, book.has_sign ? "Unterschrift (schon da – neu zeichnen ersetzt sie)" : "Unterschrift"), sigCanvas, clearSig));
-  })() : null;
-
+  const fbs = book ? (await import("./fbook.js")).bookSection($, book, d.owner_first) : null;
+  const bookBox = fbs?.el || null;
   const name = $("input", { class: "input", value: d.name, autocomplete: "name", "data-1p-ignore": true });
   const msg = $("textarea", { class: "input", rows: 3, placeholder: `Noch etwas für ${d.owner_first}?`, "data-1p-ignore": true });
   const trap = $("input", { name: "website", tabindex: "-1", autocomplete: "off", class: "vk-trap", "aria-hidden": "true" });
@@ -140,18 +100,17 @@ async function main() {
       (fields[it.f.id] ||= []).push({ old: it.old, value: now, comment: it.comment.value.trim() || null });
     }
     const changedName = name.value.trim() && name.value.trim() !== d.name;
-    const bookOut = {};
-    if (book) for (const q of book.questions) { const v = answers[q.id].value.trim(); if (v && v !== (q.value || "")) bookOut[q.id] = v; }
-    const signature = book && sigDirty ? sigCanvas.toDataURL("image/png") : null;
+    const { book: bookOut, signature } = fbs ? fbs.collect() : { book: {}, signature: null };
+    const photoFile = fbs?.photoFile || null;
     if (!Object.keys(fields).length && !changedName && !msg.value.trim() && !Object.keys(bookOut).length && !signature && !photoFile) { err.textContent = "Du hast nichts geändert – passt also alles? Dann einfach schließen."; return; }
     send.disabled = true;
     try {
-      if (photoFile) { // Foto zuerst – es geht direkt nach Immich
+      if (photoFile) { // Foto zuerst (mit Immich dorthin, sonst in syn)
         send.textContent = "Foto wird eingeklebt …";
-        const fd = new FormData(); fd.append("file", photoFile); if (avatarBox?.checked) fd.append("as_avatar", "1");
+        const fd = new FormData(); fd.append("file", photoFile); if (fbs.asAvatar) fd.append("as_avatar", "1");
         const pr = await fetch(`/api/v1/public/update/${encodeURIComponent(token)}/photo`, { method: "POST", body: fd });
         if (!pr.ok) throw new Error((await pr.json().catch(() => ({}))).detail || "Das Foto hat nicht geklappt.");
-        photoFile = null;
+        fbs.photoFile = null; // bei erneutem Absenden nicht doppelt hochladen
       }
       const r = await fetch(`/api/v1/public/update/${encodeURIComponent(token)}`, { method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: changedName ? name.value.trim() : null, fields, message: msg.value, website: trap.value, book: bookOut, signature }) });

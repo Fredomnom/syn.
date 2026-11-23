@@ -591,7 +591,7 @@ async function cardTab(body) {
   const slug = h("input.input.mono.card-slug", { value: c.slug, spellcheck: false, on: { change: async (e) => { if (!(await save({ slug: e.target.value }))) e.target.value = c.slug; } } });
   const copy = h("button.btn.sm.primary", { on: { click: async () => { try { await navigator.clipboard.writeText(url()); toast("Link kopiert"); } catch (_) { toast(url()); } } } }, icon("copy"), "Link kopieren");
   const share = navigator.share ? h("button.btn.sm", { on: { click: () => navigator.share({ title: "Meine Visitenkarte", url: url() }).catch(() => {}) } }, icon("ext"), "Teilen") : null;
-  const qrBtn = h("button.btn.sm", { on: { click: () => qrDialog("Deine Visitenkarte", url(), { hint: "Gegenüber scannt den Code mit der Kamera und sieht deine Angaben." }) } }, icon("qr"), "QR-Code");
+  const qrBtn = h("button.btn.sm", { on: { click: () => qrDialog("Deine Visitenkarte", url(), { hint: "Gegenüber scannt den Code mit der Kamera und sieht deine Angaben.", book: true }) } }, icon("qr"), "QR-Code");
   const box = h("div.card-link", h("div.card-link-url", icon("link"), linkTxt), h("div.row.wrap", copy, qrBtn, share, openA));
   const persons = S.fieldList.filter((f) => ["person", "both"].includes(f.scope) && !["note", "image", "ref", "person", "checkbox"].includes(f.type) && !["f_level", "f_seen", "f_via", "f_met"].includes(f.id));
   const mine = (await rows()).find((r) => r.is_self);
