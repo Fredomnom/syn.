@@ -462,3 +462,18 @@ def test_merge_eigener_ort_gewinnt(client):
     assert via["auto"] == "b" and via["why"] == "selbst eingetragen"
     m = c.post("/api/v1/merge", json={"keep": a["id"], "other": b["id"], "choices": {}}).json()
     assert m["ihr_zwei"]["fields"]["f_via"][0]["value"] == {"type": "place", "id": "Kletterhalle"}
+
+
+def test_standardfeld_wiederherstellen(client):
+    c = client
+    e = c.post("/api/v1/entities", json={"name": "Wohn Ort"}).json()
+    c.put(f"/api/v1/entities/{e['id']}/fields/f_city", json={"values": [{"value": "Leipzig"}]})
+    assert c.delete("/api/v1/fields/f_city").status_code == 200
+    miss = {m["id"]: m for m in c.get("/api/v1/fields/standard/missing").json()}
+    assert miss["f_city"]["values"] == 1 and miss["f_city"]["name"] == "Wohnort"
+    r = c.post("/api/v1/fields/f_city/restore").json()
+    assert r["values"] == 1
+    assert c.get(f"/api/v1/entities/{e['id']}").json()["fields"]["f_city"][0]["value"] == "Leipzig"
+    assert "f_city" not in {m["id"] for m in c.get("/api/v1/fields/standard/missing").json()}
+    assert c.post("/api/v1/fields/f_city/restore").status_code == 400
+    assert c.post("/api/v1/fields/f_gibtsnicht/restore").status_code == 404

@@ -126,6 +126,59 @@ def delete_field(fid: str, ctx: Ctx = Depends(current)):
     return {"ok": True}
 
 
+# ---------------------------------------------------------------- gelöschte Standardfelder wiederherstellen
+
+def _standard():
+    from ..seed import FIELDS, FREUNDEBUCH
+    return {f[0]: f for f in FIELDS + FREUNDEBUCH}
+
+
+def _deleted_values(uid, fid):
+    """Werte aus der letzten Löschung des Feldes (der Verlauf hält jeden Wert mit „Feld gelöscht“ fest)."""
+    last = db.val("SELECT MAX(at) FROM history WHERE user_id=? AND attr=? AND source='Feld gelöscht' AND new IS NULL", uid, fid)
+    if not last:
+        return []
+    return db.q("SELECT * FROM history WHERE user_id=? AND attr=? AND source='Feld gelöscht' AND new IS NULL AND at=? ORDER BY id", uid, fid, last)
+
+
+@router.get("/fields/standard/missing")
+def missing_standard(ctx: Ctx = Depends(current)):
+    have = {r["id"] for r in db.q("SELECT id FROM field_defs WHERE user_id=?", ctx.uid)}
+    return [{"id": fid, "name": f[2], "type": f[3], "group": (f[4] or {}).get("group"), "values": len(_deleted_values(ctx.uid, fid))}
+            for fid, f in _standard().items() if fid not in have]
+
+
+@router.post("/fields/{fid}/restore")
+def restore_standard(fid: str, ctx: Ctx = Depends(current)):
+    f = _standard().get(fid)
+    if not f:
+        raise HTTPException(404, "Kein Standardfeld")
+    if db.val("SELECT 1 FROM field_defs WHERE user_id=? AND id=?", ctx.uid, fid):
+        raise Bad("Das Feld gibt es schon")
+    _, scope, name, typ, opts, multi = f
+    restored = 0
+    with db.tx():
+        pos = db.val("SELECT COALESCE(MAX(position), 0) + 1 FROM field_defs WHERE user_id=?", ctx.uid)
+        db.insert("field_defs", {"user_id": ctx.uid, "id": fid, "scope": scope, "name": name, "type": typ,
+                                 "options": db.jd(opts), "multi": multi, "position": pos, "is_base": 1})
+        seen_owner = set()
+        for h in _deleted_values(ctx.uid, fid):
+            ot, oid = h["owner_type"], h["owner_id"]
+            table = {"entity": "entities", "bund": "bunds", "circle": "circles"}.get(ot)
+            if not table or not db.val(f"SELECT 1 FROM {table} WHERE id=?", oid):
+                continue  # Person/Bund gibt es nicht mehr
+            if not multi and (ot, oid) in seen_owner:
+                continue
+            vid = h["value_id"] if h["value_id"] and not db.val("SELECT 1 FROM field_values WHERE id=?", h["value_id"]) else new_id("v", 10)
+            db.insert("field_values", {"id": vid, "user_id": ctx.uid, "owner_type": ot, "owner_id": oid, "field_id": fid,
+                                       "value": h["old"], "is_primary": int((ot, oid) not in seen_owner), "source": "manual",
+                                       "recorded_at": now(), "position": 0})
+            model.record(ctx.uid, ot, oid, fid, None, db.jl(h["old"]), "Feld wiederhergestellt", vid)
+            seen_owner.add((ot, oid))
+            restored += 1
+    return {"ok": True, "values": restored}
+
+
 @router.get("/fields/{fid}/values")
 def distinct_values(fid: str, ctx: Ctx = Depends(current)):
     """Vorhandene Werte eines Feldes (für Filter und Autovervollständigung)."""

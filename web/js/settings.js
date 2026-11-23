@@ -79,7 +79,18 @@ async function fields(body) {
   body.append(card("Neues Feld", h("div.row.wrap", nn, nt, ns, h("label.check", nm, "mehrere Werte"), h("button.btn.primary", { on: { click: async () => {
     if (!nn.value.trim()) return; await POST("/fields", { name: nn.value, type: nt.value, scope: ns.value, multi: nm.checked, options: nt.value === "choice" ? { choices: [], multiple: false } : {} }); reloadTab(body, fields); } } }, icon("plus"), "Anlegen")),
     h("p.small.t3", "Basisfelder lassen sich frei bearbeiten und löschen. Jedes Feld kann mehrfach mit Label vorkommen, unsicher markiert sein und eine Schnellaktion tragen.")),
-    h("div.card", table), await servicesCard());
+    h("div.card", table), await missingStandardCard(body), await servicesCard());
+}
+// Gelöschte Standardfelder wiederherstellen – samt der Werte aus der letzten Löschung (stehen im Verlauf)
+async function missingStandardCard(body) {
+  const miss = await GET("/fields/standard/missing");
+  if (!miss.length) return null;
+  return card("Gelöschte Standardfelder",
+    h("p.small.t2", "Mitgelieferte Felder, die du gelöscht hast. Beim Wiederherstellen kommen auch die Werte aus der letzten Löschung zurück."),
+    h("div.col", { style: { gap: "6px" } }, miss.map((m) => h("div.row", { style: { padding: "6px 0", borderBottom: "1px solid var(--line)" } },
+      h("span.grow", h("b", m.name), " ", h("span.tiny.t3", TYPE_NAMES[m.type] + (m.group === "freundebuch" ? " · Freundebuch" : ""))),
+      h("span.small.t2", m.values ? `${m.values} ${m.values === 1 ? "Wert" : "Werte"} wiederherstellbar` : "keine Werte"),
+      h("button.btn.sm", { on: { click: async () => { const r = await POST(`/fields/${m.id}/restore`); toast(`„${m.name}“ ist wieder da` + (r.values ? ` – ${r.values} ${r.values === 1 ? "Wert" : "Werte"} zurückgeholt` : "")); await reloadFields(); reloadTab(body, fields); } } }, icon("undo"), "Wiederherstellen")))));
 }
 async function editOptions(f, body) {
   const choices = h("textarea.input", { rows: 6, value: (f.options.choices || []).join("\n") });

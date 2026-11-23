@@ -1427,5 +1427,9 @@
 "Mit Freundebuch": "Con libro de amigos",
 "Foto wird eingeklebt …": "Pegando foto …",
 " – Spitzname, Lieblingsessen, „Das mag ich an dir“ …, Unterschrift und ein Foto (mit Immich landet es dort, sonst in syn). Diese Antworten speichert syn direkt.": " – apodo, comida favorita, «Lo que me gusta de ti» …, firma y una foto (con Immich va allí; si no, a syn). syn guarda estas respuestas directamente.",
-"Das ist kein Bild (erlaubt: JPEG, PNG, WebP, GIF, HEIC)": "Eso no es una imagen (se permiten JPEG, PNG, WebP, GIF, HEIC)"
+"Das ist kein Bild (erlaubt: JPEG, PNG, WebP, GIF, HEIC)": "Eso no es una imagen (se permiten JPEG, PNG, WebP, GIF, HEIC)",
+"Gelöschte Standardfelder": "Campos estándar eliminados",
+"Wiederherstellen": "Restaurar",
+"Mitgelieferte Felder, die du gelöscht hast. Beim Wiederherstellen kommen auch die Werte aus der letzten Löschung zurück.": "Campos incluidos que eliminaste. Al restaurar vuelven también los valores de la última eliminación.",
+"keine Werte": "sin valores"
 }
