@@ -99,6 +99,34 @@ def patch_field(fid: str, body: dict, ctx: Ctx = Depends(current)):
     return model.field_defs(ctx.uid)[fid]
 
 
+@router.post("/fields/{fid}/rename")
+def rename_field(fid: str, body: dict, ctx: Ctx = Depends(current)):
+    """ID eines eigenen Feldes ändern; alle Verweise ziehen mit. Basisfelder erkennt syn an ihrer ID – die bleiben."""
+    import re
+    d = model.fdef(ctx.uid, fid)
+    new = (body.get("id") or "").strip()
+    if d.get("is_base") or fid in _standard():
+        raise Bad("Mitgelieferte Felder behalten ihre ID – syn erkennt sie daran")
+    if not re.fullmatch(r"[a-z][a-z0-9_]{1,39}", new):
+        raise Bad("ID: Kleinbuchstaben, Ziffern und _, 2–40 Zeichen, beginnt mit Buchstabe")
+    if new == fid:
+        return model.field_defs(ctx.uid)[fid]
+    if new in _standard() or db.val("SELECT 1 FROM field_defs WHERE user_id=? AND id=?", ctx.uid, new):
+        raise Bad("Diese ID ist schon vergeben")
+    q = f'"{fid}"'
+    with db.tx():
+        db.ex("UPDATE field_defs SET id=? WHERE user_id=? AND id=?", new, ctx.uid, fid)
+        db.ex("UPDATE field_values SET field_id=? WHERE user_id=? AND field_id=?", new, ctx.uid, fid)
+        db.ex("UPDATE history SET attr=? WHERE user_id=? AND attr=?", new, ctx.uid, fid)
+        # JSON-Verweise: nur als ganzer String ("id"), damit f_a nicht in f_ab ersetzt wird
+        for table, key, cols in (("routines", "user_id", ("trigger", "conditions", "actions")), ("update_links", "user_id", ("fields",)),
+                                 ("cards", "user_id", ("fields",)), ("saved_views", "user_id", ("view", "config")),
+                                 ("users", "id", ("settings",))):
+            for c in cols:
+                db.ex(f"UPDATE {table} SET {c}=REPLACE({c}, ?, ?) WHERE {key}=? AND INSTR({c}, ?)", q, f'"{new}"', ctx.uid, q)
+    return model.field_defs(ctx.uid)[new]
+
+
 @router.post("/fields/order")
 def order(body: dict, ctx: Ctx = Depends(current)):
     for i, fid in enumerate(body.get("ids", [])):

@@ -477,3 +477,15 @@ def test_standardfeld_wiederherstellen(client):
     assert "f_city" not in {m["id"] for m in c.get("/api/v1/fields/standard/missing").json()}
     assert c.post("/api/v1/fields/f_city/restore").status_code == 400
     assert c.post("/api/v1/fields/f_gibtsnicht/restore").status_code == 404
+
+
+def test_feld_id_umbenennen(client):
+    c = client
+    f = c.post("/api/v1/fields", json={"name": "Schuhgröße", "type": "text", "scope": "both"}).json()
+    e = c.post("/api/v1/entities", json={"name": "Fuß Gänger"}).json()
+    c.put(f"/api/v1/entities/{e['id']}/fields/{f['id']}", json={"values": [{"value": "44"}]})
+    assert c.post(f"/api/v1/fields/{f['id']}/rename", json={"id": "Böse ID"}).status_code == 400
+    assert c.post("/api/v1/fields/f_bday/rename", json={"id": "geburt"}).status_code == 400
+    assert c.post(f"/api/v1/fields/{f['id']}/rename", json={"id": "f_city"}).status_code == 400
+    assert c.post(f"/api/v1/fields/{f['id']}/rename", json={"id": "f_schuh"}).status_code == 200
+    assert c.get(f"/api/v1/entities/{e['id']}").json()["fields"]["f_schuh"][0]["value"] == "44"
