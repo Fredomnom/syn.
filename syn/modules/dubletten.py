@@ -275,6 +275,15 @@ def _adopt_bund(src, dst, other, keep):
             db.ex("UPDATE field_values SET owner_id=? WHERE id=?", dst["id"], r["id"])
 
 
+def _own(v) -> bool:
+    """Wert, den du selbst eingetragen hast – von Hand, über den Pflege-Link oder ein eigener Ort/Kreis/eine Person
+    bei „Kennengelernt über“ (statt eines Dienstes aus einem Import)."""
+    if v.get("source") in ("manual", "selbst", "Zusammenführen"):
+        return True
+    val = v.get("value")
+    return isinstance(val, dict) and val.get("type") in ("place", "entity", "circle")
+
+
 def _same_key(v):
     """Vergleichsschlüssel für „derselbe Wert“: Profile über Dienst + ID/Name, sonst sortiertes JSON."""
     if isinstance(v, dict) and v.get("service"):
@@ -310,6 +319,9 @@ def plan_merge(ctx, a_id, b_id):
             auto, why = "both", "Mehrfachfeld: alle Werte bleiben"
         elif pa and pb and pa["value"] == pb["value"]:
             auto, why = "a", "gleich"
+        elif pa and pb and _own(pa) != _own(pb) and (d["type"] != "date" or fid == "f_bday"):
+            # selbst Eingetragenes (z.B. ein eigener Kennenlernort) schlägt Importiertes
+            auto, why = ("a" if _own(pa) else "b"), "selbst eingetragen"
         elif d["type"] == "date" and pa and pb:
             da, db_ = approx_date(pa["value"]), approx_date(pb["value"])
             if fid in ("f_seen",) or d["options"].get("newer_wins", fid != "f_bday"):

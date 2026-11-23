@@ -446,3 +446,19 @@ def test_austragen_und_gleich_wieder_eintragen(client):
     again = c.post(f"/api/v1/circles/{k['id']}/members", json={"entity_id": e["id"]}).json()["id"]
     ms = c.get(f"/api/v1/entities/{e['id']}").json()["memberships"]
     assert again == mid and len(ms) == 1 and not ms[0]["valid_to"]
+
+
+def test_merge_eigener_ort_gewinnt(client):
+    """Beim Zusammenführen ist ein selbst eingetragener Kennenlernort vorausgewählt – nicht der Dienst aus dem Import."""
+    from syn import db, model
+    c = client
+    a = c.post("/api/v1/entities", json={"name": "Ort A"}).json()
+    b = c.post("/api/v1/entities", json={"name": "Ort B"}).json()
+    uid = db.val("SELECT id FROM users LIMIT 1")
+    model.set_entity_field(uid, a["id"], "f_via", {"type": "service", "id": "telegram"}, "telegram")   # aus Import
+    model.set_entity_field(uid, b["id"], "f_via", {"type": "place", "id": "Kletterhalle"}, "manual")  # eigener Ort
+    plan = c.get("/api/v1/merge/preview", params={"a": a["id"], "b": b["id"]}).json()
+    via = next(f for f in plan["fields"] if f["field"] == "f_via")
+    assert via["auto"] == "b" and via["why"] == "selbst eingetragen"
+    m = c.post("/api/v1/merge", json={"keep": a["id"], "other": b["id"], "choices": {}}).json()
+    assert m["ihr_zwei"]["fields"]["f_via"][0]["value"] == {"type": "place", "id": "Kletterhalle"}

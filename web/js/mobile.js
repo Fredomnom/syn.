@@ -401,7 +401,7 @@ export async function todayPage(page, { withUpcoming = true } = {}) {
     if (it.kind === "card") {
       const e = it.entity || {};
       page.append(h("div.card.pad.col.today-card",
-        h("div.row", e.id ? avatar(e, 40) : null, h("div.grow", h("b", it.title), h("div.small.t2", [e.level ? ringName(e.level) : null, e.bund_kind ? bundKindName(e.bund_kind) : null].filter(Boolean).join(" · "), " ", it.body ? h("span.qmark", it.body) : null)), h("button.btn.sm.ghost.icon", { title: "Erledigt", on: { click: async () => { await POST(`/today/${it.id}/dismiss`); reload(); } } }, icon("x"))),
+        h("div.row", e.id ? h("a.today-av", { href: "#/p/" + e.id, title: "Profil öffnen" }, avatar(e, 40)) : null, h("div.grow", e.id ? h("a.today-title", { href: "#/p/" + e.id }, h("b", it.title)) : h("b", it.title), h("div.small.t2", [e.level ? ringName(e.level) : null, e.bund_kind ? bundKindName(e.bund_kind) : null].filter(Boolean).join(" · "), " ", it.body ? h("span.qmark", it.body) : null)), h("button.btn.sm.ghost.icon", { title: "Erledigt", on: { click: async () => { await POST(`/today/${it.id}/dismiss`); reload(); } } }, icon("x"))),
         e.id ? h("div.qa",
           e.phone ? h("a.btn.primary", { href: "sms:" + e.phone.replace(/[^\d+]/g, "") }, "Schreiben") : e.email ? h("a.btn.primary", { href: "mailto:" + e.email }, "Schreiben") : h("a.btn.primary", { href: "#/p/" + e.id }, "Öffnen"),
           e.phone ? h("a.btn", { href: "tel:" + e.phone.replace(/[^\d+]/g, "") }, "Anrufen") : h("button.btn", { disabled: true }, "Anrufen"),
