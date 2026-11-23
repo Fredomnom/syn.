@@ -97,7 +97,10 @@ def patch_circle(cid: str, body: dict, ctx: Ctx = Depends(current)):
         if db.val("SELECT 1 FROM circles WHERE parent_id=?", cid):
             raise Bad("Ein Kreis mit Unterkreisen kann nicht selbst Unterkreis sein")
     upd["updated_at"] = now()
-    db.update("circles", {"id": cid}, upd)
+    with db.tx():
+        db.update("circles", {"id": cid}, upd)
+        if upd.get("parent_id"):  # unter einen Kreis geschoben: alle Mitglieder sind jetzt auch dort
+            model.sync_parent_memberships(ctx.uid)
     return get_circle(cid, ctx)
 
 
@@ -139,6 +142,8 @@ def patch_membership(mid: str, body: dict, ctx: Ctx = Depends(current)):
     for k in ("role", "valid_from", "valid_to"):
         if k in body:
             upd[k] = parse_date(body[k]) if k != "role" and body[k] else body[k]
+    if upd.get("valid_to"):
+        model.guard_parent_leave(ctx.uid, m, upd["valid_to"])
     db.update("memberships", {"id": mid}, upd)
     model.record(ctx.uid, "entity", m["entity_id"], "membership:meta",
                  {k: m[k] for k in upd}, upd)
@@ -158,6 +163,8 @@ def delete_membership(mid: str, ctx: Ctx = Depends(current)):
     m = db.q1("SELECT * FROM memberships WHERE id=? AND user_id=?", mid, ctx.uid)
     if not m:
         raise HTTPException(404, "Mitgliedschaft nicht gefunden")
+    if model.active(m) and not m.get("valid_to"):
+        model.guard_parent_leave(ctx.uid, m)
     db.ex("DELETE FROM memberships WHERE id=?", mid)
     model.record(ctx.uid, "entity", m["entity_id"], "membership", {"circle": m["circle_id"]}, None)
     e = db.q1("SELECT main_circle_id FROM entities WHERE id=?", m["entity_id"])

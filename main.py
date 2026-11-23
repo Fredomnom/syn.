@@ -91,6 +91,9 @@ def create_app() -> FastAPI:
     backfill_freundebuch()
     backfill_views()
     backfill_icons()
+    from syn.model import sync_parent_memberships
+    with db.tx():
+        sync_parent_memberships()  # Unterkreis ⇒ Oberkreis, immer
     return app
 
 

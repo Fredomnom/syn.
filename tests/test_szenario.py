@@ -507,3 +507,27 @@ def test_merge_mehrere(client):
     assert sorted(v["value"] for v in e["fields"]["f_phone"]) == ["+49 1", "+49 2", "+49 3"]
     assert {"Tim A", "Timothy C"} <= set(e["aliases"])
     assert c.get(f"/api/v1/entities/{b['id']}").status_code == 404 and c.get(f"/api/v1/entities/{d['id']}").status_code == 404
+
+
+def test_unterkreis_heisst_oberkreis(client):
+    c = client
+    kind = c.get("/api/v1/circle-kinds").json()["kinds"][0]["id"]
+    uni = c.post("/api/v1/circles", json={"name": "Uni", "kind_id": kind}).json()
+    chor = c.post("/api/v1/circles", json={"name": "Unichor", "kind_id": kind, "parent_id": uni["id"]}).json()
+    e = c.post("/api/v1/entities", json={"name": "Ober Unter"}).json()
+    c.post(f"/api/v1/circles/{chor['id']}/members", json={"entity_id": e["id"]})
+    ms = {m["circle_id"]: m for m in c.get(f"/api/v1/entities/{e['id']}").json()["memberships"] if m["active"]}
+    assert uni["id"] in ms and chor["id"] in ms
+    # aus dem Oberkreis austreten geht nicht, solange im Unterkreis
+    assert c.post(f"/api/v1/memberships/{ms[uni['id']]['id']}/end").status_code == 400
+    assert c.delete(f"/api/v1/memberships/{ms[uni['id']]['id']}").status_code == 400
+    assert c.patch(f"/api/v1/memberships/{ms[uni['id']]['id']}", json={"valid_to": "2020-01-01"}).status_code == 400
+    # erst Unterkreis, dann Oberkreis: geht
+    assert c.post(f"/api/v1/memberships/{ms[chor['id']]['id']}/end").status_code == 200
+    assert c.post(f"/api/v1/memberships/{ms[uni['id']]['id']}/end").status_code == 200
+    # Kreis nachträglich unter einen anderen schieben: Mitglieder kommen mit
+    sport = c.post("/api/v1/circles", json={"name": "Unisport", "kind_id": kind}).json()
+    f = c.post("/api/v1/entities", json={"name": "Spät Dazu"}).json()
+    c.post(f"/api/v1/circles/{sport['id']}/members", json={"entity_id": f["id"]})
+    c.patch(f"/api/v1/circles/{sport['id']}", json={"parent_id": uni["id"]})
+    assert uni["id"] in {m["circle_id"] for m in c.get(f"/api/v1/entities/{f['id']}").json()["memberships"] if m["active"]}

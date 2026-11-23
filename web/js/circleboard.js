@@ -1,7 +1,7 @@
 // Kreise auf der Personenseite als Blasen: Profilbild hineinziehen = Mitglied, herausziehen = austragen.
 // Vorschläge (blass) per Klick aufnehmen, „+“ sucht alle Kreise. Menüs hängen am Seitenrand (popover) – nichts klippt.
 // Änderungen gelten sofort lokal (Blasen gleiten in ihre neue Lage), der Server bekommt sie im Hintergrund.
-import { S, h, icon, POST, PATCH, avatar, circleColors, menu, pickCircle, toast, invalidate, reloadCircles, modal, isMobile } from "./core.js";
+import { S, h, icon, GET, POST, PATCH, avatar, circleColors, menu, pickCircle, toast, invalidate, reloadCircles, modal, isMobile } from "./core.js";
 
 let W = 560, H = 400, K = 1;   // logische Bühne, auf die Kartenbreite skaliert; am Handy eine eigene, kleinere
 const LS = (k, d) => { try { return JSON.parse(localStorage.getItem("syn." + k)) ?? d; } catch (_) { return d; } };
@@ -59,10 +59,29 @@ export function circleBoard(e, all, reload, { list } = {}) {
     try { await fn(); dirty = true; invalidate(); if (msg) toast(msg, { action: { label: "Rückgängig", run: () => dispatchEvent(new CustomEvent("syn-undo", { detail: "undo" })) } }); }
     catch (_) { toast("Das hat nicht geklappt", { err: true }); reload(); }
   };
-  const join = (cid) => { mem.set(cid, { circle_id: cid, pending: true }); if (!main) main = cid; sugg = sugg.filter((x) => x !== cid); };
-  const joinServer = async (cid) => { const r = await POST(`/circles/${cid}/members`, { entity_id: e.id }); const m = mem.get(cid); if (m) { m.id = r.id; m.pending = false; } };
-  const leave = (cid) => { const m = mem.get(cid); mem.delete(cid); if (!sugg.includes(cid)) sugg = [cid, ...sugg].slice(0, 4); if (main === cid) main = mem.keys().next().value || null; return m; };
-  const leaveServer = async (m) => { if (m?.id) await POST(`/memberships/${m.id}/end`); };
+  // Unterkreis ⇒ Oberkreis: wer in einem Unterkreis ist, ist auch im Kreis darüber (der Server erzwingt das ebenso)
+  const parentOf = (cid) => S.circles[cid]?.parent_id || null;
+  const kidsOf = (cid) => [...mem.keys()].filter((k) => parentOf(k) === cid);
+  const join = (cid) => {
+    if (!mem.has(cid)) mem.set(cid, { circle_id: cid, pending: true });
+    if (!main) main = cid; sugg = sugg.filter((x) => x !== cid);
+    const p = parentOf(cid); if (p && !mem.has(p)) join(p);
+  };
+  const joinServer = async (cid) => {
+    const r = await POST(`/circles/${cid}/members`, { entity_id: e.id }); const m = mem.get(cid); if (m) { m.id = r.id; m.pending = false; }
+    const p = parentOf(cid), pm = p && mem.get(p);
+    if (pm && !pm.id) { // vom Server mit angelegt: dessen ID holen, damit späteres Austragen klappt
+      const full = await GET("/entities/" + e.id); const x = full.memberships.find((y) => y.circle_id === p && y.active && !y.valid_to);
+      if (x) { pm.id = x.id; pm.pending = false; }
+    }
+  };
+  // Austragen aus einem Oberkreis nimmt die Unterkreise mit (die zuerst – sonst lehnt der Server ab)
+  const leave = (cid) => {
+    const kids = kidsOf(cid).flatMap((k) => leave(k));
+    const m = mem.get(cid); mem.delete(cid); if (!sugg.includes(cid)) sugg = [cid, ...sugg].slice(0, 4); if (main === cid) main = mem.keys().next().value || null;
+    return [...kids, m].filter(Boolean);
+  };
+  const leaveServer = async (ms) => { for (const m of [ms].flat()) if (m?.id) await POST(`/memberships/${m.id}/end`); };
   addEventListener("hashchange", () => { if (dirty) reloadCircles(); }, { once: true });
 
   const circleMenu = (anchor, cid) => {
@@ -150,8 +169,10 @@ export function circleBoard(e, all, reload, { list } = {}) {
       const { ms, ss } = layout([...mem.keys()], sugg);
       const hit = new Set([...ms, ...ss].filter((c) => Math.hypot(p.x - c.x, p.y - c.y) < c.r).map((c) => c.id));
       for (const [, b] of els) b.classList.remove("hover");
+      // Oberkreise der getroffenen Kreise gelten als getroffen (Unterkreis ⇒ Oberkreis)
+      for (const id of [...hit]) { let p = parentOf(id); while (p) { hit.add(p); p = parentOf(p); } }
       const add = [...hit].filter((id) => !mem.has(id)), drop = [...mem.keys()].filter((id) => !hit.has(id));
-      const gone = drop.map((id) => leave(id));
+      const gone = drop.filter((id) => mem.has(id)).flatMap((id) => leave(id));
       add.forEach(join);
       render();
       if (!add.length && !drop.length) return;

@@ -534,6 +534,8 @@ def add_member(uid, circle_id, eid, role=None, valid_from=None, source="manual")
             db.ex("UPDATE memberships SET valid_to=NULL WHERE id=?", m["id"])
             record(uid, "entity", eid, "membership", {"circle": circle_id, "valid_to": m["valid_to"]}, {"circle": circle_id, "name": c["name"]}, source)
             _touch("entity", eid)
+        if c["parent_id"]:  # wer im Unterkreis ist, ist immer auch im Kreis darüber
+            add_member(uid, c["parent_id"], eid, source=source)
         return m["id"]
     mid = new_id("m")
     db.insert("memberships", {"id": mid, "user_id": uid, "circle_id": circle_id, "entity_id": eid, "role": role,
@@ -544,7 +546,28 @@ def add_member(uid, circle_id, eid, role=None, valid_from=None, source="manual")
     if not e["main_circle_id"]:
         db.ex("UPDATE entities SET main_circle_id=? WHERE id=?", circle_id, eid)
     _touch("entity", eid)
+    if c["parent_id"]:  # wer im Unterkreis ist, ist immer auch im Kreis darüber
+        add_member(uid, c["parent_id"], eid, valid_from=valid_from, source=source)
     return mid
+
+
+def guard_parent_leave(uid, m, on=None):
+    """Aus einem Oberkreis austreten geht nicht, solange die Person noch in einem seiner Unterkreise ist."""
+    d = on or today()
+    kids = db.q("SELECT id, name FROM circles WHERE user_id=? AND parent_id=?", uid, m["circle_id"])
+    for k in kids:
+        for x in db.q("SELECT * FROM memberships WHERE circle_id=? AND entity_id=?", k["id"], m["entity_id"]):
+            vt = x.get("valid_to")
+            if not vt or str(approx_date(vt) if "?" in vt else vt) > d:  # läuft im Unterkreis über diesen Tag hinaus
+                raise Bad(f"Ist noch im Unterkreis „{k['name']}“ – erst dort austragen")
+
+
+def sync_parent_memberships(uid=None):
+    """Wer in einem Unterkreis ist, ist auch im Kreis darüber – nachziehen, wo es fehlt (beim Start und beim Verschieben)."""
+    for c in db.q("SELECT id, parent_id, user_id FROM circles WHERE parent_id IS NOT NULL" + (" AND user_id=?" if uid else ""), *([uid] if uid else [])):
+        for m in db.q("SELECT * FROM memberships WHERE circle_id=?", c["id"]):
+            if active(m) and not m.get("valid_to"):
+                add_member(c["user_id"], c["parent_id"], m["entity_id"], valid_from=m["valid_from"], source="Unterkreis")
 
 
 def end_member(uid, mid, on=None, source="manual"):
@@ -553,6 +576,7 @@ def end_member(uid, mid, on=None, source="manual"):
     if not m:
         raise HTTPException(404, "Mitgliedschaft nicht gefunden")
     end = parse_date(on) if on else today()
+    guard_parent_leave(uid, m, end)
     db.ex("UPDATE memberships SET valid_to=? WHERE id=?", end, mid)
     c = db.q1("SELECT name FROM circles WHERE id=?", m["circle_id"])
     record(uid, "entity", m["entity_id"], "membership", {"circle": m["circle_id"], "name": c and c["name"]},
