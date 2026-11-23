@@ -1,5 +1,5 @@
 // Desktop: sortieren und bearbeiten in großen Mengen. Seitenleiste, sechs Ansichten, Personenseite, Kreise.
-import { S, h, icon, GET, POST, PUT, PATCH, DEL, clear, rebuild, rows, captureSegs, animateSegs, invalidate, avatar, circleChip, nameEl, rel, ringName, today, debounce,
+import { S, h, icon, GET, POST, PUT, PATCH, DEL, clear, rebuild, optimistic, interacting, rows, captureSegs, animateSegs, invalidate, avatar, circleChip, nameEl, rel, ringName, today, debounce,
   toast, getOrBack, modal, logo, qs, menu, pickPerson, pickCircle, reloadCircles, confirmDlg, ringMini, MOD, fmtTs, circleColors, kindColors, promptDlg, RING, cssVar as V } from "./core.js";
 import { primaryOf, valueEl, actionFor, editField, entityFieldList, runQuick, bundFields, TYPE_NAMES, SOURCE, plain, fieldsFor, service, serviceIcon, fieldRow, fieldSections, sourceName } from "./fields.js";
 import { LOCALE } from "./i18n.js";
@@ -299,17 +299,35 @@ export async function newPersonDialog(prefill = {}) {
 }
 
 // ---------------------------------------------------------------- Personenseite
-async function personPage(main, id) {
-  const e = await getOrBack("/entities/" + id, "#/people", "Person");
+// Antworten merken, solange dieselben Daten lokal neu gezeichnet werden (frische Daten = neuer Merker)
+const memo = (e, k, fn) => ((e.__c ||= {})[k] ??= fn());
+let quietT = null;
+// Eintrag aus einer gemerkten Liste nehmen, sofort neu zeichnen, Server im Hintergrund (Personenseite)
+function dropLocal(e, key, pred, reload, server) {
+  if (!reload.local) return Promise.resolve(server()).then(() => { invalidate(); reload(); });
+  const c = (e.__c ||= {}); const cur = c[key];
+  c[key] = Promise.resolve(cur).then((l) => (l || []).filter((x) => !pred(x)));
+  reload.local();
+  return optimistic(server, { onFail: reload, onDone: reload.quiet });
+}
+async function personPage(main, id, local = null) {
+  const e = local || await getOrBack("/entities/" + id, "#/people", "Person");
   if (!e) return;
   const page = h("div.page"); main.append(page);
+  // reload = echter Stand vom Server; reload.local = sofort aus den lokalen Daten neu zeichnen
   const reload = () => rebuild(main, (m) => personPage(m, id));
+  reload.local = () => rebuild(main, (m) => personPage(m, id, e));
+  // still nachholen, was der Server berechnet (Ist, Verlauf …) – nicht, während jemand tippt
+  reload.quiet = () => { clearTimeout(quietT); const go = () => { if (location.hash !== "#/p/" + id) return; if (interacting()) { quietT = setTimeout(go, 800); return; } reload(); }; quietT = setTimeout(go, 600); };
+  // erst lokal ändern und zeigen, dann speichern
+  const act = (mutate, server) => { mutate(e); reload.local(); optimistic(server, { onFail: reload, onDone: reload.quiet }); };
+  const seenNow = () => act((x) => { x.fields.f_seen = [{ value: today(), primary: true, source: "manual" }]; x.long_unseen = false; }, () => POST(`/seen-today/${id}`));
   rememberPerson(id);
-  if (!e.is_self) onPage("seen_today", async () => { await POST(`/seen-today/${id}`); invalidate(); toast(`${e.display}: heute gesehen`); reload(); });
+  if (!e.is_self) onPage("seen_today", () => { seenNow(); toast(`${e.display}: heute gesehen`); });
   onPage("edit_person", async () => { if (await editPerson(e)) reload(); });
   onPage("add_field", () => addField(e, { onDone: reload }));
   // weitere Kürzel der Personenseite (Einstellungen → Tastenkürzel)
-  if (!e.is_self && S.settings.use_levels) for (const l of [0, 1, 2, 3, 4]) onPage("ring_" + l, async () => { await setRing(id, l || null); invalidate(); toast(`${e.display}: ${l ? ringName(l) : "ohne Ring"}`); reload(); });
+  if (!e.is_self && S.settings.use_levels) for (const l of [0, 1, 2, 3, 4]) onPage("ring_" + l, () => { act((x) => (x.level = l || null), () => setRing(id, l || null)); toast(`${e.display}: ${l ? ringName(l) : "ohne Ring"}`); });
   onPage("add_bund", () => page.querySelector(".card.bw .card-h .btn")?.click());
   onPage("add_circle", () => page.querySelector(".guide-circle")?.click());
   if (!e.is_self) onPage("edit_ihr", async () => { if (await editIhrZwei(e)) reload(); });
@@ -319,7 +337,7 @@ async function personPage(main, id) {
   if (!e.is_self) {
     onPage("update_link", async () => { await (await import("./shared.js")).updateLinkDialog(e); reload(); });
     onPage("merge_with", () => pickPerson(page.querySelector(".phead .btn.icon:last-child") || page, { exclude: [id], allowNew: false, onPick: (r) => (location.hash = `#/merge/${id}/${r.id}`) }));
-    onPage("toggle_phone", async () => { await PATCH("/entities/" + id, { on_phone: !e.on_phone }); toast(e.on_phone ? "Nicht mehr mit dem Handy synchronisiert" : "Wird mit dem Handy synchronisiert"); reload(); });
+    onPage("toggle_phone", () => { const on = !e.on_phone; act((x) => { x.on_phone = on; x.on_phone_effective = on; }, () => PATCH("/entities/" + id, { on_phone: on })); toast(on ? "Wird mit dem Handy synchronisiert" : "Nicht mehr mit dem Handy synchronisiert"); });
     onPage("delete_person", () => deletePerson(e));
     if (S.settings.use_levels) onPage("ring_center", () => { const o = LS("ringopt", {}); SAVE("ringopt", { ...o, center: id }); location.hash = "#/people/rings"; });
   }
@@ -336,7 +354,7 @@ async function personPage(main, id) {
       e.kind === "pet" ? h("span.chip.plain", icon("paw"), "Haustier") : null),
       e.aliases?.length ? h("div.small.t2", "auch: " + e.aliases.join(", ")) : null,
       h("div.meta-line", h("span", "Erfasst ", h("span.mono", (e.created_at || "").slice(0, 10))), e.on_phone_effective ? h("span.meta-pill", icon("smartphone", "xs"), "Mit Handy synchronisiert") : null)),
-    e.is_self ? null : h("button.btn.primary.guide-seen", { on: { click: async () => { await POST(`/seen-today/${id}`); invalidate(); reload(); } } }, icon("eye"), "Heute gesehen"),
+    e.is_self ? null : h("button.btn.primary.guide-seen", { on: { click: seenNow } }, icon("eye"), "Heute gesehen"),
     phone ? h("a.btn", { href: "tel:" + phone.value.replace(/[^\d+]/g, "") }, icon("phone"), "Anrufen") : null,
     mail ? h("a.btn", { href: "mailto:" + mail.value }, icon("message"), "Schreiben") : null,
     h("button.btn.icon", { on: { click: (ev) => menu(ev.currentTarget, [
@@ -345,7 +363,7 @@ async function personPage(main, id) {
       e.is_self || !S.settings.use_levels ? null : { label: "In den Ringen in die Mitte", icon: "rings", hint: pretty(binding("ring_center")), action: () => { const o = LS("ringopt", {}); SAVE("ringopt", { ...o, center: id }); location.hash = "#/people/rings"; } },
       e.is_self ? null : { label: "Angaben prüfen lassen …", icon: "link", hint: pretty(binding("update_link")), action: async () => { await (await import("./shared.js")).updateLinkDialog(e); reload(); } },
       e.is_self ? null : { label: "Zusammenführen mit …", icon: "merge", hint: pretty(binding("merge_with")), action: () => pickPerson(ev.target, { exclude: [id], allowNew: false, onPick: (r) => (location.hash = `#/merge/${id}/${r.id}`) }) },
-      e.is_self ? null : { label: e.on_phone ? "Nicht mehr mit Handy synchronisieren" : "Mit Handy synchronisieren", hint: pretty(binding("toggle_phone")), icon: "smartphone", action: async () => { await PATCH("/entities/" + id, { on_phone: !e.on_phone }); reload(); } },
+      e.is_self ? null : { label: e.on_phone ? "Nicht mehr mit Handy synchronisieren" : "Mit Handy synchronisieren", hint: pretty(binding("toggle_phone")), icon: "smartphone", action: () => { const on = !e.on_phone; act((x) => { x.on_phone = on; x.on_phone_effective = on; }, () => PATCH("/entities/" + id, { on_phone: on })); } },
       e.is_self ? null : { label: "Person löschen", icon: "trash", action: () => deletePerson(e), hint: pretty(binding("delete_person")) },
       { label: "Verlauf als JSON", icon: "history", action: async () => modal("Verlauf", h("div.code", JSON.stringify(await GET(`/entities/${id}/history`), null, 2)), [], { wide: true }) },
     ], { align: "right" }) } }, icon("more")));
@@ -357,7 +375,7 @@ async function personPage(main, id) {
       e.long_unseen ? h("span.tag.yellow", "lange nicht gesehen") : null),
     h("div.card-b.iz-body" + (S.settings.use_levels ? "" : ".no-ring"),
       S.settings.use_levels ? h("div.iz-ring.guide-ring",
-        ringBig(ring, async (l) => { await setRing(id, l); reload(); })) : null,
+        ringBig(ring, (l) => act((x) => (x.level = l), () => setRing(id, l)))) : null,
       h("div.iz-tiles",
         bundFields().filter((d) => d.id !== "f_level").map((d) => h("div.iz-tile", fieldRow(d, iz[d.id] || [], `/entities/${id}/fields/${d.id}`, e, reload))),
         e.ist ? h("div.iz-tile.static", h("div.iz-k", "Ist (berechnet)"), h("div.iz-v", `Ring ${e.ist.ring}`), h("div.iz-sub", `letzter Kontakt ${rel(e.ist.last)}`, e.long_unseen ? " · lange nicht gesehen" : "")) : null)));
@@ -375,7 +393,7 @@ async function personPage(main, id) {
 // Karten der Personenseite – Desktop und Handy nutzen dieselben (Felder, Kreise, Bünde, Verlauf, …)
 export async function personCards(e, reload, { mobile = false } = {}) {
   const id = e.id;
-  const sugg = await GET("/suggestions" + qs({ entity_id: id }));
+  const sugg = await memo(e, "sugg", () => GET("/suggestions" + qs({ entity_id: id })));
   // Felder
   const sections = fieldSections(e, reload, mobile ? { mobile: true } : undefined);
   const fields = h("div.card", h("div.card-h", h("h3", "Felder"), h("button.btn.sm.guide-field", { on: { click: () => addField(e, { onDone: reload }) } }, icon("plus"), "Feld")),
@@ -383,7 +401,7 @@ export async function personCards(e, reload, { mobile = false } = {}) {
 
   // rechte Spalte: Bünde, Kreise, Verlauf, Routinen
   const allRowsB = await rows();
-  const kin = e.is_self ? [] : await GET("/kin?entity_id=" + e.id).catch(() => []); // abgeleitete Verwandtschaft
+  const kin = e.is_self ? [] : await memo(e, "kin", () => GET("/kin?entity_id=" + e.id).catch(() => [])); // abgeleitete Verwandtschaft
   const bunds = e.is_self ? null : bundWidget(e, allRowsB, reload, kin); // du hast zu jedem einen Bund – hier nicht nötig
   const allRows = await rows();
   const myC = new Set(e.memberships.filter((m) => m.active).map((m) => m.circle_id));
@@ -422,7 +440,7 @@ export async function personCards(e, reload, { mobile = false } = {}) {
     circles.append(h("div.card-b.cb-cardb", cb.body));
     if (cb.seg) circles.querySelector(".card-h").insertBefore(cb.seg, circles.querySelector(".card-h .btn"));
   }
-  const hist = (await GET(`/entities/${id}/history?limit=60`)).filter((x) => !["role_a", "role_b"].includes(x.attr));
+  const hist = (await memo(e, "hist", () => GET(`/entities/${id}/history?limit=60`))).filter((x) => !["role_a", "role_b"].includes(x.attr));
   const histBox = h("div.timeline");
   const drawHist = (n) => clear(histBox, hist.slice(0, n).map((x) => h("div.ev", h("span.dot"), h("div", h("div.mono.t3", x.at.slice(0, 10)), h("div", historyText(x)), x.source && x.source !== "manual" ? h("div.tiny.t3", SOURCE(x.source)) : null))),
     hist.length > n ? h("button.btn.sm.ghost", { style: { alignSelf: "flex-start" }, on: { click: () => drawHist(999) } }, "Ganzen Verlauf zeigen") : null);
@@ -442,12 +460,12 @@ export async function personCards(e, reload, { mobile = false } = {}) {
   const suggBox = sugg.length ? h("div.card", h("div.card-h", h("h3", "Vorschläge")), h("div.card-b.col", sugg.map((s) => h("div.row",
     s.payload.img ? h("img.sugg-img", { src: s.payload.img, alt: "" }) : null,
     h("div.grow.small", h("b", s.field_name || (s.kind === "name" ? "Name" : s.kind === "avatar" ? "Profilbild" : s.kind)), ": ", typeof s.payload.value === "object" ? JSON.stringify(s.payload.value) : s.payload.value, h("div.t3.tiny", (s.payload.why || "") + " · " + SOURCE(s.source))),
-    h("button.btn.sm", { on: { click: async () => { await POST(`/suggestions/${s.id}/accept`); invalidate(); reload(); } } }, "Übernehmen"),
-    h("button.btn.sm.ghost.icon", { on: { click: async () => { await POST(`/suggestions/${s.id}/reject`); reload(); } } }, icon("x")))))) : null;
+    h("button.btn.sm", { on: { click: () => dropLocal(e, "sugg", (x) => x.id === s.id, reload, () => POST(`/suggestions/${s.id}/accept`)) } }, "Übernehmen"),
+    h("button.btn.sm.ghost.icon", { on: { click: () => dropLocal(e, "sugg", (x) => x.id === s.id, reload, () => POST(`/suggestions/${s.id}/reject`)) } }, icon("x")))))) : null;
   const self = e.is_self ? await selfOverview(allRows) : null;
   // Fotos aus Immich: Banner oben und Galerie
   const P = await import("./photos.js");
-  const pd = await P.loadPhotos(id);
+  const pd = await memo(e, "photos", () => P.loadPhotos(id));
   const immichProfile = (e.fields.f_profile || []).find((v) => v.value?.service === "immich")?.value?.url;
   const banner = P.photoBanner(pd);
   const photos = P.photoGallery(pd, { profileUrl: immichProfile });
@@ -669,8 +687,8 @@ function bundWidget(e, all, reload, kin = []) {
   const kinRow = (k, other, label) => h("div.bw-row.kin", avatar(other, 28, { exact: true, self: other.is_self }),
     h("a.grow", { href: "#/p/" + other.id }, other.is_self ? "Du" : other.display, h("span.tiny.t3", " · " + via(k))),
     h("span.small.t2", label),
-    h("button.btn.sm", { title: "Stimmt – als echten Bund speichern", on: { click: async () => { await POST("/kin/confirm", { a_id: k.a_id, b_id: k.b_id }); invalidate(); toast("Bund gespeichert"); reload(); } } }, icon("check"), "Stimmt"),
-    h("button.btn.sm.ghost.icon", { title: "Stimmt nicht – nicht mehr vorschlagen", on: { click: async () => { await POST("/kin/hide", { a_id: k.a_id, b_id: k.b_id }); toast("Ausgeblendet"); reload(); } } }, icon("x")));
+    h("button.btn.sm", { title: "Stimmt – als echten Bund speichern", on: { click: () => { toast("Bund gespeichert"); dropLocal(e, "kin", (x) => x === k, reload, () => POST("/kin/confirm", { a_id: k.a_id, b_id: k.b_id })); } } }, icon("check"), "Stimmt"),
+    h("button.btn.sm.ghost.icon", { title: "Stimmt nicht – nicht mehr vorschlagen", on: { click: () => { toast("Ausgeblendet"); dropLocal(e, "kin", (x) => x === k, reload, () => POST("/kin/hide", { a_id: k.a_id, b_id: k.b_id })); } } }, icon("x")));
   const kinList = [myKin ? kinRow(myKin, me, `${e.display || e.name} ist ${dein(myKin.role_a)}`) : null, ...derived.map((d) => kinRow(d.derived, byId[d.other_id], d.role_other))].filter(Boolean);
   const real = others.filter((b) => !b.derived);
   const list = real.length || kinList.length ? h("div.bw-list", kinList.length ? h("div.bw-kin-h.tiny.t3", "Folgt aus der Familie – noch nicht bestätigt") : null, kinList, real.map((b) => h("div.bw-row", avatar(byId[b.other_id], 28, { exact: true }),

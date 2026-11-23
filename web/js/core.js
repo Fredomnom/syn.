@@ -121,6 +121,16 @@ export async function rebuild(el, fill) {
   return fresh;
 }
 
+// Erst zeigen, dann speichern: die Oberfläche ist schon geändert, der Server folgt im Hintergrund.
+// Schlägt er fehl, gibt es einen Hinweis und onFail lädt den echten Stand.
+export function optimistic(server, { onFail, onDone } = {}) {
+  const p = Promise.resolve().then(server);
+  p.then((r) => { invalidate(); onDone?.(r); }, (err) => { if (!(err && err.message)) toast("Konnte nicht gespeichert werden – zeige den gespeicherten Stand", { err: true }); onFail?.(err); }); // api() zeigt Serverfehler schon selbst an
+  return p;
+}
+// Tippt oder wählt gerade jemand etwas? Dann nicht still neu zeichnen.
+export const interacting = () => !!document.querySelector(".backdrop:not(.leaving), .pop") || /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || "") || !!document.activeElement?.closest?.("[contenteditable], syn-date, .fr-edit");
+
 // dünner Ladebalken, wenn etwas länger als einen Moment dauert
 let busyN = 0, busyT;
 export function busy(on) {

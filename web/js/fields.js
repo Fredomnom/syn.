@@ -3,7 +3,7 @@
 import { dateInput } from "./date.js";
 import { LOCALE } from "./i18n.js";
 import { pickAndCrop } from "./crop.js";
-import { S, h, icon, api, GET, PUT, POST, clear, modal, rows, invalidate, avatar, circleChip, pickPerson, pickCircle, toast, menu, popover, closePop } from "./core.js";
+import { S, h, icon, api, GET, PUT, POST, clear, modal, optimistic, rows, invalidate, avatar, circleChip, pickPerson, pickCircle, toast, menu, popover, closePop } from "./core.js";
 
 export const TYPE_NAMES = { text: "Text", note: "Notiz", number: "Zahl", date: "Datum", choice: "Auswahl", checkbox: "Checkbox",
   person: "Person", ref: "Verweis", phone: "Telefon", email: "E-Mail", address: "Adresse", profile: "Profil", image: "Bild" };
@@ -200,7 +200,7 @@ async function editDateList(def, values, path, { title } = {}) {
   } }]);
 }
 
-export async function editField(def, values, path, { title, addNew = false } = {}) {
+export async function editField(def, values, path, { title, addNew = false, bg = null } = {}) {
   if (def.type === "date" && def.multi) return editDateList(def, values, path, { title });
   const list = h("div.col.fv-list");
   const items = (values || []).map((v) => ({ ...v }));
@@ -244,6 +244,7 @@ export async function editField(def, values, path, { title, addNew = false } = {
       sync();
       const values = items.filter((it) => it.value !== null && it.value !== "" && !(Array.isArray(it.value) && !it.value.length))
         .map(({ _get, _range, _new, ...rest }) => rest);
+      if (bg) { bg.local(values); optimistic(() => PUT(path, { values }), { onFail: bg.onFail, onDone: bg.onDone }); return values; } // Dialog schließt sofort
       try { return await PUT(path, { values }); } catch (_) { return false; }
     } }]);
   if (res) invalidate();
@@ -302,7 +303,13 @@ export function fieldRow(def, vals, path, e, reload, { extra = null, label = nul
   const live = (vals || []).filter((v) => !v.deprecated);
   const p = primaryOf(vals);
   const ordered = p ? [p, ...live.filter((v) => v !== p)] : live;
-  const dialog = async () => { if (await editField(def, vals || [], path)) reload(); };
+  // Personenseite: lokale Daten sofort ändern und zeigen, Server im Hintergrund (reload.local vorhanden)
+  const target = () => (def.scope === "bund" ? ((e.ihr_zwei ||= {}).fields ||= {}) : e.fields);
+  const fast = !!(reload?.local && e?.fields && path === `/entities/${e.id}/fields/${def.id}`); // nur Felder dieser Person (und „Ihr zwei“)
+  const dialog = async () => {
+    if (!fast) { if (await editField(def, vals || [], path)) reload(); return; }
+    await editField(def, vals || [], path, { bg: { local: (values) => { target()[def.id] = values.map((v, i) => ({ primary: i === 0, source: "manual", ...v })); reload.local(); }, onFail: reload, onDone: reload.quiet } });
+  };
   const inline = !def.multi && INLINE_TYPES.has(def.type) && path.startsWith("/entities/");
   const svcCount = {};
   if (def.type === "profile") for (const v of live) svcCount[v.value?.service] = (svcCount[v.value?.service] || 0) + 1;
@@ -338,11 +345,20 @@ export function fieldRow(def, vals, path, e, reload, { extra = null, label = nul
     const save = async () => {
       if (done) return; done = true;
       const v = inp.get();
-      if ((v ?? "") === (p?.value ?? "")) return reload();
+      if ((v ?? "") === (p?.value ?? "")) return fast ? cancel2() : reload();
+      if (fast) {
+        const t = target(), arr = (t[def.id] ||= []), cur = arr.find((x) => x.primary) || arr[0];
+        if (v === "" || v == null) { if (cur) arr.splice(arr.indexOf(cur), 1); }
+        else if (cur) cur.value = v; else arr.push({ value: v, primary: true, source: "manual" });
+        reload.local();
+        optimistic(() => api("PATCH", path, { value: v === "" ? null : v }), { onFail: reload, onDone: reload.quiet });
+        return;
+      }
       try { await api("PATCH", path, { value: v === "" ? null : v }); invalidate(); } catch (_) {}
       reload();
     };
     const cancel = () => { if (done) return; done = true; valueBox.replaceWith(valueBoxOrig); };
+    const cancel2 = () => ed.replaceWith(valueBoxOrig);
     const valueBoxOrig = valueBox;
     valueBox.replaceWith(ed);
     const field = ed.querySelector("input");
