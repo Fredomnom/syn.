@@ -233,6 +233,7 @@ async function saveView(saved) {
 
 async function drawView(body, all) {
   const list = filterRows(all);
+  try { sessionStorage.setItem("syn.navlist", JSON.stringify(list.filter((r) => !r.is_self).map((r) => r.id))); sessionStorage.setItem("syn.navfrom", location.hash); } catch (_) {}
   const box = document.createDocumentFragment();
   if (VS.view === "grid") grid(box, list);
   else if (VS.view === "list") listView(box, list);
@@ -307,6 +308,27 @@ async function personPage(main, id) {
   if (!e.is_self) onPage("seen_today", async () => { await POST(`/seen-today/${id}`); invalidate(); toast(`${e.display}: heute gesehen`); reload(); });
   onPage("edit_person", async () => { if (await editPerson(e)) reload(); });
   onPage("add_field", () => addField(e, { onDone: reload }));
+  // weitere Kürzel der Personenseite (Einstellungen → Tastenkürzel)
+  if (!e.is_self && S.settings.use_levels) for (const l of [0, 1, 2, 3, 4]) onPage("ring_" + l, async () => { await setRing(id, l || null); invalidate(); toast(`${e.display}: ${l ? ringName(l) : "ohne Ring"}`); reload(); });
+  onPage("add_bund", () => page.querySelector(".card.bw .card-h .btn")?.click());
+  onPage("add_circle", () => page.querySelector(".guide-circle")?.click());
+  if (!e.is_self) onPage("edit_ihr", async () => { if (await editIhrZwei(e)) reload(); });
+  onPage("new_note", async () => { const { noteEditor } = await import("./notes.js"); if (await noteEditor({ links: [{ role: "dabei", entity_id: id }] })) reload(); });
+  onPage("call", () => { const p = primaryOf(e.fields.f_phone); p ? (location.href = "tel:" + p.value.replace(/[^\d+]/g, "")) : toast("Keine Telefonnummer"); });
+  onPage("mail", () => { const m = primaryOf(e.fields.f_email); m ? (location.href = "mailto:" + m.value) : toast("Keine E-Mail-Adresse"); });
+  if (!e.is_self) {
+    onPage("update_link", async () => { await (await import("./shared.js")).updateLinkDialog(e); reload(); });
+    onPage("merge_with", () => pickPerson(page.querySelector(".phead .btn.icon:last-child") || page, { exclude: [id], allowNew: false, onPick: (r) => (location.hash = `#/merge/${id}/${r.id}`) }));
+    onPage("toggle_phone", async () => { await PATCH("/entities/" + id, { on_phone: !e.on_phone }); toast(e.on_phone ? "Nicht mehr mit dem Handy synchronisiert" : "Wird mit dem Handy synchronisiert"); reload(); });
+    onPage("delete_person", () => deletePerson(e));
+    if (S.settings.use_levels) onPage("ring_center", () => { const o = LS("ringopt", {}); SAVE("ringopt", { ...o, center: id }); location.hash = "#/people/rings"; });
+  }
+  // ← / →: durch die zuletzt angezeigte Personenliste blättern
+  const navList = (() => { try { return JSON.parse(sessionStorage.getItem("syn.navlist") || "[]"); } catch (_) { return []; } })();
+  const step = (d) => { const i = navList.indexOf(id); const to = i >= 0 ? navList[i + d] : null; if (to) location.hash = "#/p/" + to; else toast(i < 0 ? "Diese Person ist nicht in der letzten Liste" : d > 0 ? "Letzte Person der Liste" : "Erste Person der Liste"); };
+  onPage("prev_person", () => step(-1));
+  onPage("next_person", () => step(1));
+  onPage("back_list", () => { if (document.querySelector(".pop")) return; location.hash = sessionStorage.getItem("syn.navfrom") || "#/people"; });
   const iz = e.ihr_zwei?.fields || {};
   const phone = primaryOf(e.fields.f_phone), mail = primaryOf(e.fields.f_email);
   const head = h("div.phead", avatar(e, 72),
