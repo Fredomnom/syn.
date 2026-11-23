@@ -577,3 +577,42 @@ export function animateSegs(root, prev) {
     setTimeout(finish, 450); // Sicherheitsnetz
   });
 }
+
+// ---------------------------------------------------------------- Popups immer ganz sichtbar
+// Jedes Aufklapp-Element (Klasse .pop: Menüs, Auswahlfelder, Datum, Farbe, Personen-/Kreissuche …) wird nach dem
+// Öffnen und bei jeder Größenänderung vollständig in den sichtbaren Bereich geschoben; zu hohe werden scrollbar.
+const POP_MARGIN = 8;
+function fitPop(el) {
+  if (!el.isConnected || !el.offsetParent && getComputedStyle(el).position !== "fixed") return;
+  const vv = window.visualViewport;
+  const vw = vv ? vv.width : innerWidth, vh = vv ? vv.height : innerHeight, ox = vv ? vv.offsetLeft : 0, oy = vv ? vv.offsetTop : 0;
+  el.style.translate = "";
+  let r = el.getBoundingClientRect();
+  if (!r.width && !r.height) return;
+  const maxH = vh - 2 * POP_MARGIN;
+  if (r.height > maxH + 1) { el.style.maxHeight = maxH + "px"; el.style.overflowY = "auto"; r = el.getBoundingClientRect(); }
+  else if (el.style.maxHeight && el.scrollHeight <= maxH) { el.style.maxHeight = ""; el.style.overflowY = ""; r = el.getBoundingClientRect(); }
+  let dx = 0, dy = 0;
+  if (r.right > ox + vw - POP_MARGIN) dx = ox + vw - POP_MARGIN - r.right;
+  if (r.left + dx < ox + POP_MARGIN) dx = ox + POP_MARGIN - r.left;
+  if (r.bottom > oy + vh - POP_MARGIN) dy = oy + vh - POP_MARGIN - r.bottom;
+  if (r.top + dy < oy + POP_MARGIN) dy = oy + POP_MARGIN - r.top;
+  const t = dx || dy ? `${Math.round(dx)}px ${Math.round(dy)}px` : "";
+  if (el.style.translate !== t) el.style.translate = t;
+}
+const popRO = typeof ResizeObserver !== "undefined" ? new ResizeObserver((es) => es.forEach((e) => fitPop(e.target))) : null;
+const watched = new Set();
+function watchPop(el) { if (watched.has(el)) return; watched.add(el); popRO?.observe(el); requestAnimationFrame(() => fitPop(el)); }
+new MutationObserver((muts) => {
+  for (const m of muts) {
+    if (m.type === "attributes") { if (m.target.classList?.contains("pop")) { watchPop(m.target); requestAnimationFrame(() => fitPop(m.target)); } continue; }
+    for (const n of m.addedNodes) if (n.nodeType === 1) { if (n.classList.contains("pop")) watchPop(n); n.querySelectorAll?.(".pop").forEach(watchPop); }
+    for (const n of m.removedNodes) if (n.nodeType === 1 && watched.has(n)) { watched.delete(n); popRO?.unobserve(n); }
+  }
+}).observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["class", "hidden"] }); // nicht „style“: das ändern wir selbst
+const refitAll = () => watched.forEach((el) => fitPop(el));
+// Popups, die sich beim Öffnen per Stil neu setzen (z.B. Datum), nach jeder Bedienung einmal prüfen
+for (const ev of ["pointerup", "keyup", "focusin"]) addEventListener(ev, () => requestAnimationFrame(refitAll), true);
+addEventListener("resize", refitAll);
+window.visualViewport?.addEventListener("resize", refitAll);
+window.visualViewport?.addEventListener("scroll", refitAll);
