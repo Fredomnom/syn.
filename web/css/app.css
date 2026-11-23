@@ -1487,3 +1487,27 @@ syn-personcard.with-banner .pc-head .av { box-shadow: 0 0 0 4px var(--white); }
 .bw-row.kin .btn.sm { height: 28px; }
 .bw-kin-h { margin: 2px 0 2px; }
 .ring-svg { cursor: grab; } .ring-svg.panning { cursor: grabbing; } .ring-svg .node { cursor: pointer; }
+/* Shift+?: Kürzel an den Knöpfen */
+.sc-host { position: relative; }
+.sc-badge { position: absolute; top: -9px; right: -7px; z-index: 30; pointer-events: none; display: inline-flex; animation: sc-in .18s cubic-bezier(.2,.8,.2,1); }
+.sc-badge .keys { gap: 2px; }
+.sc-badge .key { background: var(--yellow); color: #16181D; border-color: var(--yellow-line); box-shadow: 0 2px 6px -2px rgba(0,0,0,.35); font-weight: 600; }
+.sc-badge .key svg { stroke: #16181D; }
+@keyframes sc-in { from { opacity: 0; transform: scale(.6) translateY(4px); } }
+.sc-pill { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 200; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; justify-content: center;
+  padding: 10px 16px; border-radius: 14px; background: var(--ink); color: var(--white); font-size: 12.5px; box-shadow: 0 14px 34px -12px rgba(0,0,0,.5); animation: sc-in .2s; max-width: calc(100vw - 32px); }
+.sc-pill span { display: inline-flex; align-items: center; gap: 5px; color: color-mix(in srgb, var(--white) 75%, transparent); }
+.sc-pill.hold { gap: 10px; }
+.sc-bar { width: 80px; height: 4px; border-radius: 2px; background: color-mix(in srgb, var(--white) 20%, transparent); overflow: hidden; position: relative; }
+.sc-bar::after { content: ""; position: absolute; inset: 0; background: var(--yellow); transform-origin: left; animation: sc-fill .43s linear forwards; }
+@keyframes sc-fill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+/* Übersicht */
+.sc-q { max-width: 280px; }
+.sc-grid { columns: 3 260px; column-gap: 18px; }
+.sc-group { break-inside: avoid; margin: 0 0 14px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--white); }
+.sc-group.here { border-color: var(--yellow-line); background: color-mix(in srgb, var(--yellow) 6%, var(--white)); }
+.sc-group h3 { margin: 0 0 8px; font-size: 13px; display: flex; align-items: center; gap: 8px; text-transform: uppercase; letter-spacing: .04em; color: var(--text2); }
+.sc-rows { display: flex; flex-direction: column; }
+.sc-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 5px 0; border-top: 1px solid var(--line); font-size: 13.5px; }
+.sc-row:first-child { border-top: 0; }
+.sc-l { min-width: 0; }

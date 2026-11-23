@@ -3,7 +3,7 @@ import { S, h, icon, GET, POST, PUT, PATCH, DEL, clear, rebuild, rows, captureSe
   toast, getOrBack, modal, logo, qs, menu, pickPerson, pickCircle, reloadCircles, confirmDlg, ringMini, MOD, fmtTs, circleColors, kindColors, promptDlg, RING, cssVar as V } from "./core.js";
 import { primaryOf, valueEl, actionFor, editField, entityFieldList, runQuick, bundFields, TYPE_NAMES, SOURCE, plain, fieldsFor, service, serviceIcon, fieldRow, fieldSections, sourceName } from "./fields.js";
 import { LOCALE } from "./i18n.js";
-import { onPage, onGlobal, resetPage, binding, pretty, helpOverlay, keys } from "./shortcuts.js";
+import { onPage, onGlobal, resetPage, binding, pretty, helpKey, keys } from "./shortcuts.js";
 import { dateInput } from "./date.js";
 import { openSpotlight, rememberPerson } from "./spotlight.js";
 import { guideAttach } from "./guide.js";
@@ -80,7 +80,7 @@ function setupGlobalKeys() {
   onGlobal("toggle_sidebar", toggleSidebar);
   onGlobal("search", () => openSpotlight());
   onGlobal("new_person", () => newPersonDialog());
-  onGlobal("help", helpOverlay);
+  onGlobal("help", helpKey);
   onGlobal("go_people", () => (location.hash = "#/people"));
   onGlobal("go_circles", () => (location.hash = "#/circles"));
   onGlobal("go_today", () => (location.hash = "#/today"));
@@ -171,13 +171,13 @@ async function people(main, view, route, saved = null) {
   onPage("save_view", () => saveView(saved));
   page.append(
     h("div.page-h", h("h1", saved ? saved.name : "Personen"),
-      h("button.btn.primary", { on: { click: () => newPersonDialog() } }, icon("plus"), "Person")),
+      h("button.btn.primary.np-btn", { on: { click: () => newPersonDialog() } }, icon("plus"), "Person")),
     h("div.toolbar",
       h("span.small.t2", "Personen"), h("select.input", { on: { change: (e) => { VS.kind = e.target.value; redraw(); } } },
         [["all", "Alle Menschen & Tiere"], ["person", "Menschen"], ["pet", "Haustiere"]].map(([k, l]) => h("option", { value: k, selected: VS.kind === k }, l))),
-      h("div.seg", { "data-seg": "views" }, views.map(([id, label, ic], i) => h("button" + (VS.view === id ? ".on" : ""), { title: `${label} (${pretty(binding("view_" + id))})`, on: { click: () => { location.hash = `#/people/${id}`; } } }, icon(ic), label))),
+      h("div.seg", { "data-seg": "views" }, views.map(([id, label, ic], i) => h("button" + (VS.view === id ? ".on" : ""), { "data-sc": "view_" + id, title: `${label} (${pretty(binding("view_" + id))})`, on: { click: () => { location.hash = `#/people/${id}`; } } }, icon(ic), label))),
       h("span.grow"), filterBtn, groupBtn, sortBtn,
-      h("button.btn.sm", { title: "Ansicht speichern", on: { click: () => saveView(saved) } }, icon("download"), saved ? "Speichern" : "Ansicht speichern")),
+      h("button.btn.sm.sv-btn", { title: "Ansicht speichern", on: { click: () => saveView(saved) } }, icon("download"), saved ? "Speichern" : "Ansicht speichern")),
     body);
   await redraw(); // erst fertig zeichnen, dann einblenden
 }
@@ -340,20 +340,20 @@ async function personPage(main, id) {
     phone ? h("a.btn", { href: "tel:" + phone.value.replace(/[^\d+]/g, "") }, icon("phone"), "Anrufen") : null,
     mail ? h("a.btn", { href: "mailto:" + mail.value }, icon("message"), "Schreiben") : null,
     h("button.btn.icon", { on: { click: (ev) => menu(ev.currentTarget, [
-      { label: "Bearbeiten", icon: "edit", action: async () => { if (await editPerson(e)) reload(); } },
-      { label: "Feld hinzufügen", icon: "plus", action: () => addField(e, { onDone: reload }) },
-      e.is_self || !S.settings.use_levels ? null : { label: "In den Ringen in die Mitte", icon: "rings", action: () => { const o = LS("ringopt", {}); SAVE("ringopt", { ...o, center: id }); location.hash = "#/people/rings"; } },
-      e.is_self ? null : { label: "Angaben prüfen lassen …", icon: "link", action: async () => { await (await import("./shared.js")).updateLinkDialog(e); reload(); } },
-      e.is_self ? null : { label: "Zusammenführen mit …", icon: "merge", action: () => pickPerson(ev.target, { exclude: [id], allowNew: false, onPick: (r) => (location.hash = `#/merge/${id}/${r.id}`) }) },
-      e.is_self ? null : { label: e.on_phone ? "Nicht mehr mit Handy synchronisieren" : "Mit Handy synchronisieren", icon: "smartphone", action: async () => { await PATCH("/entities/" + id, { on_phone: !e.on_phone }); reload(); } },
-      e.is_self ? null : { label: "Person löschen", icon: "trash", action: () => deletePerson(e) },
+      { label: "Bearbeiten", icon: "edit", action: async () => { if (await editPerson(e)) reload(); }, hint: pretty(binding("edit_person")) },
+      { label: "Feld hinzufügen", icon: "plus", action: () => addField(e, { onDone: reload }), hint: pretty(binding("add_field")) },
+      e.is_self || !S.settings.use_levels ? null : { label: "In den Ringen in die Mitte", icon: "rings", hint: pretty(binding("ring_center")), action: () => { const o = LS("ringopt", {}); SAVE("ringopt", { ...o, center: id }); location.hash = "#/people/rings"; } },
+      e.is_self ? null : { label: "Angaben prüfen lassen …", icon: "link", hint: pretty(binding("update_link")), action: async () => { await (await import("./shared.js")).updateLinkDialog(e); reload(); } },
+      e.is_self ? null : { label: "Zusammenführen mit …", icon: "merge", hint: pretty(binding("merge_with")), action: () => pickPerson(ev.target, { exclude: [id], allowNew: false, onPick: (r) => (location.hash = `#/merge/${id}/${r.id}`) }) },
+      e.is_self ? null : { label: e.on_phone ? "Nicht mehr mit Handy synchronisieren" : "Mit Handy synchronisieren", hint: pretty(binding("toggle_phone")), icon: "smartphone", action: async () => { await PATCH("/entities/" + id, { on_phone: !e.on_phone }); reload(); } },
+      e.is_self ? null : { label: "Person löschen", icon: "trash", action: () => deletePerson(e), hint: pretty(binding("delete_person")) },
       { label: "Verlauf als JSON", icon: "history", action: async () => modal("Verlauf", h("div.code", JSON.stringify(await GET(`/entities/${id}/history`), null, 2)), [], { wide: true }) },
     ], { align: "right" }) } }, icon("more")));
 
   // Ihr zwei
   const ring = e.level;
   const ihr = e.is_self ? null : h("div.card",
-    h("div.card-h", h("div.row", h("span.small.t2", "Ihr zwei"), h("button.chip.sel", { style: { cursor: "pointer" }, on: { click: async () => { if (await editIhrZwei(e)) reload(); } } }, bundKindIcon(e.ihr_zwei?.kind_id), bundKindName(e.ihr_zwei?.kind_id), " ▾")),
+    h("div.card-h", h("div.row", h("span.small.t2", "Ihr zwei"), h("button.chip.sel.iz-kind", { style: { cursor: "pointer" }, on: { click: async () => { if (await editIhrZwei(e)) reload(); } } }, bundKindIcon(e.ihr_zwei?.kind_id), bundKindName(e.ihr_zwei?.kind_id), " ▾")),
       e.long_unseen ? h("span.tag.yellow", "lange nicht gesehen") : null),
     h("div.card-b.iz-body" + (S.settings.use_levels ? "" : ".no-ring"),
       S.settings.use_levels ? h("div.iz-ring.guide-ring",

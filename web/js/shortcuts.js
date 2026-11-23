@@ -124,12 +124,85 @@ export function recordCombo() {
   });
 }
 
+// ---------------------------------------------------------------- Shift+? : kurz = Kürzel an den Knöpfen, halten = Liste
+// Welche Kürzel an welchen Knöpfen stehen (sichtbare Elemente bekommen ein kleines Tastenschild)
+const SPOTS = [
+  ["toggle_sidebar", ".side .top .btn.icon"], ["new_person", ".page-h .btn.primary.np-btn"],
+  ["go_people", 'a.nav[href="#/people"]'], ["go_circles", 'a.nav[href="#/circles"]'], ["go_today", 'a.nav[href="#/today"]'], ["go_notes", 'a.nav[href="#/notes"]'],
+  ["go_settings", 'a.nav[href^="#/settings"]'], ["save_view", ".sv-btn"],
+  ["view_grid", '[data-sc="view_grid"]'], ["view_list", '[data-sc="view_list"]'], ["view_table", '[data-sc="view_table"]'],
+  ["view_rings", '[data-sc="view_rings"]'], ["view_axes", '[data-sc="view_axes"]'], ["view_net", '[data-sc="view_net"]'],
+  ["seen_today", ".guide-seen"], ["call", '.phead a.btn[href^="tel:"]'], ["mail", '.phead a.btn[href^="mailto:"]'],
+  ["add_bund", ".card.bw .card-h .btn"], ["add_circle", ".guide-circle"], ["edit_ihr", ".iz-kind"],
+  ["ring_1", ".iz-ring", "1–4 · 0"],
+];
+let hintsOn = false, hintObs = null, hintPill = null;
+function paintHints() {
+  document.querySelectorAll(".sc-badge").forEach((b) => b.remove());
+  if (!hintsOn) return;
+  for (const [id, sel, text] of SPOTS) {
+    const combo = text || binding(id); if (!combo) continue;
+    for (const el of document.querySelectorAll(sel)) {
+      if (!el.offsetParent || el.closest(".backdrop")) continue;
+      el.classList.add("sc-host");
+      const b = text ? h("span.sc-badge", h("span.key", text)) : h("span.sc-badge", keys(combo));
+      el.append(b);
+    }
+  }
+}
+export function setHints(on) {
+  hintsOn = on;
+  document.body.classList.toggle("sc-hints", on);
+  hintObs?.disconnect(); hintObs = null;
+  hintPill?.remove(); hintPill = null;
+  if (on) {
+    let t = 0;
+    hintObs = new MutationObserver((m) => { if (m.every((x) => [...x.addedNodes, ...x.removedNodes].every((n) => n.classList?.contains("sc-badge")))) return; clearTimeout(t); t = setTimeout(paintHints, 60); });
+    hintObs.observe(document.body, { childList: true, subtree: true });
+    hintPill = h("div.sc-pill", h("b", "Tastenkürzel eingeblendet"), h("span", keys(binding("help")), " nochmal: ausblenden"), h("span", keys(binding("help")), " gedrückt halten: alle Kürzel"), h("span", keys("Esc"), " schließen"));
+    document.body.append(hintPill);
+  }
+  paintHints();
+}
+document.addEventListener("keydown", (e) => { if (hintsOn && e.key === "Escape" && !document.querySelector(".backdrop:not(.leaving), .pop")) { e.preventDefault(); e.stopPropagation(); setHints(false); } }, true);
+
+let holdT = null;
+export function helpKey(e) {
+  if (e.repeat || holdT) return;
+  let holdPill = null;
+  const pillT = setTimeout(() => { holdPill = h("div.sc-pill.hold", h("span", "Gedrückt halten …"), h("span.sc-bar")); document.body.append(holdPill); }, 120);
+  holdT = setTimeout(() => { holdT = "fired"; clearTimeout(pillT); holdPill?.remove(); setHints(false); helpOverlay(); }, 550);
+  const up = () => {
+    document.removeEventListener("keyup", up, true);
+    clearTimeout(pillT); holdPill?.remove();
+    if (holdT !== "fired") { clearTimeout(holdT); setHints(!hintsOn); }
+    holdT = null;
+  };
+  document.addEventListener("keyup", up, true);
+}
+
+// Übersicht: nach Bereichen in Spalten, „Hier“ zuerst, mit Suche
 export function helpOverlay() {
+  const here = location.hash.startsWith("#/p/") ? "Personenseite" : /^#\/(people|v)\b/.test(location.hash) || location.hash === "" ? "Ansichten" : null;
   const groups = {};
   for (const [id, g, label] of ACTIONS) (groups[g] ||= []).push([id, label]);
-  modal("Tastenkürzel", h("div.col", Object.entries(groups).map(([g, list]) => h("div.col", { style: { gap: "4px" } }, h("h3", g),
-    list.map(([id, label]) => h("div.row.between", h("span", label), keys(binding(id)))))),
-  h("a.small", { href: "#/settings/shortcuts", on: { click: () => document.querySelector(".backdrop:not(.leaving)")?._close?.(null) } }, "Tastenkürzel ändern →")), []);
+  const order = Object.keys(groups).sort((a, b) => (b === here) - (a === here));
+  const q = h("input.input.sc-q", { placeholder: "Kürzel suchen …", autocomplete: "off" });
+  const grid = h("div.sc-grid");
+  const draw = () => {
+    const f = q.value.trim().toLowerCase();
+    grid.replaceChildren(...order.map((g) => {
+      const list = groups[g].filter(([id, label]) => !f || label.toLowerCase().includes(f) || g.toLowerCase().includes(f) || pretty(binding(id)).toLowerCase().includes(f));
+      if (!list.length) return null;
+      return h("section.sc-group" + (g === here ? ".here" : ""), h("h3", g, g === here ? h("span.tag.yellow", "hier") : null),
+        h("div.sc-rows", list.map(([id, label]) => h("div.sc-row", h("span.sc-l", label), keys(binding(id))))));
+    }).filter(Boolean));
+  };
+  q.addEventListener("input", draw); draw();
+  setTimeout(() => q.focus(), 30);
+  modal("Tastenkürzel", h("div.col", { style: { gap: "12px" } }, h("div.row", { style: { gap: "10px" } }, q,
+      h("span.small.t3", "Kurz ", keys(binding("help")), " zeigt die Kürzel direkt an den Knöpfen")), grid,
+    h("a.small", { href: "#/settings/shortcuts", on: { click: () => document.querySelector(".backdrop:not(.leaving)")?._close?.(null) } }, "Tastenkürzel ändern →")), [], { wide: true });
 }
 
 // ---------------------------------------------------------------- Tastenkappen: einheitliche Darstellung aller Tasten
@@ -143,7 +216,7 @@ const KEY_SVG = {
   left: '<path d="M19 12H5M11 6l-6 6 6 6"/>', right: '<path d="M5 12h14M13 6l6 6-6 6"/>',
 };
 const NAMES = { Mod: IS_MAC ? "cmd" : "Strg", Ctrl: IS_MAC ? "ctrl" : "Strg", Meta: IS_MAC ? "cmd" : "Win", Alt: IS_MAC ? "opt" : "Alt", Shift: IS_MAC ? "shift" : "Shift",
-  Enter: "enter", Up: "up", Down: "down", Left: "left", Right: "right", Esc: "Esc", Space: "Leertaste", "↑": "up", "↓": "down", "←": "left", "→": "right" };
+  Enter: "enter", Up: "up", Down: "down", Left: "left", Right: "right", Esc: "Esc", Space: "Leertaste", Delete: IS_MAC ? "⌦" : "Entf", Backspace: IS_MAC ? "⌫" : "Rück", "↑": "up", "↓": "down", "←": "left", "→": "right" };
 export function keycap(k) {
   const n = NAMES[k] ?? k;
   const el = document.createElement("span"); el.className = "key";
