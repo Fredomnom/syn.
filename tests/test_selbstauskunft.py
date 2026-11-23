@@ -65,6 +65,7 @@ def test_pflege_link_ablauf(client):
     assert c.post("/api/v1/entities/" + c.get("/api/v1/me").json()["self_id"] + "/update-link", json={}).status_code == 400
 
 
+JPG = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00fake"
 PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
 
 
@@ -78,8 +79,10 @@ def test_freundebuch(client, monkeypatch):
     auth = c.headers.pop("Authorization")
     pub = c.get(f"/api/v1/public/update/{token}").json()
     qids = [q["id"] for q in pub["book"]["questions"]]
-    assert "f_fb_like" in qids and "f_fb_photo" not in qids and pub["book"]["photo"] is False   # ohne Immich kein Foto
-    assert c.post(f"/api/v1/public/update/{token}/photo", files={"file": ("a.jpg", b"x", "image/jpeg")}).status_code == 404
+    assert "f_fb_like" in qids and "f_fb_photo" not in qids and pub["book"]["photo"] is True and pub["book"]["immich"] is False
+    # ohne Immich: Foto liegt in syn wie andere Bild-Felder; nur echte Bilder (Dateianfang wird geprüft)
+    assert c.post(f"/api/v1/public/update/{token}/photo", files={"file": ("a.jpg", b"kein bild", "image/jpeg")}).status_code == 400
+    assert c.post(f"/api/v1/public/update/{token}/photo", files={"file": ("a.jpg", JPG, "image/jpeg")}, data={"as_avatar": "1"}).status_code == 200
     r = c.post(f"/api/v1/public/update/{token}", json={"book": {"f_fb_food": "Sushi", "f_fb_like": "Du hörst zu.", "f_note": "nicht erlaubt"},
                                                     "signature": PNG, "fields": {"f_phone": [{"old": None, "value": "+49 170 1234567"}]}}).json()
     assert r["book"] == 3 and r["suggestions"] == 1
@@ -88,6 +91,11 @@ def test_freundebuch(client, monkeypatch):
     assert f["f_fb_food"][0]["value"] == "Sushi" and f["f_fb_food"][0]["source"] == "selbst"   # direkt gespeichert
     assert f["f_fb_sign"][0]["value"].startswith("/api/v1/files/") and "f_note" not in f
     assert "f_phone" not in f                                                                  # Kontaktdaten: nur Vorschlag
+    local = f["f_fb_photo"][0]["value"]
+    assert local.startswith("/api/v1/files/") and c.get(local).content == JPG
+    av = next(x for x in c.get("/api/v1/suggestions", params={"entity_id": e["id"]}).json() if x["kind"] == "avatar")
+    assert c.post(f"/api/v1/suggestions/{av['id']}/accept").status_code == 200
+    assert c.get(f"/api/v1/entities/{e['id']}").json()["avatar"] == local
     assert any("Freundebuch" in it["title"] for it in c.get("/api/v1/today").json()["items"])
 
     # mit Immich: Foto geht direkt dorthin (nachgebaut), landet im Album und ist über syn abrufbar
@@ -107,7 +115,7 @@ def test_freundebuch(client, monkeypatch):
     auth = c.headers.pop("Authorization")
     assert c.get(f"/api/v1/public/update/{token}").json()["book"]["photo"] is True
     assert c.post(f"/api/v1/public/update/{token}/photo", files={"file": ("a.txt", b"x", "text/plain")}).status_code == 400
-    assert c.post(f"/api/v1/public/update/{token}/photo", files={"file": ("ich.jpg", b"\xff\xd8jpg", "image/jpeg")}).status_code == 200
+    assert c.post(f"/api/v1/public/update/{token}/photo", files={"file": ("ich.jpg", JPG, "image/jpeg")}).status_code == 200
     c.headers["Authorization"] = auth
     assert ("POST", "assets", None) in calls and any(x[1] == "albums" and x[0] == "POST" and x[2]["albumName"] == "syn Freundebuch" for x in calls)
     photo = c.get(f"/api/v1/entities/{e['id']}").json()["fields"]["f_fb_photo"][0]["value"]
@@ -127,7 +135,7 @@ def test_profilbild_vorschlagen(client, monkeypatch):
     from syn.modules import immich_api
     monkeypatch.setattr(immich_api, "_client", type("C", (), {"get": staticmethod(lambda url, **kw: resp("GET", url, content=b"\xff\xd8bild", headers={"content-type": "image/jpeg"}))})())
     auth = c.headers.pop("Authorization")
-    assert c.post(f"/api/v1/public/update/{token}/photo", files={"file": ("ich.jpg", b"\xff\xd8", "image/jpeg")}, data={"as_avatar": "1"}).status_code == 200
+    assert c.post(f"/api/v1/public/update/{token}/photo", files={"file": ("ich.jpg", JPG, "image/jpeg")}, data={"as_avatar": "1"}).status_code == 200
     c.headers["Authorization"] = auth
     assert not c.get(f"/api/v1/entities/{e['id']}").json()["avatar"]                 # nicht direkt
     s = next(x for x in c.get("/api/v1/suggestions", params={"entity_id": e["id"]}).json() if x["kind"] == "avatar")

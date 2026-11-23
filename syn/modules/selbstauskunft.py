@@ -117,7 +117,7 @@ def public_get(token: str):
         from ..importers.immich import connected
         prim = lambda fid: (vals.get(fid) or [{}])[0].get("value")  # noqa: E731
         book = {"questions": [{"id": d["id"], "name": d["name"], "type": d["type"], "value": prim(d["id"])} for d in _book_defs(uid)],
-                "photo": connected(uid), "has_photo": bool(prim("f_fb_photo")), "has_sign": bool(prim("f_fb_sign"))}
+                "photo": True, "immich": connected(uid), "has_photo": bool(prim("f_fb_photo")), "has_sign": bool(prim("f_fb_sign"))}
     services = [{k: s.get(k) for k in ("id", "name")} for s in user_settings(uid).get("services", [])]
     return {
         "owner": display_name(me), "owner_first": me.get("first_name") or display_name(me).split(" ")[0],
@@ -237,32 +237,53 @@ def public_answer(token: str, body: Answer):
 
 @router.post("/api/v1/public/update/{token}/photo", include_in_schema=False)
 async def public_photo(token: str, file: UploadFile = File(...), as_avatar: str | None = Form(None)):
-    """Foto fürs Freundebuch: geht direkt nach Immich (Album „syn Freundebuch“). Ohne Immich gibt es keine Fotos."""
+    """Foto fürs Freundebuch: mit Immich direkt dorthin (Album „syn Freundebuch“), sonst in syn wie andere Bild-Felder."""
     l = _by_token(token)
     if BOOK not in db.jl(l["fields"], []):
         raise HTTPException(404, "Kein Freundebuch")
     from ..importers.immich import connected, upload_photo
     uid, eid = l["user_id"], l["entity_id"]
-    if not connected(uid):
-        raise HTTPException(404, "Fotos sind hier nicht möglich")
     mime = (file.content_type or "").lower()
     if not mime.startswith("image/"):
         raise HTTPException(400, "Bitte ein Bild")
     data = await file.read(15 * 1024 * 1024 + 1)
     if len(data) > 15 * 1024 * 1024:
         raise HTTPException(413, "Das Bild ist zu groß (höchstens 15 MB)")
-    try:
-        aid = upload_photo(uid, data, file.filename or "freundebuch.jpg", mime, eid)
-    except Exception:
-        raise HTTPException(502, "Das Foto konnte gerade nicht gespeichert werden") from None
-    if not aid:
-        raise HTTPException(404, "Fotos sind hier nicht möglich")
-    model.set_entity_field(uid, eid, "f_fb_photo", f"/api/v1/immich/assets/{aid}?size=preview", SOURCE)
+    real = _sniff(data)
+    if not real:
+        raise HTTPException(400, "Das ist kein Bild (erlaubt: JPEG, PNG, WebP, GIF, HEIC)")
+    if connected(uid):  # mit Immich: dorthin, wo deine Fotos ohnehin liegen
+        try:
+            aid = upload_photo(uid, data, file.filename or "freundebuch.jpg", real, eid)
+        except Exception:
+            raise HTTPException(502, "Das Foto konnte gerade nicht gespeichert werden") from None
+        url, thumb, ref = f"/api/v1/immich/assets/{aid}?size=preview", f"/api/v1/immich/assets/{aid}?size=thumbnail", {"asset": aid}
+    else:               # ohne Immich: in syn, wie andere Bild-Felder
+        from .dateien import store_bytes
+        fid = store_bytes(uid, data, real)
+        url = thumb = f"/api/v1/files/{fid}"
+        ref = {"file": fid}
+    model.set_entity_field(uid, eid, "f_fb_photo", url, SOURCE)
     if as_avatar in ("1", "true", "on"):  # „Auch als mein Profilbild vorschlagen“ – nur als Vorschlag
         who = model.get_entity(uid, eid)["name"] or "Die Person"
-        add_suggestion(uid, "avatar", eid, {"value": "neues Profilbild", "asset": aid, "img": f"/api/v1/immich/assets/{aid}?size=thumbnail",
+        add_suggestion(uid, "avatar", eid, {"value": "neues Profilbild", **ref, "img": thumb,
                                             "why": f"{who} schlägt sich selbst ein Profilbild vor"}, SOURCE)
     return {"ok": True}
+
+
+def _sniff(b: bytes) -> str | None:
+    """Echter Bildtyp am Dateianfang – nicht dem angegebenen Typ glauben."""
+    if b[:3] == b"\xff\xd8\xff":
+        return "image/jpeg"
+    if b[:8] == b"\x89PNG\r\n\x1a\n":
+        return "image/png"
+    if b[:4] == b"RIFF" and b[8:12] == b"WEBP":
+        return "image/webp"
+    if b[:6] in (b"GIF87a", b"GIF89a"):
+        return "image/gif"
+    if b[4:8] == b"ftyp" and b[8:12] in (b"heic", b"heix", b"mif1", b"msf1", b"heim", b"heis"):
+        return "image/heic"
+    return None
 
 
 def install(app):

@@ -1425,5 +1425,7 @@
 "Nochmal": "Again",
 "Schreib was für {} rein – alles freiwillig.": "Write something for {} – all optional.",
 "Mit Freundebuch": "With friendship book",
-"Foto wird eingeklebt …": "Sticking in photo …"
+"Foto wird eingeklebt …": "Sticking in photo …",
+" – Spitzname, Lieblingsessen, „Das mag ich an dir“ …, Unterschrift und ein Foto (mit Immich landet es dort, sonst in syn). Diese Antworten speichert syn direkt.": " – nickname, favourite food, “What I like about you” …, signature and a photo (with Immich it goes there, otherwise into syn). syn saves these answers directly.",
+"Das ist kein Bild (erlaubt: JPEG, PNG, WebP, GIF, HEIC)": "That's not an image (allowed: JPEG, PNG, WebP, GIF, HEIC)"
 }

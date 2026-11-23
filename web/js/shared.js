@@ -325,7 +325,7 @@ export async function updateLinkDialog(e) {
       clear(box,
         h("p.small.t2", `Schick ${e.display || e.name} einen Link, um die eigenen Kontaktdaten zu prüfen und zu ergänzen. Nichts wird direkt geändert – alles kommt als Vorschlag zu dir. Der Link gilt ${st.days} Tage.`),
         h("div.small.t2", "Was die Person sehen und ändern darf:"), chips,
-        h("label.check", fbBox, h("span", h("b", "Mit Freundebuch"), h("span.small.t2", " – Spitzname, Lieblingsessen, „Das mag ich an dir“ …, Unterschrift und (mit Immich) ein Foto. Diese Antworten speichert syn direkt."))),
+        h("label.check", fbBox, h("span", h("b", "Mit Freundebuch"), h("span.small.t2", " – Spitzname, Lieblingsessen, „Das mag ich an dir“ …, Unterschrift und ein Foto (mit Immich landet es dort, sonst in syn). Diese Antworten speichert syn direkt."))),
         st.link && !st.link.active ? h("div.small.t3", st.link.revoked ? "Der letzte Link wurde zurückgezogen." : "Der letzte Link ist abgelaufen.") : null,
         h("button.btn.primary", { style: { alignSelf: "flex-start" }, on: { click: async () => { if (!sel.size) return t("Mindestens ein Feld wählen", { err: true }); await post(`/entities/${e.id}/update-link`, { fields: [...sel], freundebuch: fbBox.checked }); draw(); } } }, icon("link"), "Link erstellen"));
     }

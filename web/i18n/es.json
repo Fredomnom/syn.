@@ -1425,5 +1425,7 @@
 "Nochmal": "Otra vez",
 "Schreib was für {} rein – alles freiwillig.": "Escribe algo para {}: todo es opcional.",
 "Mit Freundebuch": "Con libro de amigos",
-"Foto wird eingeklebt …": "Pegando foto …"
+"Foto wird eingeklebt …": "Pegando foto …",
+" – Spitzname, Lieblingsessen, „Das mag ich an dir“ …, Unterschrift und ein Foto (mit Immich landet es dort, sonst in syn). Diese Antworten speichert syn direkt.": " – apodo, comida favorita, «Lo que me gusta de ti» …, firma y una foto (con Immich va allí; si no, a syn). syn guarda estas respuestas directamente.",
+"Das ist kein Bild (erlaubt: JPEG, PNG, WebP, GIF, HEIC)": "Eso no es una imagen (se permiten JPEG, PNG, WebP, GIF, HEIC)"
 }

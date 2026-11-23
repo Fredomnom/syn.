@@ -195,6 +195,8 @@ def accept(sid: str, ctx: Ctx = Depends(current)):
                 model.set_single(ctx.uid, ot, oid, d, p.get("value"), "manual")
         elif s["kind"] == "name":
             model.patch_entity(ctx.uid, s["entity_id"], {"name": p["value"]})
+        elif s["kind"] == "avatar" and p.get("file"):  # ohne Immich: liegt schon als Datei in syn
+            model.patch_entity(ctx.uid, s["entity_id"], {"avatar": f"/api/v1/files/{p['file']}"}, "selbst")
         elif s["kind"] == "avatar" and p.get("asset"):
             # Profilbild aus Immich holen und als echte Datei speichern (braucht u.a. das Handy-Adressbuch)
             from .dateien import store_bytes
