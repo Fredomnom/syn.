@@ -1,6 +1,6 @@
 // Tabelle: Spreadsheet mit Formelleiste, Tastatur, Bereichsauswahl, Füllen per ⌘D, Kopieren/Einfügen,
 // Ring-Popup in der Zelle und Bulk-Aktionen für markierte Zeilen.
-import { S, h, icon, GET, POST, PATCH, clear, invalidate, optimistic, avatar, circleChip, nameEl, rel, ringName, menu, pickCircle, toast, confirmDlg, modal, rows, MOD, popover, closePop } from "./core.js";
+import { S, h, icon, GET, POST, PATCH, clear, invalidate, optimistic, hasSeen, avatar, circleChip, nameEl, rel, ringName, menu, pickCircle, toast, confirmDlg, modal, rows, MOD, popover, closePop } from "./core.js";
 import { LOCALE } from "./i18n.js";
 import { editField, plain, TYPE_NAMES } from "./fields.js";
 import { ringPopup } from "./shared.js";
@@ -323,7 +323,7 @@ export async function table(body, list, all, grouping = "", redraw = null) {
       h("button.btn.sm", { on: { click: (e) => menu(e.currentTarget, [
         { label: "Mit Handy synchronisieren", icon: "smartphone", action: () => { toast("Wird mit dem Handy synchronisiert"); bg(() => POST("/bulk", { ids, op: "on_phone", value: true })); } },
         { label: "Nicht mit Handy synchronisieren", action: () => bg(() => POST("/bulk", { ids, op: "on_phone", value: false })) },
-        { label: "Heute gesehen", icon: "eye", action: () => { const d = new Date(), t = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; ids.forEach((id) => applyLocal(byId(id), "f_seen", t)); refreshAll(); toast(`${n} × heute gesehen`); bg(() => Promise.all(ids.map((id) => POST(`/seen-today/${id}`)))); } },
+        !hasSeen() ? null : { label: "Heute gesehen", icon: "eye", action: () => { const d = new Date(), t = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; ids.forEach((id) => applyLocal(byId(id), "f_seen", t)); refreshAll(); toast(`${n} × heute gesehen`); bg(() => Promise.all(ids.map((id) => POST(`/seen-today/${id}`)))); } },
         { label: "Löschen", icon: "trash", action: async () => { if (await confirmDlg(`${n} Einträge löschen?`, "Personen aus Importen werden danach nicht wieder importiert (freigeben unter Einstellungen → Importe). Mit Rückgängig holst du alle zurück.", "Löschen", true)) { await POST("/bulk", { ids, op: "delete" }); invalidate(); location.reload(); } } }]) } }, icon("more"))] : null);
   }
 

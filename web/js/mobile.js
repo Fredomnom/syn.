@@ -1,5 +1,7 @@
+// Ist kein Knopf der Hauptknopf (z.B. ohne „Heute gesehen“), wird der erste benutzbare es
+const primaryFirst = (box) => { if (!box.querySelector(".btn.primary")) box.querySelector(".btn:not([disabled])")?.classList.add("primary"); return box; };
 // Handy (PWA): schnell erfassen und finden. Untere Leiste: Personen, Kreise, Plus, Suche, Ich.
-import { S, h, icon, GET, POST, PATCH, DEL, clear, rebuild, optimistic, rows, themePref, setTheme, invalidate, avatar, circleChip, nameEl, rel, ringName, today, debounce,
+import { S, h, icon, GET, POST, PATCH, DEL, clear, rebuild, optimistic, hasSeen, rows, themePref, setTheme, invalidate, avatar, circleChip, nameEl, rel, ringName, today, debounce,
   postOrQueue, getOrBack, toast, modal, logo, qs, queued, fmtDate, menu, pickPerson } from "./core.js";
 import { primaryOf, valueEl, actionFor, editField, entityFieldList, runQuick, plain, bundFields, fieldSections, humanDate } from "./fields.js";
 import { LOCALE } from "./i18n.js";
@@ -63,7 +65,7 @@ export function personRow(r, onSeen) {
   const done = r.v.f_seen?.raw === today();
   return h("a.prow", { href: "#/p/" + r.id }, avatar(r, 38),
     h("div.grow", h("div.nm", nameEl(r)), sub(r)),
-    r.is_self ? null : h("button.seen" + (done ? ".done" : ""), { title: "Heute gesehen", "aria-label": "Heute gesehen", on: { click: async (e) => {
+    r.is_self || !hasSeen() ? null : h("button.seen" + (done ? ".done" : ""), { title: "Heute gesehen", "aria-label": "Heute gesehen", on: { click: async (e) => {
       e.preventDefault(); e.stopPropagation();
       const res = await postOrQueue(`/seen-today/${r.id}`, {}, `${r.display} gesehen`);
       e.currentTarget?.classList.add("done");
@@ -259,10 +261,10 @@ async function profile(page, id) {
         e.kind === "pet" ? h("span.chip.plain", icon("paw"), "Haustier") : null,
         e.on_phone_effective ? h("span.chip.plain", icon("smartphone"), "Handy") : null)),
     dupHint(e, { onChange: reload }),
-    e.is_self ? null : h("div.qa",
-      h("button.btn.primary.guide-seen", { on: { click: async () => { await postOrQueue(`/seen-today/${e.id}`, {}, e.display); invalidate(); reload(); } } }, icon("eye"), "Heute gesehen"),
+    e.is_self ? null : primaryFirst(h("div.qa",
+      hasSeen() ? h("button.btn.primary.guide-seen", { on: { click: async () => { await postOrQueue(`/seen-today/${e.id}`, {}, e.display); invalidate(); reload(); } } }, icon("eye"), "Heute gesehen") : null,
       tel ? h("a.btn", { href: "tel:" + tel.replace(/[^\d+]/g, "") }, icon("phone"), "Anrufen") : h("button.btn", { on: { click: async () => { if (await editField(S.fields.f_phone, [], `/entities/${e.id}/fields/f_phone`)) reload(); } } }, icon("plus"), "Nummer"),
-      tel ? h("a.btn", { href: "sms:" + tel.replace(/[^\d+]/g, "") }, icon("message"), "Schreiben") : mail ? h("a.btn", { href: "mailto:" + mail.value }, icon("mail"), "Schreiben") : h("button.btn", { disabled: true }, icon("message"), "Schreiben")),
+      tel ? h("a.btn", { href: "sms:" + tel.replace(/[^\d+]/g, "") }, icon("message"), "Schreiben") : mail ? h("a.btn", { href: "mailto:" + mail.value }, icon("mail"), "Schreiben") : h("button.btn", { disabled: true }, icon("message"), "Schreiben"))),
     e.is_self ? null : h("div.list",
       h("div.kv", { style: { background: "var(--bg)" } }, h("span.small.t2", "Ihr zwei"), h("a.small", { href: "#", on: { click: async (ev) => { ev.preventDefault(); if (await editIhrZwei(e)) reload(); } } }, bundKindName(e.ihr_zwei?.kind_id))),
       S.settings.use_levels ? h("div.kv.guide-ring", { on: { click: (ev) => ringPopup(ev.currentTarget, ring, async (l) => { await setRing(e.id, l); reload(); }) } }, h("span.k", "Ring"), h("span.v", ringName(ring),
@@ -405,12 +407,12 @@ export async function todayPage(page, { withUpcoming = true } = {}) {
         e.id ? h("div.qa",
           e.phone ? h("a.btn.primary", { href: "sms:" + e.phone.replace(/[^\d+]/g, "") }, "Schreiben") : e.email ? h("a.btn.primary", { href: "mailto:" + e.email }, "Schreiben") : h("a.btn.primary", { href: "#/p/" + e.id }, "Öffnen"),
           e.phone ? h("a.btn", { href: "tel:" + e.phone.replace(/[^\d+]/g, "") }, "Anrufen") : h("button.btn", { disabled: true }, "Anrufen"),
-          h("button.btn", { on: { click: () => { toast("Gesehen"); optimistic(() => POST(`/seen-today/${e.id}`)); } } }, "Gesehen")) : null,
+          hasSeen() ? h("button.btn", { on: { click: () => { toast("Gesehen"); optimistic(() => POST(`/seen-today/${e.id}`)); } } }, "Gesehen") : null) : null,
         h("div.small.t3", h("span.tag", "routine"), " ", it.day)));
     } else if (it.kind === "list") {
       page.append(h("div.card.col", { style: { gap: 0 } }, h("div.card-h", h("div", h("b", it.title), h("div.small.t2", it.day)), h("button.btn.sm.ghost.icon", { on: { click: (ev) => { const card = ev.currentTarget.closest(".card"); card?.classList.add("gone"); setTimeout(() => card?.remove(), 220); optimistic(() => POST(`/today/${it.id}/dismiss`), { onFail: reload }); } } }, icon("x"))),
         (it.data.items || []).map((x) => h("a.prow", { href: "#/p/" + x.id }, avatar({ display: x.name, name: x.name, ...(x.row || {}) }, 32), h("div.grow", h("div.nm", x.name), h("div.sub", x.text)),
-          h("button.btn.sm.icon", { title: "Heute gesehen", on: { click: (ev) => { ev.preventDefault(); const b = ev.currentTarget; b.classList.add("active"); optimistic(() => POST(`/seen-today/${x.id}`), { onFail: () => b.classList.remove("active") }); } } }, icon("eye"))))));
+          !hasSeen() ? null : h("button.btn.sm.icon", { title: "Heute gesehen", on: { click: (ev) => { ev.preventDefault(); const b = ev.currentTarget; b.classList.add("active"); optimistic(() => POST(`/seen-today/${x.id}`), { onFail: () => b.classList.remove("active") }); } } }, icon("eye"))))));
     }
   }
   if (withUpcoming) {

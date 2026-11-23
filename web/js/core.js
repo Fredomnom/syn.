@@ -121,6 +121,9 @@ export async function rebuild(el, fill) {
   return fresh;
 }
 
+// Gibt es das Feld „Zuletzt gesehen“? Ohne es verschwinden alle „Heute gesehen“-Knöpfe.
+export const hasSeen = () => !!S.fields?.f_seen;
+
 // Erst zeigen, dann speichern: die Oberfläche ist schon geändert, der Server folgt im Hintergrund.
 // Schlägt er fehl, gibt es einen Hinweis und onFail lädt den echten Stand.
 export function optimistic(server, { onFail, onDone } = {}) {

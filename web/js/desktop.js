@@ -1,5 +1,5 @@
 // Desktop: sortieren und bearbeiten in großen Mengen. Seitenleiste, sechs Ansichten, Personenseite, Kreise.
-import { S, h, icon, GET, POST, PUT, PATCH, DEL, clear, rebuild, optimistic, interacting, rows, captureSegs, animateSegs, invalidate, avatar, circleChip, nameEl, rel, ringName, today, debounce,
+import { S, h, icon, GET, POST, PUT, PATCH, DEL, clear, rebuild, optimistic, interacting, hasSeen, rows, captureSegs, animateSegs, invalidate, avatar, circleChip, nameEl, rel, ringName, today, debounce,
   toast, getOrBack, modal, logo, qs, menu, pickPerson, pickCircle, reloadCircles, confirmDlg, ringMini, MOD, fmtTs, circleColors, kindColors, promptDlg, RING, cssVar as V } from "./core.js";
 import { primaryOf, valueEl, actionFor, editField, entityFieldList, runQuick, bundFields, TYPE_NAMES, SOURCE, plain, fieldsFor, service, serviceIcon, fieldRow, fieldSections, sourceName } from "./fields.js";
 import { LOCALE } from "./i18n.js";
@@ -168,7 +168,7 @@ async function people(main, view, route, saved = null) {
     ...GROUPINGS.filter((g) => !g[2] || g[2]()).map(([k, l]) => ({ label: l, on: groupingOf(VS.view, VS.cfg) === k, action: () => { setGrouping(VS.view, VS.cfg, k, !!VS.savedId); groupBtn.lastChild.textContent = "Gruppiert: " + groupLabel(k); redraw(); } }))]) } },
     icon("layers"), h("span", "Gruppiert: " + groupLabel(groupingOf(VS.view, VS.cfg)))) : null;
   const subBtn = VS.view === "grid" ? h("button.btn.sm", { title: "Was unter dem Namen steht", on: { click: (e) => menu(e.currentTarget, [{ label: "Unter dem Namen" },
-    ...GRID_SUB_SPECIAL.map(([k, l]) => ({ label: l, on: gridSubOf() === k, action: () => { setGridSub(k); subBtn.lastChild.textContent = "Darunter: " + l; redraw(); } })),
+    ...GRID_SUB_SPECIAL.filter(([k]) => k !== "f_seen" || hasSeen()).map(([k, l]) => ({ label: l, on: gridSubOf() === k, action: () => { setGridSub(k); subBtn.lastChild.textContent = "Darunter: " + l; redraw(); } })),
     { label: "Felder" },
     ...S.fieldList.filter((f) => ["person", "both"].includes(f.scope) && f.id !== "f_seen" && f.type !== "image").map((f) => ({ label: f.name, on: gridSubOf() === f.id, action: () => { setGridSub(f.id); subBtn.lastChild.textContent = "Darunter: " + f.name; redraw(); } }))]) } },
     icon("list"), h("span", "Darunter: " + gridSubLabel(gridSubOf()))) : null;
@@ -256,7 +256,7 @@ async function drawView(body, all) {
 }
 
 // Was unter dem Namen in der Grid-Ansicht steht (gespeicherte Ansicht merkt es sich, sonst dieses Gerät)
-const gridSubOf = () => (VS.cfg && "gridSub" in VS.cfg ? VS.cfg.gridSub : LS("gridsub", "f_seen"));
+const gridSubOf = () => { const k = VS.cfg && "gridSub" in VS.cfg ? VS.cfg.gridSub : LS("gridsub", "f_seen"); return k === "f_seen" && !hasSeen() ? "" : k; };
 const setGridSub = (k) => { if (VS.savedId) VS.cfg.gridSub = k; else SAVE("gridsub", k); };
 const GRID_SUB_SPECIAL = [["f_seen", "Zuletzt gesehen"], ["", "Nichts"], ["level", "Ring"], ["main_circle", "Hauptkreis"], ["ist", "Ist (berechnet)"], ["created", "Erfasst"], ["aliases", "Auch genannt"]];
 const gridSubLabel = (k) => GRID_SUB_SPECIAL.find((x) => x[0] === k)?.[1] || S.fields[k]?.name || "Zuletzt gesehen";
@@ -285,7 +285,7 @@ function gridCell(g, r) {
     const seen = r.v.f_seen?.raw;
     const sub = gridSub(r, gridSubOf());
     g.append(h("a.pcell", { href: "#/p/" + r.id }, avatar(r, 56), h("div.nm.ellipsis", nameEl(r)), sub == null ? null : h("div.small.t2.ellipsis.pc-sub", { title: sub }, sub),
-      h("button.btn.sm.seen-btn", { title: "Heute gesehen", on: { click: async (e) => { e.preventDefault(); await POST(`/seen-today/${r.id}`); invalidate(); toast(`${r.display}: heute gesehen`); r.v.f_seen = { raw: today(), d: today() }; } } }, icon("eye"))));
+      !hasSeen() ? null : h("button.btn.sm.seen-btn", { title: "Heute gesehen", on: { click: async (e) => { e.preventDefault(); await POST(`/seen-today/${r.id}`); invalidate(); toast(`${r.display}: heute gesehen`); r.v.f_seen = { raw: today(), d: today() }; } } }, icon("eye"))));
   }
 }
 
@@ -360,7 +360,7 @@ async function personPage(main, id, local = null) {
   const act = (mutate, server) => { mutate(e); reload.local(); optimistic(server, { onFail: reload, onDone: reload.quiet }); };
   const seenNow = () => act((x) => { x.fields.f_seen = [{ value: today(), primary: true, source: "manual" }]; x.long_unseen = false; }, () => POST(`/seen-today/${id}`));
   rememberPerson(id);
-  if (!e.is_self) onPage("seen_today", () => { seenNow(); toast(`${e.display}: heute gesehen`); });
+  if (!e.is_self && hasSeen()) onPage("seen_today", () => { seenNow(); toast(`${e.display}: heute gesehen`); });
   onPage("edit_person", () => editPerson(e, bgOf(reload)));
   onPage("add_field", () => addField(e, { onDone: reload }));
   // weitere Kürzel der Personenseite (Einstellungen → Tastenkürzel)
@@ -391,9 +391,11 @@ async function personPage(main, id, local = null) {
       e.kind === "pet" ? h("span.chip.plain", icon("paw"), "Haustier") : null),
       e.aliases?.length ? h("div.small.t2", "auch: " + e.aliases.join(", ")) : null,
       h("div.meta-line", h("span", "Erfasst ", h("span.mono", (e.created_at || "").slice(0, 10))), e.on_phone_effective ? h("span.meta-pill", icon("smartphone", "xs"), "Mit Handy synchronisiert") : null)),
-    e.is_self ? null : h("button.btn.primary.guide-seen", { on: { click: seenNow } }, icon("eye"), "Heute gesehen"),
-    phone ? h("a.btn", { href: "tel:" + phone.value.replace(/[^\d+]/g, "") }, icon("phone"), "Anrufen") : null,
-    mail ? h("a.btn", { href: "mailto:" + mail.value }, icon("message"), "Schreiben") : null,
+    // ohne „Zuletzt gesehen“ kein „Heute gesehen“ – dann wird der nächste Knopf der Hauptknopf
+    ...(() => { const bs = [!e.is_self && hasSeen() ? ["button.guide-seen", { on: { click: seenNow } }, icon("eye"), "Heute gesehen"] : null,
+      phone ? ["a", { href: "tel:" + phone.value.replace(/[^\d+]/g, "") }, icon("phone"), "Anrufen"] : null,
+      mail ? ["a", { href: "mailto:" + mail.value }, icon("message"), "Schreiben"] : null].filter(Boolean);
+      return bs.map(([tag, attrs, ...kids], i) => h(tag.replace(/^(\w+)/, "$1.btn" + (i === 0 ? ".primary" : "")), attrs, ...kids)); })(),
     h("button.btn.icon", { on: { click: (ev) => menu(ev.currentTarget, [
       { label: "Bearbeiten", icon: "edit", action: () => editPerson(e, bgOf(reload)), hint: pretty(binding("edit_person")) },
       { label: "Feld hinzufügen", icon: "plus", action: () => addField(e, { onDone: reload }), hint: pretty(binding("add_field")) },
