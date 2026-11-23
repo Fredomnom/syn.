@@ -87,7 +87,7 @@ async function missingStandardCard(body) {
   if (!miss.length) return null;
   return card("Gelöschte Standardfelder",
     h("p.small.t2", "Mitgelieferte Felder, die du gelöscht hast. Beim Wiederherstellen kommen auch die Werte aus der letzten Löschung zurück."),
-    h("div.col", { style: { gap: "6px" } }, miss.map((m) => h("div.row", { style: { padding: "6px 0", borderBottom: "1px solid var(--line)" } },
+    h("div.col", { style: { gap: "6px" } }, miss.map((m) => h("div.row.rs-row", { style: { padding: "6px 0" } },
       h("span.grow", h("b", m.name), " ", h("span.tiny.t3", TYPE_NAMES[m.type] + (m.group === "freundebuch" ? " · Freundebuch" : ""))),
       h("span.small.t2", m.values ? `${m.values} ${m.values === 1 ? "Wert" : "Werte"} wiederherstellbar` : "keine Werte"),
       h("button.btn.sm", { on: { click: async () => { const r = await POST(`/fields/${m.id}/restore`); toast(`„${m.name}“ ist wieder da` + (r.values ? ` – ${r.values} ${r.values === 1 ? "Wert" : "Werte"} zurückgeholt` : "")); await reloadFields(); reloadTab(body, fields); } } }, icon("undo"), "Wiederherstellen")))));
