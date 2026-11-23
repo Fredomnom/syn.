@@ -84,6 +84,19 @@ def seed_circles(uid):
                               "description": None, "created_at": t, "updated_at": t})
 
 
+def backfill_freundebuch():
+    """Einmalig: bestehende Konten bekommen die Freundebuch-Fragen als Felder."""
+    if db.val("SELECT value FROM instance WHERE key='freundebuch_v1'"):
+        return
+    for u in db.q("SELECT id FROM users"):
+        pos = db.val("SELECT COALESCE(MAX(position), 0) + 1 FROM field_defs WHERE user_id=?", u["id"])
+        for i, (fid, scope, name, typ, opts, multi) in enumerate(FREUNDEBUCH):
+            if not db.val("SELECT 1 FROM field_defs WHERE user_id=? AND id=?", u["id"], fid):
+                db.insert("field_defs", {"user_id": u["id"], "id": fid, "scope": scope, "name": name, "type": typ,
+                                         "options": db.jd(opts), "multi": multi, "position": pos + i, "is_base": 1})
+    db.ex("INSERT OR REPLACE INTO instance(key,value) VALUES('freundebuch_v1', ?)", now())
+
+
 def backfill_meet_dates():
     """Einmalig: „Treffen“ war eine Zahl, jetzt eine Liste von Daten. Die alte Zahl bleibt als „Frühere Treffen
     (ohne Datum)“ erhalten; war „Zuletzt gesehen“ gesetzt, wird dieses Datum gleich ein echtes Treffen."""
@@ -190,6 +203,21 @@ BUND_KINDS = [
     ("trainingspartner", "Trainingspartner", "Trainingspartner", "Trainingspartner"),
 ]
 
+# Freundebuch: Fragen, die Leute über den Pflege-Link selbst beantworten (eigene Fragen = Feld mit Gruppe „freundebuch“)
+FB = {"group": "freundebuch"}
+FREUNDEBUCH = [
+    ("f_fb_photo", "person", "Foto", "image", FB, 0),
+    ("f_fb_nick", "person", "Spitzname", "text", FB, 0),
+    ("f_fb_food", "person", "Lieblingsessen", "text", FB, 0),
+    ("f_fb_color", "person", "Lieblingsfarbe", "text", FB, 0),
+    ("f_fb_music", "person", "Lieblingsmusik", "text", FB, 0),
+    ("f_fb_job", "person", "Traumberuf", "text", FB, 0),
+    ("f_fb_met", "person", "So haben wir uns kennengelernt", "note", FB, 0),
+    ("f_fb_like", "person", "Das mag ich an dir", "note", FB, 0),
+    ("f_fb_say", "person", "Das wollte ich dir schon immer sagen", "note", FB, 0),
+    ("f_fb_sign", "person", "Unterschrift", "image", FB, 0),
+]
+
 # (id, scope, name, type, options, multi)
 FIELDS = [
     ("f_seen", "both", "Zuletzt gesehen", "date", {}, 0),
@@ -233,7 +261,7 @@ def seed_user(uid: str, display_name: str = "Ich"):
     for i, (bid, name, ra, rb) in enumerate(BUND_KINDS):
         db.insert("bund_kinds", {"user_id": uid, "id": bid, "name": name, "role_a": ra, "role_b": rb,
                                  "position": i})
-    for i, (fid, scope, name, typ, opts, multi) in enumerate(FIELDS):
+    for i, (fid, scope, name, typ, opts, multi) in enumerate(FIELDS + FREUNDEBUCH):
         db.insert("field_defs", {"user_id": uid, "id": fid, "scope": scope, "name": name, "type": typ,
                                  "options": db.jd(opts), "multi": multi, "position": i, "is_base": 1})
     seed_circles(uid)

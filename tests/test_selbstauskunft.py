@@ -63,3 +63,75 @@ def test_pflege_link_ablauf(client):
     db.ex("UPDATE update_links SET expires_at='2000-01-01T00:00:00Z' WHERE id=?", l3["id"])
     assert c.get(f"/api/v1/public/update/{l3['path'][3:]}").status_code == 404
     assert c.post("/api/v1/entities/" + c.get("/api/v1/me").json()["self_id"] + "/update-link", json={}).status_code == 400
+
+
+PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+
+
+def test_freundebuch(client, monkeypatch):
+    import httpx
+    c = client
+    e = c.post("/api/v1/entities", json={"name": "Mia Buch"}).json()
+    l = c.post(f"/api/v1/entities/{e['id']}/update-link", json={}).json()
+    assert l["freundebuch"]
+    token = l["path"][3:]
+    auth = c.headers.pop("Authorization")
+    pub = c.get(f"/api/v1/public/update/{token}").json()
+    qids = [q["id"] for q in pub["book"]["questions"]]
+    assert "f_fb_like" in qids and "f_fb_photo" not in qids and pub["book"]["photo"] is False   # ohne Immich kein Foto
+    assert c.post(f"/api/v1/public/update/{token}/photo", files={"file": ("a.jpg", b"x", "image/jpeg")}).status_code == 404
+    r = c.post(f"/api/v1/public/update/{token}", json={"book": {"f_fb_food": "Sushi", "f_fb_like": "Du hörst zu.", "f_note": "nicht erlaubt"},
+                                                    "signature": PNG, "fields": {"f_phone": [{"old": None, "value": "+49 170 1234567"}]}}).json()
+    assert r["book"] == 3 and r["suggestions"] == 1
+    c.headers["Authorization"] = auth
+    f = c.get(f"/api/v1/entities/{e['id']}").json()["fields"]
+    assert f["f_fb_food"][0]["value"] == "Sushi" and f["f_fb_food"][0]["source"] == "selbst"   # direkt gespeichert
+    assert f["f_fb_sign"][0]["value"].startswith("/api/v1/files/") and "f_note" not in f
+    assert "f_phone" not in f                                                                  # Kontaktdaten: nur Vorschlag
+    assert any("Freundebuch" in it["title"] for it in c.get("/api/v1/today").json()["items"])
+
+    # mit Immich: Foto geht direkt dorthin (nachgebaut), landet im Album und ist über syn abrufbar
+    c.put("/api/v1/importers/immich", json={"config": {"url": "http://immich.local:2283", "api_key": "k"}, "enabled": True})
+    calls = []
+    def post(url, **kw):
+        calls.append(("POST", url.rsplit("/api/", 1)[1], kw.get("json")))
+        return httpx.Response(201, json={"id": "fb-asset-1", "status": "created"}, request=httpx.Request("POST", url))
+    def get(url, **kw):
+        calls.append(("GET", url.rsplit("/api/", 1)[1], None))
+        if url.endswith("/api/albums"):
+            return httpx.Response(200, json=[], request=httpx.Request("GET", url))
+        return httpx.Response(200, content=b"\xff\xd8jpg", headers={"content-type": "image/jpeg"}, request=httpx.Request("GET", url))
+    monkeypatch.setattr(httpx, "post", post); monkeypatch.setattr(httpx, "get", get)
+    from syn.modules import immich_api
+    monkeypatch.setattr(immich_api, "_client", type("C", (), {"get": staticmethod(get)})())
+    auth = c.headers.pop("Authorization")
+    assert c.get(f"/api/v1/public/update/{token}").json()["book"]["photo"] is True
+    assert c.post(f"/api/v1/public/update/{token}/photo", files={"file": ("a.txt", b"x", "text/plain")}).status_code == 400
+    assert c.post(f"/api/v1/public/update/{token}/photo", files={"file": ("ich.jpg", b"\xff\xd8jpg", "image/jpeg")}).status_code == 200
+    c.headers["Authorization"] = auth
+    assert ("POST", "assets", None) in calls and any(x[1] == "albums" and x[0] == "POST" and x[2]["albumName"] == "syn Freundebuch" for x in calls)
+    photo = c.get(f"/api/v1/entities/{e['id']}").json()["fields"]["f_fb_photo"][0]["value"]
+    assert photo == "/api/v1/immich/assets/fb-asset-1?size=preview"
+    assert c.get(photo).status_code == 200
+
+
+def test_profilbild_vorschlagen(client, monkeypatch):
+    import httpx
+    c = client
+    e = c.post("/api/v1/entities", json={"name": "Ole Bild"}).json()
+    c.put("/api/v1/importers/immich", json={"config": {"url": "http://immich.local:2283", "api_key": "k"}, "enabled": True})
+    token = c.post(f"/api/v1/entities/{e['id']}/update-link", json={}).json()["path"][3:]
+    resp = lambda m, url, **kw: httpx.Response(201 if m == "POST" else 200, request=httpx.Request(m, url), **kw)  # noqa: E731
+    monkeypatch.setattr(httpx, "post", lambda url, **kw: resp("POST", url, json={"id": "av-1"}))
+    monkeypatch.setattr(httpx, "get", lambda url, **kw: resp("GET", url, json=[]))
+    from syn.modules import immich_api
+    monkeypatch.setattr(immich_api, "_client", type("C", (), {"get": staticmethod(lambda url, **kw: resp("GET", url, content=b"\xff\xd8bild", headers={"content-type": "image/jpeg"}))})())
+    auth = c.headers.pop("Authorization")
+    assert c.post(f"/api/v1/public/update/{token}/photo", files={"file": ("ich.jpg", b"\xff\xd8", "image/jpeg")}, data={"as_avatar": "1"}).status_code == 200
+    c.headers["Authorization"] = auth
+    assert not c.get(f"/api/v1/entities/{e['id']}").json()["avatar"]                 # nicht direkt
+    s = next(x for x in c.get("/api/v1/suggestions", params={"entity_id": e["id"]}).json() if x["kind"] == "avatar")
+    assert s["payload"]["img"].startswith("/api/v1/immich/assets/av-1")
+    assert c.post(f"/api/v1/suggestions/{s['id']}/accept").status_code == 200
+    av = c.get(f"/api/v1/entities/{e['id']}").json()["avatar"]
+    assert av.startswith("/api/v1/files/") and c.get(av).content == b"\xff\xd8bild"   # echte Datei in syn

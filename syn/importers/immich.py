@@ -142,3 +142,46 @@ def push_names(uid, eid):
         db.ex("UPDATE field_values SET value=? WHERE id=?", db.jd(val), v["id"])
         n += 1
     return n
+
+
+ALBUM = "syn Freundebuch"
+
+
+def upload_photo(uid, data: bytes, filename: str, mime: str, person_eid: str) -> str | None:
+    """Foto aus dem Freundebuch direkt nach Immich (Album „syn Freundebuch“). Ohne Immich-Verbindung: None.
+    Braucht die Rechte asset.upload (und für das Album album.read/album.create/albumAsset.create)."""
+    import logging
+    from datetime import datetime, timezone
+
+    import httpx
+
+    from ..importe import get_config
+    cfg = get_config(uid, "immich")
+    if not cfg.get("api_key"):
+        return None
+    base, h = base_url(cfg), {"x-api-key": cfg["api_key"].strip(), "Accept": "application/json"}
+    t = datetime.now(timezone.utc).isoformat()
+    r = httpx.post(f"{base}/api/assets", headers=h, timeout=60,
+                   data={"fileCreatedAt": t, "fileModifiedAt": t, "filename": filename, "deviceAssetId": f"syn-fb-{person_eid}-{t}",
+                         "deviceId": "syn"},
+                   files={"assetData": (filename, data, mime)})
+    r.raise_for_status()
+    aid = r.json()["id"]
+    try:  # ins Album „syn Freundebuch“ (legt es beim ersten Mal an); ohne Album-Rechte bleibt das Foto trotzdem
+        albums = httpx.get(f"{base}/api/albums", headers=h, timeout=15).json()
+        al = next((a for a in albums if a.get("albumName") == ALBUM), None)
+        if al:
+            httpx.put(f"{base}/api/albums/{al['id']}/assets", headers=h, json={"ids": [aid]}, timeout=15)
+        else:
+            httpx.post(f"{base}/api/albums", headers=h, json={"albumName": ALBUM, "assetIds": [aid],
+                                                               "description": "Fotos, die Leute über ihr Freundebuch in syn geschickt haben"}, timeout=15)
+    except (httpx.HTTPError, ValueError) as e:
+        logging.getLogger("syn.immich").warning("Album: %s", e)
+    # syn darf das Foto danach durchreichen (wie die anderen Immich-Fotos dieser Person)
+    db.ex("INSERT OR IGNORE INTO immich_assets(user_id, person_id, asset_id, taken_at) VALUES(?,?,?,?)", uid, f"fb:{person_eid}", aid, t)
+    return aid
+
+
+def connected(uid) -> bool:
+    from ..importe import get_config
+    return bool(get_config(uid, "immich").get("api_key"))

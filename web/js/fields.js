@@ -267,7 +267,7 @@ export async function runQuick(eid, rid) {
 }
 
 // ---------------------------------------------------------------- Abschnitte und Zeilen-Darstellung
-export const GROUPS = [["kontakt", "Kontakt"], ["persoenlich", "Persönliches"], ["gemeinsam", "Gemeinsam"], ["weitere", "Weitere"], ["notiz", "Notizen"]];
+export const GROUPS = [["kontakt", "Kontakt"], ["persoenlich", "Persönliches"], ["gemeinsam", "Gemeinsam"], ["freundebuch", "Freundebuch"], ["weitere", "Weitere"], ["notiz", "Notizen"]];
 const BASE_GROUP = { f_phone: "kontakt", f_email: "kontakt", f_addr: "kontakt", f_profile: "kontakt",
   f_bday: "persoenlich", f_city: "persoenlich", f_company: "persoenlich", f_position: "persoenlich", f_study: "persoenlich",
   f_food: "persoenlich", f_train: "persoenlich", f_traits: "persoenlich", f_species: "persoenlich", f_breed: "persoenlich",

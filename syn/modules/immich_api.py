@@ -111,3 +111,14 @@ def face(eid: str, asset_id: str, ctx: Ctx = Depends(current)):
     db.ex("INSERT OR REPLACE INTO immich_faces(user_id, asset_id, person_id, x, y) VALUES(?,?,?,?,?)",
           ctx.uid, asset_id, pids[0], x, y)
     return {"x": x, "y": y}
+
+
+def fetch_asset(uid, asset_id: str, size="preview") -> tuple[bytes, str]:
+    """Bild aus Immich holen (z.B. für ein vorgeschlagenes Profilbild)."""
+    cfg = get_config(uid, "immich")
+    if not cfg.get("api_key"):
+        raise HTTPException(400, "Immich ist nicht verbunden")
+    r = _client.get(f"{base_url(cfg)}/api/assets/{asset_id}/thumbnail", params={"size": size}, headers={"x-api-key": cfg["api_key"].strip()})
+    if r.status_code != 200:
+        raise HTTPException(502, "Immich liefert das Bild nicht")
+    return r.content, r.headers.get("content-type", "image/jpeg")

@@ -471,7 +471,7 @@ async function suggestions(body) {
   const list = await GET("/suggestions");
   const circ = await GET("/suggestions/circles");
   body.append(card("Werte aus Importen und Google", list.length ? list.map((s) => h("div.row", { style: { borderBottom: "1px solid var(--line)", padding: "6px 0" } },
-    h("a", { href: "#/p/" + s.entity_id }, s.entity_name), h("span.grow.small", h("b", s.field_name || (s.kind === "name" ? "Name" : s.kind)), ": ", typeof s.payload.value === "object" ? JSON.stringify(s.payload.value) : String(s.payload.value), h("span.t3", ` · ${s.payload.why || ""} · ${s.source}`)),
+    s.payload.img ? h("img.sugg-img", { src: s.payload.img, alt: "" }) : null, h("a", { href: "#/p/" + s.entity_id }, s.entity_name), h("span.grow.small", h("b", s.field_name || (s.kind === "name" ? "Name" : s.kind === "avatar" ? "Profilbild" : s.kind)), ": ", typeof s.payload.value === "object" ? JSON.stringify(s.payload.value) : String(s.payload.value), h("span.t3", ` · ${s.payload.why || ""} · ${s.source}`)),
     h("button.btn.sm", { on: { click: async (e) => { await POST(`/suggestions/${s.id}/accept`); invalidate(); e.target.closest(".row").remove(); } } }, "Übernehmen"),
     h("button.btn.sm.ghost", { on: { click: async (e) => { await POST(`/suggestions/${s.id}/reject`); e.target.closest(".row").remove(); } } }, "Ablehnen"))) : h("div.t3", "Keine offenen Vorschläge.")),
   card("Neue Kreise", circ.length ? circ.map((sg) => h("div.row", { style: { borderBottom: "1px solid var(--line)", padding: "6px 0" } },

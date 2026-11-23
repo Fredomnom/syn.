@@ -313,19 +313,21 @@ export async function updateLinkDialog(e) {
             navigator.share ? h("button.btn.sm", { on: { click: () => navigator.share({ title: "Deine Angaben", text: "Magst du kurz prüfen, ob deine Kontaktdaten noch stimmen?", url }).catch(() => {}) } }, icon("ext"), "Teilen") : null,
             h("button.btn.sm", { on: { click: async () => { const { qrDialog } = await import("./qr.js"); qrDialog("Angaben prüfen", url, { hint: "Zum Scannen für die Person." }); } } }, icon("qr"), "QR-Code"))),
         h("div.small.t2", `Gilt noch ${days} ${days === 1 ? "Tag" : "Tage"}` + (l.answers ? ` · ${l.answers}× beantwortet` : " · noch nicht beantwortet")),
-        h("div.small.t3", "Freigegeben: " + l.fields.map((f) => S.fields[f]?.name || f).join(", ")),
-        h("div.row.wrap", h("button.btn.sm", { on: { click: async () => { await post(`/entities/${e.id}/update-link`, { fields: l.fields }); t("Neuer Link – der alte gilt nicht mehr"); draw(); } } }, icon("refresh"), "Neuer Link"),
+        h("div.small.t3", "Freigegeben: " + l.fields.map((f) => S.fields[f]?.name || f).join(", ") + (l.freundebuch ? " · mit Freundebuch" : "")),
+        h("div.row.wrap", h("button.btn.sm", { on: { click: async () => { await post(`/entities/${e.id}/update-link`, { fields: l.fields, freundebuch: l.freundebuch }); t("Neuer Link – der alte gilt nicht mehr"); draw(); } } }, icon("refresh"), "Neuer Link"),
           h("button.btn.sm.danger", { on: { click: async () => { await del(`/update-links/${l.id}`); t("Link zurückgezogen"); draw(); } } }, icon("x"), "Zurückziehen")));
     } else {
-      const sel = new Set(st.default.filter((f) => st.available.some((a) => a.id === f)));
+      const sel = new Set(st.default.filter((f) => st.available.some((a) => a.id === f) && !(S.fields[f]?.options?.group === "freundebuch")));
+      const fbBox = h("input", { type: "checkbox", checked: true });
       const chips = h("div.sugg");
       const drawChips = () => clear(chips, st.available.map((a) => h("span.chip" + (sel.has(a.id) ? ".sel" : ".plain"), { on: { click: () => { sel.has(a.id) ? sel.delete(a.id) : sel.add(a.id); drawChips(); } } }, sel.has(a.id) ? icon("check", "xs") : null, a.name)));
       drawChips();
       clear(box,
         h("p.small.t2", `Schick ${e.display || e.name} einen Link, um die eigenen Kontaktdaten zu prüfen und zu ergänzen. Nichts wird direkt geändert – alles kommt als Vorschlag zu dir. Der Link gilt ${st.days} Tage.`),
         h("div.small.t2", "Was die Person sehen und ändern darf:"), chips,
+        h("label.check", fbBox, h("span", h("b", "Mit Freundebuch"), h("span.small.t2", " – Spitzname, Lieblingsessen, „Das mag ich an dir“ …, Unterschrift und (mit Immich) ein Foto. Diese Antworten speichert syn direkt."))),
         st.link && !st.link.active ? h("div.small.t3", st.link.revoked ? "Der letzte Link wurde zurückgezogen." : "Der letzte Link ist abgelaufen.") : null,
-        h("button.btn.primary", { style: { alignSelf: "flex-start" }, on: { click: async () => { if (!sel.size) return t("Mindestens ein Feld wählen", { err: true }); await post(`/entities/${e.id}/update-link`, { fields: [...sel] }); draw(); } } }, icon("link"), "Link erstellen"));
+        h("button.btn.primary", { style: { alignSelf: "flex-start" }, on: { click: async () => { if (!sel.size) return t("Mindestens ein Feld wählen", { err: true }); await post(`/entities/${e.id}/update-link`, { fields: [...sel], freundebuch: fbBox.checked }); draw(); } } }, icon("link"), "Link erstellen"));
     }
   };
   await draw();

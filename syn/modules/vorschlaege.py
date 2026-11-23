@@ -195,6 +195,13 @@ def accept(sid: str, ctx: Ctx = Depends(current)):
                 model.set_single(ctx.uid, ot, oid, d, p.get("value"), "manual")
         elif s["kind"] == "name":
             model.patch_entity(ctx.uid, s["entity_id"], {"name": p["value"]})
+        elif s["kind"] == "avatar" and p.get("asset"):
+            # Profilbild aus Immich holen und als echte Datei speichern (braucht u.a. das Handy-Adressbuch)
+            from .dateien import store_bytes
+            from .immich_api import fetch_asset
+            data, mime = fetch_asset(ctx.uid, p["asset"], "preview")
+            fid = store_bytes(ctx.uid, data, mime)
+            model.patch_entity(ctx.uid, s["entity_id"], {"avatar": f"/api/v1/files/{fid}"}, "selbst")
         db.ex("UPDATE suggestions SET status='accepted' WHERE id=?", sid)
     return {"ok": True}
 

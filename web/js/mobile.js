@@ -382,8 +382,9 @@ async function suggestionsPage(page) {
   page.append(h("div.mtop", h("a.back", { href: "#/me" }, icon("left"), "Ich")), h("h1", "Vorschläge"),
     h("p.small.t2", "Werte aus Importen und Daten, die syn nicht ungefragt übernimmt."),
     sugg.length ? h("div.list", sugg.map((s) => h("div.prow",
+      s.payload.img ? h("img.sugg-img", { src: s.payload.img, alt: "" }) : null,
       h("a.grow", { href: s.entity_id ? "#/p/" + s.entity_id : "#/suggestions", style: { textDecoration: "none", color: "inherit", minWidth: 0 } },
-        h("div.nm", s.entity_name || ""), h("div.sub", { style: { whiteSpace: "normal" } }, `${s.field_name || (s.kind === "name" ? "Name" : s.kind)}: ${typeof s.payload.value === "object" ? JSON.stringify(s.payload.value) : s.payload.value} · ${s.payload.why || s.source}`)),
+        h("div.nm", s.entity_name || ""), h("div.sub", { style: { whiteSpace: "normal" } }, `${s.field_name || (s.kind === "name" ? "Name" : s.kind === "avatar" ? "Profilbild" : s.kind)}: ${typeof s.payload.value === "object" ? JSON.stringify(s.payload.value) : s.payload.value} · ${s.payload.why || s.source}`)),
       h("button.btn.sm", { on: { click: async () => { await POST(`/suggestions/${s.id}/accept`); invalidate(); reload(); } } }, "Übernehmen"),
       h("button.btn.sm.ghost.icon", { "aria-label": "Ablehnen", on: { click: async () => { await POST(`/suggestions/${s.id}/reject`); reload(); } } }, icon("x"))))) : h("div.card.pad.empty", "Keine offenen Vorschläge."));
 }

@@ -7,7 +7,9 @@ Der Link gilt 30 Tage (bewusst keine Einstellung) und lässt sich jederzeit zur�
 import secrets
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+import base64
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
@@ -39,13 +41,24 @@ def _defs(uid, ids):
 
 
 def _out(l):
-    return {"id": l["id"], "path": f"/u/{l['token']}", "fields": db.jl(l["fields"], []), "created_at": l["created_at"],
+    fl = db.jl(l["fields"], [])
+    return {"id": l["id"], "path": f"/u/{l['token']}", "fields": [f for f in fl if f != BOOK], "freundebuch": BOOK in fl, "created_at": l["created_at"],
             "expires_at": l["expires_at"], "revoked": bool(l["revoked_at"]), "active": _active(l),
             "last_used_at": l["last_used_at"], "answers": l["answers"]}
 
 
 class LinkIn(BaseModel):
     fields: list[str] | None = None
+    freundebuch: bool = True      # Freundebuch-Fragen mit dazu (Antworten werden direkt gespeichert)
+
+
+BOOK = "freundebuch"   # steht als Markierung in der Feldliste des Links
+
+
+def _book_defs(uid):
+    """Freundebuch-Fragen: alle Felder der Gruppe „freundebuch“ (ohne Foto/Unterschrift, die haben eigene Wege)."""
+    return [d for d in model.field_defs(uid).values() if (d.get("options") or {}).get("group") == BOOK
+            and d["type"] in ("text", "note") and d["scope"] in ("person", "both")]
 
 
 @router.get("/api/v1/entities/{eid}/update-link")
@@ -69,7 +82,7 @@ def create_link(eid: str, body: LinkIn, ctx: Ctx = Depends(current)):
     db.ex("UPDATE update_links SET revoked_at=? WHERE user_id=? AND entity_id=? AND revoked_at IS NULL", now(), ctx.uid, eid)
     lid = new_id("ul")
     db.insert("update_links", {"id": lid, "user_id": ctx.uid, "entity_id": eid, "token": secrets.token_urlsafe(18),
-                               "fields": db.jd(fields), "created_at": now(), "expires_at": _iso(t + timedelta(days=DAYS)), "answers": 0})
+                               "fields": db.jd(fields + ([BOOK] if body.freundebuch else [])), "created_at": now(), "expires_at": _iso(t + timedelta(days=DAYS)), "answers": 0})
     return _out(db.q1("SELECT * FROM update_links WHERE id=?", lid))
 
 
@@ -97,7 +110,14 @@ def public_get(token: str):
     e = model.get_entity(uid, eid)
     me = model.get_entity(uid, model.self_id(uid))
     vals = model.get_values("entity", eid, include_deprecated=False)
-    defs = _defs(uid, db.jl(l["fields"], []))
+    fl = db.jl(l["fields"], [])
+    defs = _defs(uid, fl)
+    book = None
+    if BOOK in fl:
+        from ..importers.immich import connected
+        prim = lambda fid: (vals.get(fid) or [{}])[0].get("value")  # noqa: E731
+        book = {"questions": [{"id": d["id"], "name": d["name"], "type": d["type"], "value": prim(d["id"])} for d in _book_defs(uid)],
+                "photo": connected(uid), "has_photo": bool(prim("f_fb_photo")), "has_sign": bool(prim("f_fb_sign"))}
     services = [{k: s.get(k) for k in ("id", "name")} for s in user_settings(uid).get("services", [])]
     return {
         "owner": display_name(me), "owner_first": me.get("first_name") or display_name(me).split(" ")[0],
@@ -105,6 +125,7 @@ def public_get(token: str):
         "expires_at": l["expires_at"], "services": services,
         "fields": [{"id": d["id"], "name": d["name"], "type": d["type"], "multi": bool(d["multi"]),
                     "values": [{"value": v["value"], "label": v.get("label")} for v in vals.get(d["id"], [])]} for d in defs],
+        "book": book,
     }
 
 
@@ -120,6 +141,8 @@ class Answer(BaseModel):
     fields: dict[str, list[Change]] = {}
     message: str | None = None
     website: str | None = None    # Honigtopf gegen Bots
+    book: dict[str, str] = {}     # Freundebuch-Antworten (werden direkt gespeichert – es sind ihre eigenen Worte)
+    signature: str | None = None  # Unterschrift als PNG-Data-URL
 
 
 def _clean(v):
@@ -180,13 +203,66 @@ def public_answer(token: str, body: Answer):
                     p["comment"] = comment
                     p["why"] = f"{p['why']}: „{comment}“"
                 n += bool(add_suggestion(uid, "field", eid, p, SOURCE))
+        # Freundebuch: direkt speichern (Quelle „selbst“, steht im Verlauf), nur die freigegebenen Fragen
+        fb = 0
+        if BOOK in db.jl(l["fields"], []):
+            qs = {d["id"]: d for d in _book_defs(uid)}
+            for fid, text in (body.book or {}).items():
+                d = qs.get(fid)
+                if not d or not isinstance(text, str):
+                    continue
+                text = text.strip()[:2000 if d["type"] == "note" else 200]
+                old_v = (cur.get(fid) or [{}])[0].get("value")
+                if text and text != old_v:
+                    model.set_entity_field(uid, eid, fid, text, SOURCE)
+                    fb += 1
+            sig = body.signature or ""
+            if sig.startswith("data:image/png;base64,") and len(sig) < 400_000:
+                try:
+                    from .dateien import store_bytes
+                    fid_ = store_bytes(uid, base64.b64decode(sig.split(",", 1)[1]), "image/png")
+                    model.set_entity_field(uid, eid, "f_fb_sign", f"/api/v1/files/{fid_}", SOURCE)
+                    fb += 1
+                except Exception:
+                    pass
         msg = (body.message or "").strip()[:500]
-        if n or msg:
+        if n or msg or fb:
             db.insert("today_items", {"id": new_id("t"), "user_id": uid, "routine_id": None, "entity_id": eid, "kind": "card",
-                                      "title": f"{who} hat die eigenen Angaben geprüft" + (f" – {n} Vorschl{'ag' if n == 1 else 'äge'}" if n else ""),
+                                      "title": (f"{who} hat dein Freundebuch ausgefüllt" if fb else f"{who} hat die eigenen Angaben geprüft")
+                                               + (f" – {n} Vorschl{'ag' if n == 1 else 'äge'}" if n else ""),
                                       "body": msg[:140], "day": now()[:10], "created_at": now(), "data": "{}"})
         db.ex("UPDATE update_links SET answers=answers+1, last_used_at=? WHERE id=?", now(), l["id"])
-    return {"ok": True, "suggestions": n, "owner": display_name(model.get_entity(uid, model.self_id(uid)))}
+    return {"ok": True, "suggestions": n, "book": fb, "owner": display_name(model.get_entity(uid, model.self_id(uid)))}
+
+
+@router.post("/api/v1/public/update/{token}/photo", include_in_schema=False)
+async def public_photo(token: str, file: UploadFile = File(...), as_avatar: str | None = Form(None)):
+    """Foto fürs Freundebuch: geht direkt nach Immich (Album „syn Freundebuch“). Ohne Immich gibt es keine Fotos."""
+    l = _by_token(token)
+    if BOOK not in db.jl(l["fields"], []):
+        raise HTTPException(404, "Kein Freundebuch")
+    from ..importers.immich import connected, upload_photo
+    uid, eid = l["user_id"], l["entity_id"]
+    if not connected(uid):
+        raise HTTPException(404, "Fotos sind hier nicht möglich")
+    mime = (file.content_type or "").lower()
+    if not mime.startswith("image/"):
+        raise HTTPException(400, "Bitte ein Bild")
+    data = await file.read(15 * 1024 * 1024 + 1)
+    if len(data) > 15 * 1024 * 1024:
+        raise HTTPException(413, "Das Bild ist zu groß (höchstens 15 MB)")
+    try:
+        aid = upload_photo(uid, data, file.filename or "freundebuch.jpg", mime, eid)
+    except Exception:
+        raise HTTPException(502, "Das Foto konnte gerade nicht gespeichert werden") from None
+    if not aid:
+        raise HTTPException(404, "Fotos sind hier nicht möglich")
+    model.set_entity_field(uid, eid, "f_fb_photo", f"/api/v1/immich/assets/{aid}?size=preview", SOURCE)
+    if as_avatar in ("1", "true", "on"):  # „Auch als mein Profilbild vorschlagen“ – nur als Vorschlag
+        who = model.get_entity(uid, eid)["name"] or "Die Person"
+        add_suggestion(uid, "avatar", eid, {"value": "neues Profilbild", "asset": aid, "img": f"/api/v1/immich/assets/{aid}?size=thumbnail",
+                                            "why": f"{who} schlägt sich selbst ein Profilbild vor"}, SOURCE)
+    return {"ok": True}
 
 
 def install(app):

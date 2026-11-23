@@ -409,7 +409,8 @@ export async function personCards(e, reload, { mobile = false } = {}) {
   const routines = e.routines.length ? h("div.card", h("div.card-h", h("h3", "Routinen, die hier greifen")), h("div.card-b.col", e.routines.map((r) => h("div.row", h("span.tag", r.next ? r.next : "aktiv"), h("a", { href: "#/settings/routines?r=" + r.id }, r.name), h("span.small.t3", r.trigger_text))))) : null;
   const notes = e.notes?.length ? h("div.card", h("div.card-h", h("h3", "Notizen")), h("div.card-b.col", e.notes.map((n) => h("div", h("span.mono.t3", n.day + " "), h("span.tag", n.role), " ", n.text.replace(/@\[([^\]]+)\]\([^)]+\)/g, "$1").slice(0, 140))))) : null;
   const suggBox = sugg.length ? h("div.card", h("div.card-h", h("h3", "Vorschläge")), h("div.card-b.col", sugg.map((s) => h("div.row",
-    h("div.grow.small", h("b", s.field_name || (s.kind === "name" ? "Name" : s.kind)), ": ", typeof s.payload.value === "object" ? JSON.stringify(s.payload.value) : s.payload.value, h("div.t3.tiny", (s.payload.why || "") + " · " + SOURCE(s.source))),
+    s.payload.img ? h("img.sugg-img", { src: s.payload.img, alt: "" }) : null,
+    h("div.grow.small", h("b", s.field_name || (s.kind === "name" ? "Name" : s.kind === "avatar" ? "Profilbild" : s.kind)), ": ", typeof s.payload.value === "object" ? JSON.stringify(s.payload.value) : s.payload.value, h("div.t3.tiny", (s.payload.why || "") + " · " + SOURCE(s.source))),
     h("button.btn.sm", { on: { click: async () => { await POST(`/suggestions/${s.id}/accept`); invalidate(); reload(); } } }, "Übernehmen"),
     h("button.btn.sm.ghost.icon", { on: { click: async () => { await POST(`/suggestions/${s.id}/reject`); reload(); } } }, icon("x")))))) : null;
   const self = e.is_self ? await selfOverview(allRows) : null;
