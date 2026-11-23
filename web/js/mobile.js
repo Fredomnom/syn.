@@ -1,5 +1,5 @@
 // Handy (PWA): schnell erfassen und finden. Untere Leiste: Personen, Kreise, Plus, Suche, Ich.
-import { S, h, icon, GET, POST, PATCH, DEL, clear, rebuild, rows, themePref, setTheme, invalidate, avatar, circleChip, nameEl, rel, ringName, today, debounce,
+import { S, h, icon, GET, POST, PATCH, DEL, clear, rebuild, optimistic, rows, themePref, setTheme, invalidate, avatar, circleChip, nameEl, rel, ringName, today, debounce,
   postOrQueue, getOrBack, toast, modal, logo, qs, queued, fmtDate, menu, pickPerson } from "./core.js";
 import { primaryOf, valueEl, actionFor, editField, entityFieldList, runQuick, plain, bundFields, fieldSections, humanDate } from "./fields.js";
 import { LOCALE } from "./i18n.js";
@@ -401,16 +401,16 @@ export async function todayPage(page, { withUpcoming = true } = {}) {
     if (it.kind === "card") {
       const e = it.entity || {};
       page.append(h("div.card.pad.col.today-card",
-        h("div.row", e.id ? h("a.today-av", { href: "#/p/" + e.id, title: "Profil öffnen" }, avatar(e, 40)) : null, h("div.grow", e.id ? h("a.today-title", { href: "#/p/" + e.id }, h("b", it.title)) : h("b", it.title), h("div.small.t2", [e.level ? ringName(e.level) : null, e.bund_kind ? bundKindName(e.bund_kind) : null].filter(Boolean).join(" · "), " ", it.body ? h("span.qmark", it.body) : null)), h("button.btn.sm.ghost.icon", { title: "Erledigt", on: { click: async () => { await POST(`/today/${it.id}/dismiss`); reload(); } } }, icon("x"))),
+        h("div.row", e.id ? h("a.today-av", { href: "#/p/" + e.id, title: "Profil öffnen" }, avatar(e, 40)) : null, h("div.grow", e.id ? h("a.today-title", { href: "#/p/" + e.id }, h("b", it.title)) : h("b", it.title), h("div.small.t2", [e.level ? ringName(e.level) : null, e.bund_kind ? bundKindName(e.bund_kind) : null].filter(Boolean).join(" · "), " ", it.body ? h("span.qmark", it.body) : null)), h("button.btn.sm.ghost.icon", { title: "Erledigt", on: { click: (ev) => { const card = ev.currentTarget.closest(".card"); card?.classList.add("gone"); setTimeout(() => card?.remove(), 220); optimistic(() => POST(`/today/${it.id}/dismiss`), { onFail: reload }); } } }, icon("x"))),
         e.id ? h("div.qa",
           e.phone ? h("a.btn.primary", { href: "sms:" + e.phone.replace(/[^\d+]/g, "") }, "Schreiben") : e.email ? h("a.btn.primary", { href: "mailto:" + e.email }, "Schreiben") : h("a.btn.primary", { href: "#/p/" + e.id }, "Öffnen"),
           e.phone ? h("a.btn", { href: "tel:" + e.phone.replace(/[^\d+]/g, "") }, "Anrufen") : h("button.btn", { disabled: true }, "Anrufen"),
-          h("button.btn", { on: { click: async () => { await POST(`/seen-today/${e.id}`); toast("Gesehen"); } } }, "Gesehen")) : null,
+          h("button.btn", { on: { click: () => { toast("Gesehen"); optimistic(() => POST(`/seen-today/${e.id}`)); } } }, "Gesehen")) : null,
         h("div.small.t3", h("span.tag", "routine"), " ", it.day)));
     } else if (it.kind === "list") {
-      page.append(h("div.card.col", { style: { gap: 0 } }, h("div.card-h", h("div", h("b", it.title), h("div.small.t2", it.day)), h("button.btn.sm.ghost.icon", { on: { click: async () => { await POST(`/today/${it.id}/dismiss`); reload(); } } }, icon("x"))),
+      page.append(h("div.card.col", { style: { gap: 0 } }, h("div.card-h", h("div", h("b", it.title), h("div.small.t2", it.day)), h("button.btn.sm.ghost.icon", { on: { click: (ev) => { const card = ev.currentTarget.closest(".card"); card?.classList.add("gone"); setTimeout(() => card?.remove(), 220); optimistic(() => POST(`/today/${it.id}/dismiss`), { onFail: reload }); } } }, icon("x"))),
         (it.data.items || []).map((x) => h("a.prow", { href: "#/p/" + x.id }, avatar({ display: x.name, name: x.name, ...(x.row || {}) }, 32), h("div.grow", h("div.nm", x.name), h("div.sub", x.text)),
-          h("button.btn.sm.icon", { title: "Heute gesehen", on: { click: async (ev) => { ev.preventDefault(); await POST(`/seen-today/${x.id}`); ev.currentTarget.classList.add("active"); } } }, icon("eye"))))));
+          h("button.btn.sm.icon", { title: "Heute gesehen", on: { click: (ev) => { ev.preventDefault(); const b = ev.currentTarget; b.classList.add("active"); optimistic(() => POST(`/seen-today/${x.id}`), { onFail: () => b.classList.remove("active") }); } } }, icon("eye"))))));
     }
   }
   if (withUpcoming) {

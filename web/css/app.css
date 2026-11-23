@@ -1511,3 +1511,4 @@ syn-personcard.with-banner .pc-head .av { box-shadow: 0 0 0 4px var(--white); }
 .sc-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 5px 0; border-top: 1px solid var(--line); font-size: 13.5px; }
 .sc-row:first-child { border-top: 0; }
 .sc-l { min-width: 0; }
+.card.gone { opacity: 0; transform: scale(.97); transition: opacity .2s, transform .2s; }

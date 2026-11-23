@@ -1,6 +1,6 @@
 // Tabelle: Spreadsheet mit Formelleiste, Tastatur, Bereichsauswahl, Füllen per ⌘D, Kopieren/Einfügen,
 // Ring-Popup in der Zelle und Bulk-Aktionen für markierte Zeilen.
-import { S, h, icon, GET, POST, PATCH, clear, invalidate, avatar, circleChip, nameEl, rel, ringName, menu, pickCircle, toast, confirmDlg, modal, rows, MOD, popover, closePop } from "./core.js";
+import { S, h, icon, GET, POST, PATCH, clear, invalidate, optimistic, avatar, circleChip, nameEl, rel, ringName, menu, pickCircle, toast, confirmDlg, modal, rows, MOD, popover, closePop } from "./core.js";
 import { LOCALE } from "./i18n.js";
 import { editField, plain, TYPE_NAMES } from "./fields.js";
 import { ringPopup } from "./shared.js";
@@ -170,19 +170,35 @@ export async function table(body, list, all, grouping = "", redraw = null) {
   }
 
   // ------------------------------------------------ Bearbeiten
-  async function save(r, c, value) {
-    try {
-      if (c.key === "name") {
-        const body = r.name || !r.description ? { name: value } : { description: value };
-        await PATCH("/entities/" + r.id, body); if (body.name !== undefined) r.name = value || null; else r.description = value;
-        r.display = r.name || r.description;
-      } else {
-        await POST("/bulk/cells", { cells: [{ id: r.id, field: c.key, value: value === "" ? null : c.def?.type === "choice" ? (c.def.options?.multiple ? value.split(",").map((s) => s.trim()).filter(Boolean) : value) : value }] });
-        const fresh = (await rows(true)).find((x) => x.id === r.id);
-        if (fresh) Object.assign(r, fresh);
-      }
-      invalidate();
-    } catch (_) {}
+  // Erst zeigen, dann speichern: Zelle sofort lokal setzen, Server im Hintergrund; danach still die echten Werte holen
+  const byId = (id) => list.find((y) => y.id === id);
+  function applyLocal(r, key, value) {
+    if (!r) return;
+    if (key === "name") { if (r.name || !r.description) r.name = value || null; else r.description = value; r.display = r.name || r.description; return; }
+    if (key === "f_level") { r.level = value ?? null; return; }
+    if (key === "main_circle_id") { r.main_circle_id = value; if (value && !r.circles.includes(value)) r.circles.push(value); return; }
+    if (key === "kind") { r.kind = value; return; }
+    const def = S.fields[key]; if (!def) return;
+    if (value == null || value === "" || (Array.isArray(value) && !value.length)) delete r.v[key];
+    else r.v[key] = { ...(r.v[key] || {}), raw: value, d: plain(def, value), u: false };
+  }
+  let syncT = null;
+  const resync = () => { clearTimeout(syncT); syncT = setTimeout(async () => {
+    if (st.editing || document.querySelector(".backdrop:not(.leaving), .pop")) return resync();
+    const fresh = Object.fromEntries((await rows(true)).map((x) => [x.id, x]));
+    list.forEach((r) => fresh[r.id] && Object.assign(r, fresh[r.id])); refreshAll();
+  }, 700); };
+  const bg = (server) => optimistic(server, { onDone: resync, onFail: resync });
+  function save(r, c, value) {
+    const cellValue = value === "" ? null : c.def?.type === "choice" ? (c.def.options?.multiple ? value.split(",").map((s) => s.trim()).filter(Boolean) : value) : value;
+    if (c.key === "name") {
+      const body = r.name || !r.description ? { name: value } : { description: value };
+      applyLocal(r, "name", value);
+      bg(() => PATCH("/entities/" + r.id, body));
+    } else {
+      applyLocal(r, c.key, cellValue);
+      bg(() => POST("/bulk/cells", { cells: [{ id: r.id, field: c.key, value: cellValue }] }));
+    }
     const ri = list.indexOf(r); cols.forEach((cc, ci) => fillCell(tds[ri][ci], r, cc)); paint();
   }
   function startEdit(initial) {
@@ -219,9 +235,9 @@ export async function table(body, list, all, grouping = "", redraw = null) {
   async function cellAction() {
     const r = list[st.act.r], c = cols[st.act.c]; if (!r || c.locked) return;
     const td = tds[st.act.r][st.act.c];
-    if (c.edit === "ring") return ringPopup(td, r.level, async (l) => { await POST("/bulk", { ids: selectedIds(), op: "ring", value: l }); for (const id of selectedIds()) { const x = list.find((y) => y.id === id); if (x) x.level = l; } invalidate(); refreshAll(); });
-    if (c.edit === "circle") return pickCircle(td, { onPick: async (ci) => { await POST("/bulk", { ids: selectedIds(), op: "main_circle", value: ci.id }); invalidate(); for (const id of selectedIds()) { const x = list.find((y) => y.id === id); if (x) { x.main_circle_id = ci.id; if (!x.circles.includes(ci.id)) x.circles.push(ci.id); } } refreshAll(); } });
-    if (c.edit === "kind") return menu(td, [["person", "Mensch"], ["pet", "Haustier"]].map(([k, l]) => ({ label: l, action: async () => { await POST("/bulk", { ids: selectedIds(), op: "kind", value: k }); selectedIds().forEach((id) => { const x = list.find((y) => y.id === id); if (x) x.kind = k; }); invalidate(); refreshAll(); } })));
+    if (c.edit === "ring") return ringPopup(td, r.level, (l) => { const ids = selectedIds(); ids.forEach((id) => applyLocal(byId(id), "f_level", l)); refreshAll(); bg(() => POST("/bulk", { ids, op: "ring", value: l })); });
+    if (c.edit === "circle") return pickCircle(td, { onPick: (ci) => { const ids = selectedIds(); ids.forEach((id) => applyLocal(byId(id), "main_circle_id", ci.id)); refreshAll(); bg(() => POST("/bulk", { ids, op: "main_circle", value: ci.id })); } });
+    if (c.edit === "kind") return menu(td, [["person", "Mensch"], ["pet", "Haustier"]].map(([k, l]) => ({ label: l, action: () => { const ids = selectedIds(); ids.forEach((id) => applyLocal(byId(id), "kind", k)); refreshAll(); bg(() => POST("/bulk", { ids, op: "kind", value: k })); } })));
     if (c.edit === "dialog" || c.edit === "inline") {
       const e = await GET("/entities/" + r.id);
       const vals = c.def.scope === "bund" ? (e.ihr_zwei?.fields?.[c.key] || []) : (e.fields[c.key] || []);
@@ -248,10 +264,9 @@ export async function table(body, list, all, grouping = "", redraw = null) {
       }
     }
     if (!cells.length) return;
-    await POST("/bulk/cells", { cells });
-    const fresh = Object.fromEntries((await rows(true)).map((x) => [x.id, x]));
-    list.forEach((r) => fresh[r.id] && Object.assign(r, fresh[r.id])); refreshAll();
+    cells.forEach((x) => applyLocal(byId(x.id), x.field, x.value)); refreshAll();
     toast(`${cells.length} Zellen gefüllt`);
+    bg(() => POST("/bulk/cells", { cells }));
   }
   function copy(e) {
     const g = range(); const lines = [];
@@ -270,9 +285,8 @@ export async function table(body, list, all, grouping = "", redraw = null) {
       else if (c.edit === "ring" && /^[1-4]?$/.test(v)) cells.push({ id: r.id, field: "f_level", value: v ? +v : null });
     }));
     if (!cells.length) return;
-    await POST("/bulk/cells", { cells });
-    const fresh = Object.fromEntries((await rows(true)).map((x) => [x.id, x]));
-    list.forEach((r) => fresh[r.id] && Object.assign(r, fresh[r.id])); refreshAll(); toast(`${cells.length} Zellen eingefügt`);
+    cells.forEach((x) => applyLocal(byId(x.id), x.field, x.value)); refreshAll(); toast(`${cells.length} Zellen eingefügt`);
+    bg(() => POST("/bulk/cells", { cells }));
   }
   sheet.addEventListener("copy", copy);
   sheet.addEventListener("paste", paste);
@@ -303,13 +317,13 @@ export async function table(body, list, all, grouping = "", redraw = null) {
     const ids = selectedIds(); const n = ids.length;
     clear(bulk, n > 1 || st.rowsSel.size ? [
       h("span.small.t2", `${n} markiert`),
-      h("button.btn.sm", { on: { click: (e) => pickCircle(e.currentTarget, { onPick: async (c) => { await POST("/bulk", { ids, op: "add_circle", value: c.id }); invalidate(); toast(`${n} zu ${c.name} hinzugefügt`); location.reload(); } }) } }, icon("circles"), "Kreis zuordnen"),
-      S.settings.use_levels ? h("button.btn.sm", { on: { click: (e) => ringPopup(e.currentTarget, null, async (l) => { await POST("/bulk", { ids, op: "ring", value: l }); ids.forEach((id) => { const x = list.find((y) => y.id === id); if (x) x.level = l; }); invalidate(); refreshAll(); }) } }, icon("rings"), "Ring") : null,
+      h("button.btn.sm", { on: { click: (e) => pickCircle(e.currentTarget, { onPick: (c) => { ids.forEach((id) => { const x = byId(id); if (x && !x.circles.includes(c.id)) { x.circles.push(c.id); x.main_circle_id ||= c.id; } }); refreshAll(); toast(`${n} zu ${c.name} hinzugefügt`); bg(() => POST("/bulk", { ids, op: "add_circle", value: c.id })); } }) } }, icon("circles"), "Kreis zuordnen"),
+      S.settings.use_levels ? h("button.btn.sm", { on: { click: (e) => ringPopup(e.currentTarget, null, (l) => { ids.forEach((id) => applyLocal(byId(id), "f_level", l)); refreshAll(); bg(() => POST("/bulk", { ids, op: "ring", value: l })); }) } }, icon("rings"), "Ring") : null,
       n === 2 ? h("button.btn.sm.dark", { on: { click: () => (location.hash = `#/merge/${ids[0]}/${ids[1]}`) } }, icon("merge"), "Zusammenführen") : null,
       h("button.btn.sm", { on: { click: (e) => menu(e.currentTarget, [
-        { label: "Mit Handy synchronisieren", icon: "smartphone", action: async () => { await POST("/bulk", { ids, op: "on_phone", value: true }); toast("Wird mit dem Handy synchronisiert"); } },
-        { label: "Nicht mit Handy synchronisieren", action: async () => { await POST("/bulk", { ids, op: "on_phone", value: false }); } },
-        { label: "Heute gesehen", icon: "eye", action: async () => { for (const id of ids) await POST(`/seen-today/${id}`); invalidate(); toast(`${n} × heute gesehen`); } },
+        { label: "Mit Handy synchronisieren", icon: "smartphone", action: () => { toast("Wird mit dem Handy synchronisiert"); bg(() => POST("/bulk", { ids, op: "on_phone", value: true })); } },
+        { label: "Nicht mit Handy synchronisieren", action: () => bg(() => POST("/bulk", { ids, op: "on_phone", value: false })) },
+        { label: "Heute gesehen", icon: "eye", action: () => { const d = new Date(), t = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; ids.forEach((id) => applyLocal(byId(id), "f_seen", t)); refreshAll(); toast(`${n} × heute gesehen`); bg(() => Promise.all(ids.map((id) => POST(`/seen-today/${id}`)))); } },
         { label: "Löschen", icon: "trash", action: async () => { if (await confirmDlg(`${n} Einträge löschen?`, "Personen aus Importen werden danach nicht wieder importiert (freigeben unter Einstellungen → Importe). Mit Rückgängig holst du alle zurück.", "Löschen", true)) { await POST("/bulk", { ids, op: "delete" }); invalidate(); location.reload(); } } }]) } }, icon("more"))] : null);
   }
 

@@ -1,5 +1,5 @@
 // Räumliche Ansichten: Ringe, Achsen, Netz, Kreis-Bereiche – dazu der Zeitregler.
-import { S, h, icon, GET, POST, PUT, PATCH, pickPerson, clear, invalidate, avatar, circleChip, nameEl, rel, ringName, menu, toast, rows, RING,
+import { optimistic, S, h, icon, GET, POST, PUT, PATCH, pickPerson, clear, invalidate, avatar, circleChip, nameEl, rel, ringName, menu, toast, rows, RING,
   circleColors, kindColors, initials, daysSince, today, qs, reloadCircles, pickCircle, modal, popover, closePop, cssVar as V, loseColors } from "./core.js";
 import { VS, filterRows, newCircle } from "./desktop.js";
 import { LOCALE } from "./i18n.js";
@@ -213,11 +213,13 @@ export async function rings(body, list0, all) {
       let ang = Math.atan2(p.y - cy, p.x - cx); if (ang < -Math.PI / 2) ang += Math.PI * 2;
       const sec = sectors.find((x) => ang >= x.a0 && ang < x.a1);
       if ((opt.dist === "level" || cid) && level !== lvl(r)) {
-        await setLevel(r, level);
-        if (!cid) r.level = level; else if (r.is_self) centerRow.level = level;
+        // erst zeigen, dann speichern
+        const before = cid ? (r.is_self ? centerRow.level : cbunds[r.id]?.values?.f_level) : r.level;
+        if (!cid) r.level = level; else if (r.is_self) centerRow.level = level; else if (cbunds[r.id]) cbunds[r.id].values = { ...(cbunds[r.id].values || {}), f_level: level };
         toast(`${r.is_self ? "Du" : r.display}${cid ? " ↔ " + centerRow.display : ""}: ${level ? ringName(level) : "ohne Ring"}`);
+        optimistic(() => setLevel(r, level), { onFail: () => { if (!cid) r.level = before; else if (r.is_self) centerRow.level = before; draw(); } });
       }
-      invalidate(); draw();
+      draw();
       if (!r.is_self && sec && dist <= R && sec.k !== keyOf(r) && sec.k !== "_lose" && opt.sector !== "via") { await moveSector(r, sec.k); invalidate(); draw(); }
     };
     svg.addEventListener("dragover", (e) => e.preventDefault());
@@ -516,7 +518,11 @@ export async function net(body, list0) {
       // Fallenlassen auf einem Kreis macht zum Mitglied
       const n = nodes.find((x) => x.id === d.id); const p = pos[d.id];
       const hit = areas.find((a) => !n.circles_all.includes(a.id) && inside(p, a.pts));
-      if (hit && !at) { await POST(`/circles/${hit.id}/members`, { entity_id: d.id }); toast(`${n.display} ist jetzt in ${S.circles[hit.id].name}`); invalidate(); n.circles_all.push(hit.id); n.circles.push(hit.id); if (!n.main_circle_id) n.main_circle_id = hit.id; draw(); }
+      if (hit && !at) { // erst zeigen, dann speichern
+        n.circles_all.push(hit.id); n.circles.push(hit.id); const wasMain = n.main_circle_id; if (!n.main_circle_id) n.main_circle_id = hit.id; draw();
+        toast(`${n.display} ist jetzt in ${S.circles[hit.id].name}`);
+        optimistic(() => POST(`/circles/${hit.id}/members`, { entity_id: d.id }), { onFail: () => { n.circles_all = n.circles_all.filter((x) => x !== hit.id); n.circles = n.circles.filter((x) => x !== hit.id); n.main_circle_id = wasMain; draw(); } });
+      }
       else draw();
     });
     drawSide();
